@@ -1,0 +1,1 @@
+import{s as e}from"./auth-CJJKWZ4T.js";var t=e(`minus`,[[`path`,{d:`M5 12h14`,key:`1ays0h`}]]);export{t};
