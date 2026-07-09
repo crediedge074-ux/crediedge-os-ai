@@ -10,7 +10,7 @@ import {
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { TopNav } from "@/components/dashboard/TopNav";
 import { KpiCard } from "@/components/dashboard/KpiCard";
-import { AiCoach } from "@/components/dashboard/AiCoach";
+import { TodaysBriefing } from "@/components/dashboard/TodaysBriefing";
 import { RevenueChart } from "@/components/dashboard/RevenueChart";
 import { Priorities } from "@/components/dashboard/Priorities";
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
@@ -37,32 +37,33 @@ function Dashboard() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Sidebar />
-      <div className="lg:pl-64">
+      <div className="lg:pl-60 xl:pl-64">
         <TopNav />
 
-        <main className="mx-auto max-w-[1600px] px-5 py-8 sm:px-8">
+        <main className="mx-auto max-w-[1600px] px-4 py-5 sm:px-6 lg:px-7 xl:px-8">
           {/* Header */}
-          <div className="mb-7 flex flex-wrap items-start justify-between gap-4">
+          <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h1 className="text-[30px] font-bold tracking-tight text-foreground">
+              <h1 className="text-2xl font-bold tracking-tight text-foreground lg:text-[26px]">
                 Good morning, Dom! <span className="inline-block">👋</span>
               </h1>
-              <p className="mt-1.5 text-[13.5px] text-muted-foreground">
+              <p className="mt-1 text-[12.5px] text-muted-foreground">
                 Here's what's happening with your business today.
               </p>
             </div>
-            <div className="inline-flex items-center gap-2 text-[12.5px] font-medium text-muted-foreground">
-              <CalendarDays className="h-4 w-4" strokeWidth={1.75} />
+            <div className="inline-flex items-center gap-2 text-[12px] font-medium text-muted-foreground">
+              <CalendarDays className="h-3.5 w-3.5" strokeWidth={1.75} />
               {today}
             </div>
           </div>
 
           {/* KPI Row */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-5">
             <KpiCard
               title="Revenue (MTD)"
               value="£18,250"
               trend={12.5}
+              insight="Best performing month this year"
               icon={PoundSterling}
               data={spark(1)}
             />
@@ -72,6 +73,7 @@ function Dashboard() {
               trend={8}
               unit=""
               trendLabel="vs yesterday"
+              insight="Response time improved 18%"
               icon={MessageSquare}
             />
             <KpiCard
@@ -80,6 +82,7 @@ function Dashboard() {
               trend={4}
               unit=""
               trendLabel="vs yesterday"
+              insight="Workshop utilisation at 91%"
               icon={Calendar}
               iconTone="brand"
             />
@@ -87,6 +90,7 @@ function Dashboard() {
               title="Conversion Rate"
               value="36%"
               trend={5}
+              insight="Above industry average"
               icon={Percent}
               data={spark(4)}
             />
@@ -95,27 +99,28 @@ function Dashboard() {
               value="4.8"
               trend={0.2}
               unit=""
+              insight="3 reviews until 4.9 stars"
               icon={Star}
               iconTone="brand"
             />
           </div>
 
           {/* Second Row */}
-          <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-12">
+          <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
             <div className="xl:col-span-4">
-              <AiCoach />
+              <TodaysBriefing />
             </div>
             <div className="xl:col-span-5">
               <RevenueChart />
             </div>
-            <div className="flex flex-col gap-6 xl:col-span-3">
+            <div className="flex flex-col gap-4 xl:col-span-3">
               <Priorities />
               <Notifications />
             </div>
           </div>
 
           {/* Third Row */}
-          <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-12">
+          <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
             <div className="xl:col-span-5">
               <RecentActivity />
             </div>
@@ -124,7 +129,7 @@ function Dashboard() {
             </div>
           </div>
 
-          <div className="h-8" />
+          <div className="h-6" />
         </main>
       </div>
     </div>

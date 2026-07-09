@@ -1,18 +1,4 @@
-import {
-  LayoutDashboard,
-  Sparkles,
-  CheckSquare,
-  Calendar,
-  Users,
-  Inbox,
-  Star,
-  BarChart3,
-  FileText,
-  Target,
-  Globe,
-  Plug,
-  Settings,
-} from "lucide-react";
+import { LayoutDashboard, Sparkles, SquareCheck as CheckSquare, Calendar, Users, Inbox, Star, ChartBar as BarChart3, FileText, Target, Globe, Plug, Settings } from "lucide-react";
 import { Logo } from "./Logo";
 import { HealthScore } from "./HealthScore";
 
@@ -34,33 +20,35 @@ const nav = [
 
 export function Sidebar() {
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-border bg-card lg:flex">
-      <div className="flex h-[68px] items-center border-b border-border px-5">
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-border bg-card lg:flex xl:w-64">
+      <div className="flex h-[60px] items-center border-b border-border px-4 xl:px-5">
         <Logo />
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 py-2">
+      <nav className="flex-1 overflow-y-auto px-2.5 py-2 xl:px-3">
         <ul className="space-y-0.5">
           {nav.map((item) => {
             const Icon = item.icon;
             return (
               <li key={item.label}>
                 <button
-                  className={`group flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-[13.5px] font-medium transition-all duration-150 ${
+                  className={`group flex w-full items-center justify-between rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150 xl:py-2.5 xl:text-[13.5px] ${
                     item.active
                       ? "bg-brand text-white shadow-sm"
-                      : "text-foreground/80 hover:bg-secondary hover:text-foreground"
+                      : "text-foreground/75 hover:bg-secondary hover:text-foreground"
                   }`}
                 >
-                  <span className="flex items-center gap-3">
+                  <span className="flex items-center gap-2.5">
                     <Icon
-                      className={`h-[17px] w-[17px] ${item.active ? "" : "text-foreground/70"}`}
+                      className={`h-4 w-4 shrink-0 transition-transform duration-150 group-hover:scale-105 ${
+                        item.active ? "text-white" : "text-foreground/60"
+                      }`}
                       strokeWidth={1.75}
                     />
                     {item.label}
                   </span>
                   {item.badge && (
-                    <span className="grid h-5 min-w-5 place-items-center rounded-full bg-brand px-1.5 text-[10px] font-semibold text-white">
+                    <span className="grid h-5 min-w-5 place-items-center rounded-full bg-brand px-1 text-[10px] font-semibold text-white">
                       {item.badge}
                     </span>
                   )}
@@ -71,7 +59,7 @@ export function Sidebar() {
         </ul>
       </nav>
 
-      <div className="p-3">
+      <div className="p-2.5 xl:p-3">
         <HealthScore />
       </div>
     </aside>
