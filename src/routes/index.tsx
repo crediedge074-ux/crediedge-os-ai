@@ -70,6 +70,7 @@ function Dashboard() {
               title="New Enquiries"
               value="27"
               trend={8}
+              unit=""
               trendLabel="vs yesterday"
               icon={MessageSquare}
             />
@@ -77,6 +78,7 @@ function Dashboard() {
               title="Booked Jobs"
               value="15"
               trend={4}
+              unit=""
               trendLabel="vs yesterday"
               icon={Calendar}
               iconTone="brand"
@@ -92,6 +94,7 @@ function Dashboard() {
               title="Avg. Review Rating"
               value="4.8"
               trend={0.2}
+              unit=""
               icon={Star}
               iconTone="brand"
             />
