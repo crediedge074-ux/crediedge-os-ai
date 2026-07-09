@@ -1,5 +1,6 @@
-import { Mail, Star, FileText, ChartBar as BarChart3, Shield, ArrowRight, CircleAlert as AlertCircle, Info } from "lucide-react";
+import { Mail, Star, FileText, ChartBar as BarChart3, Shield, ArrowRight } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 
 type Tier = "critical" | "important" | "general";
 
@@ -94,9 +95,12 @@ export function Notifications() {
         })}
       </div>
 
-      <button className="mt-3 inline-flex items-center gap-1 self-start text-[12px] font-semibold text-brand transition-all duration-200 hover:gap-1.5">
+      <Link
+        to="/communications"
+        className="mt-3 inline-flex items-center gap-1 self-start text-[12px] font-semibold text-brand transition-all duration-200 hover:gap-1.5"
+      >
         View All <ArrowRight className="h-3.5 w-3.5" />
-      </button>
+      </Link>
     </div>
   );
 }

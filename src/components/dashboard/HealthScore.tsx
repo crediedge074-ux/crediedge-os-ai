@@ -1,4 +1,5 @@
 import { ArrowUp, ArrowRight, TrendingUp } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
 export function HealthScore() {
@@ -74,9 +75,12 @@ export function HealthScore() {
         </div>
       </div>
 
-      <button className="mt-3 flex w-full items-center justify-center gap-1 rounded-lg border border-brand/30 py-1.5 text-[11px] font-semibold text-brand transition-all duration-200 hover:bg-brand hover:text-white hover:border-brand">
+      <Link
+        to="/health"
+        className="mt-3 flex w-full items-center justify-center gap-1 rounded-lg border border-brand/30 py-1.5 text-[11px] font-semibold text-brand transition-all duration-200 hover:bg-brand hover:text-white hover:border-brand"
+      >
         View Full Report <ArrowRight className="h-3 w-3" />
-      </button>
+      </Link>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ArrowRight, Clock, PoundSterling } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 
 type Priority = "High" | "Medium" | "Low";
 
@@ -97,9 +98,12 @@ export function Priorities() {
         })}
       </ul>
 
-      <button className="mt-3 inline-flex items-center gap-1 self-start text-[12px] font-semibold text-brand transition-all duration-200 hover:gap-1.5">
+      <Link
+        to="/tasks"
+        className="mt-3 inline-flex items-center gap-1 self-start text-[12px] font-semibold text-brand transition-all duration-200 hover:gap-1.5"
+      >
         View All Tasks <ArrowRight className="h-3.5 w-3.5" />
-      </button>
+      </Link>
     </div>
   );
 }

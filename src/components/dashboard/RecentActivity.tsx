@@ -1,5 +1,6 @@
 import { MessageSquare, CircleDollarSign, Star, TriangleAlert as AlertTriangle, ArrowRight, CircleCheck as CheckCircle2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 
 interface Item {
   icon: LucideIcon;
@@ -62,9 +63,12 @@ export function RecentActivity() {
         })}
       </ul>
 
-      <button className="mt-4 inline-flex items-center gap-1 self-start text-[12px] font-semibold text-brand transition-all duration-200 hover:gap-1.5">
+      <Link
+        to="/intelligence"
+        className="mt-4 inline-flex items-center gap-1 self-start text-[12px] font-semibold text-brand transition-all duration-200 hover:gap-1.5"
+      >
         View All Activity <ArrowRight className="h-3.5 w-3.5" />
-      </button>
+      </Link>
     </div>
   );
 }
