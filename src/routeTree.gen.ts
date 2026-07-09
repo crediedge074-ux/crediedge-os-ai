@@ -14,6 +14,7 @@ import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ReviewsRouteImport } from './routes/reviews'
 import { Route as RelationshipsRouteImport } from './routes/relationships'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as IntelligenceRouteImport } from './routes/intelligence'
 import { Route as IntegrationsRouteImport } from './routes/integrations'
 import { Route as InsightsRouteImport } from './routes/insights'
@@ -47,6 +48,11 @@ const ReviewsRoute = ReviewsRouteImport.update({
 const RelationshipsRoute = RelationshipsRouteImport.update({
   id: '/relationships',
   path: '/relationships',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IntelligenceRoute = IntelligenceRouteImport.update({
@@ -105,6 +111,7 @@ export interface FileRoutesByFullPath {
   '/insights': typeof InsightsRoute
   '/integrations': typeof IntegrationsRoute
   '/intelligence': typeof IntelligenceRoute
+  '/login': typeof LoginRoute
   '/relationships': typeof RelationshipsRoute
   '/reviews': typeof ReviewsRoute
   '/settings': typeof SettingsRoute
@@ -121,6 +128,7 @@ export interface FileRoutesByTo {
   '/insights': typeof InsightsRoute
   '/integrations': typeof IntegrationsRoute
   '/intelligence': typeof IntelligenceRoute
+  '/login': typeof LoginRoute
   '/relationships': typeof RelationshipsRoute
   '/reviews': typeof ReviewsRoute
   '/settings': typeof SettingsRoute
@@ -138,6 +146,7 @@ export interface FileRoutesById {
   '/insights': typeof InsightsRoute
   '/integrations': typeof IntegrationsRoute
   '/intelligence': typeof IntelligenceRoute
+  '/login': typeof LoginRoute
   '/relationships': typeof RelationshipsRoute
   '/reviews': typeof ReviewsRoute
   '/settings': typeof SettingsRoute
@@ -156,6 +165,7 @@ export interface FileRouteTypes {
     | '/insights'
     | '/integrations'
     | '/intelligence'
+    | '/login'
     | '/relationships'
     | '/reviews'
     | '/settings'
@@ -172,6 +182,7 @@ export interface FileRouteTypes {
     | '/insights'
     | '/integrations'
     | '/intelligence'
+    | '/login'
     | '/relationships'
     | '/reviews'
     | '/settings'
@@ -188,6 +199,7 @@ export interface FileRouteTypes {
     | '/insights'
     | '/integrations'
     | '/intelligence'
+    | '/login'
     | '/relationships'
     | '/reviews'
     | '/settings'
@@ -205,6 +217,7 @@ export interface RootRouteChildren {
   InsightsRoute: typeof InsightsRoute
   IntegrationsRoute: typeof IntegrationsRoute
   IntelligenceRoute: typeof IntelligenceRoute
+  LoginRoute: typeof LoginRoute
   RelationshipsRoute: typeof RelationshipsRoute
   ReviewsRoute: typeof ReviewsRoute
   SettingsRoute: typeof SettingsRoute
@@ -247,6 +260,13 @@ declare module '@tanstack/react-router' {
       path: '/relationships'
       fullPath: '/relationships'
       preLoaderRoute: typeof RelationshipsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/intelligence': {
@@ -325,6 +345,7 @@ const rootRouteChildren: RootRouteChildren = {
   InsightsRoute: InsightsRoute,
   IntegrationsRoute: IntegrationsRoute,
   IntelligenceRoute: IntelligenceRoute,
+  LoginRoute: LoginRoute,
   RelationshipsRoute: RelationshipsRoute,
   ReviewsRoute: ReviewsRoute,
   SettingsRoute: SettingsRoute,

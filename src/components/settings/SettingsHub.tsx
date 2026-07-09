@@ -1,6 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Building2, User, Users, Bell, Palette, Brain, Database, Shield, CreditCard, Layers, Circle as HelpCircle, Activity, ChevronRight, CircleCheck as CheckCircle2, Globe, Clock, Lock, Key, Download, Upload, Trash2, Star, Smartphone, Monitor, Sun, Moon, RefreshCw } from "lucide-react";
+import { useAuthContext } from "@/contexts/AuthContext";
+import { updateProfile } from "@/services/profiles";
+import { updateBusiness } from "@/services/business";
+import { updateBusinessSettings } from "@/services/settings";
 
 // ─── Section config ───────────────────────────────────────────────────────────
 
@@ -13,21 +17,16 @@ interface SectionDef {
 }
 
 const sections: SectionDef[] = [
-  // Core
   { id: "business", icon: Building2, label: "Business Profile", description: "Name, logo, contact and hours", group: "Core" },
   { id: "account", icon: User, label: "Account", description: "Profile, password and devices", group: "Core" },
   { id: "organisation", icon: Users, label: "Organisation", description: "Users, roles and permissions", group: "Core" },
-  // Preferences
   { id: "notifications", icon: Bell, label: "Notifications", description: "Email, push and SMS preferences", group: "Preferences" },
   { id: "appearance", icon: Palette, label: "Appearance", description: "Theme, layout and display", group: "Preferences" },
   { id: "ai", icon: Brain, label: "AI Settings", description: "Models, analysis and behaviour", group: "Preferences" },
-  // Data
   { id: "data", icon: Database, label: "Data & Privacy", description: "Export, backup and GDPR", group: "Data" },
   { id: "security", icon: Shield, label: "Security", description: "2FA, sessions and audit logs", group: "Data" },
-  // Account Management
   { id: "billing", icon: CreditCard, label: "Billing", description: "Plan, invoices and usage", group: "Account" },
   { id: "whitelabel", icon: Layers, label: "White Label", description: "Custom branding and domains", group: "Account" },
-  // System
   { id: "status", icon: Activity, label: "System Status", description: "Platform health and versions", group: "System" },
   { id: "help", icon: HelpCircle, label: "Help & Support", description: "Docs, requests and changelog", group: "System" },
 ];
@@ -36,15 +35,7 @@ const groups = ["Core", "Preferences", "Data", "Account", "System"];
 
 // ─── Reusable primitives ──────────────────────────────────────────────────────
 
-function SettingsRow({
-  label,
-  description,
-  action,
-}: {
-  label: string;
-  description?: string;
-  action: React.ReactNode;
-}) {
+function SettingsRow({ label, description, action }: { label: string; description?: string; action: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-secondary/20 px-4 py-3.5">
       <div className="min-w-0">
@@ -87,12 +78,11 @@ function SectionHeader({ title, description }: { title: string; description: str
 }
 
 function FormField({
-  label,
-  defaultValue,
-  type = "text",
-  hint,
+  label, value, onChange, defaultValue, type = "text", hint,
 }: {
   label: string;
+  value?: string;
+  onChange?: (v: string) => void;
   defaultValue?: string;
   type?: string;
   hint?: string;
@@ -102,7 +92,9 @@ function FormField({
       <label className="mb-1.5 block text-[12.5px] font-medium text-muted-foreground">{label}</label>
       <input
         type={type}
-        defaultValue={defaultValue}
+        value={value}
+        onChange={onChange ? (e) => onChange(e.target.value) : undefined}
+        defaultValue={value === undefined ? defaultValue : undefined}
         className="w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2.5 text-[13px] text-foreground placeholder:text-muted-foreground/60 focus:border-foreground/20 focus:bg-card focus:outline-none"
       />
       {hint && <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p>}
@@ -110,19 +102,93 @@ function FormField({
   );
 }
 
-function SaveBar() {
+type Feedback = "saved" | "error" | null;
+
+function SaveBar({ onSave, saving, feedback }: { onSave?: () => void; saving?: boolean; feedback?: Feedback }) {
   return (
-    <div className="flex justify-end pt-2">
-      <button className="rounded-xl bg-brand px-5 py-2.5 text-[13px] font-semibold text-white shadow-sm transition-opacity hover:opacity-80">
-        Save Changes
+    <div className="flex items-center justify-end gap-3 pt-2">
+      {feedback === "saved" && (
+        <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-emerald-600">
+          <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2} />
+          Saved
+        </span>
+      )}
+      {feedback === "error" && (
+        <span className="text-[12.5px] font-medium text-red-600">Failed to save. Try again.</span>
+      )}
+      <button
+        onClick={onSave}
+        disabled={saving}
+        className="rounded-xl bg-brand px-5 py-2.5 text-[13px] font-semibold text-white shadow-sm transition-opacity hover:opacity-80 disabled:opacity-60"
+      >
+        {saving ? "Saving…" : "Save Changes"}
       </button>
     </div>
   );
 }
 
-// ─── Panel components ─────────────────────────────────────────────────────────
+function PanelSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="h-8 w-48 animate-pulse rounded-lg bg-secondary" />
+      <div className="grid grid-cols-2 gap-4">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="h-14 animate-pulse rounded-xl bg-secondary" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Panel: Business Profile ──────────────────────────────────────────────────
 
 function BusinessPanel() {
+  const { business, membership, refreshBusiness } = useAuthContext();
+  const [form, setForm] = useState({
+    name: "", industry: "", phone: "", email: "", website: "",
+    vat_number: "", address_line_1: "", city: "", postcode: "",
+    timezone: "Europe/London", currency: "GBP",
+  });
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState<Feedback>(null);
+
+  useEffect(() => {
+    if (business) {
+      setForm({
+        name: business.name ?? "",
+        industry: business.industry ?? "",
+        phone: business.phone ?? "",
+        email: business.email ?? "",
+        website: business.website ?? "",
+        vat_number: business.vat_number ?? "",
+        address_line_1: business.address_line_1 ?? "",
+        city: business.city ?? "",
+        postcode: business.postcode ?? "",
+        timezone: business.timezone ?? "Europe/London",
+        currency: business.currency ?? "GBP",
+      });
+    }
+  }, [business?.id]);
+
+  const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleSave = async () => {
+    if (!membership?.business_id) return;
+    setSaving(true);
+    try {
+      await updateBusiness(membership.business_id, form);
+      await refreshBusiness();
+      setFeedback("saved");
+      setTimeout(() => setFeedback(null), 3000);
+    } catch {
+      setFeedback("error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!business) return <PanelSkeleton />;
+
   const businessHours = [
     { day: "Monday", open: true, from: "08:00", to: "18:00" },
     { day: "Tuesday", open: true, from: "08:00", to: "18:00" },
@@ -137,29 +203,37 @@ function BusinessPanel() {
     <div className="space-y-6">
       <SectionHeader title="Business Profile" description="Your business identity displayed throughout CrediEdgeOS." />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <FormField label="Business Name" defaultValue="CrediEdge Automotive" />
-        <FormField label="Industry" defaultValue="Automotive" />
-        <FormField label="Phone Number" defaultValue="+44 7700 900000" />
-        <FormField label="Email Address" defaultValue="contact@crediedge.co.uk" />
-        <FormField label="Website" defaultValue="https://crediedge.co.uk" />
-        <FormField label="VAT Number" defaultValue="GB123456789" />
-        <FormField label="Address Line 1" defaultValue="12 Commerce Street" />
-        <FormField label="City / Town" defaultValue="London" />
-        <FormField label="Postcode" defaultValue="EC1A 1BB" />
+        <FormField label="Business Name" value={form.name} onChange={set("name")} />
+        <FormField label="Industry" value={form.industry} onChange={set("industry")} />
+        <FormField label="Phone Number" value={form.phone} onChange={set("phone")} />
+        <FormField label="Email Address" value={form.email} onChange={set("email")} type="email" />
+        <FormField label="Website" value={form.website} onChange={set("website")} />
+        <FormField label="VAT Number" value={form.vat_number} onChange={set("vat_number")} />
+        <FormField label="Address Line 1" value={form.address_line_1} onChange={set("address_line_1")} />
+        <FormField label="City / Town" value={form.city} onChange={set("city")} />
+        <FormField label="Postcode" value={form.postcode} onChange={set("postcode")} />
         <div>
           <label className="mb-1.5 block text-[12.5px] font-medium text-muted-foreground">Timezone</label>
-          <select className="w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2.5 text-[13px] text-foreground focus:border-foreground/20 focus:outline-none">
-            <option>Europe/London (GMT+1)</option>
-            <option>America/New_York (GMT-4)</option>
-            <option>Asia/Dubai (GMT+4)</option>
+          <select
+            value={form.timezone}
+            onChange={(e) => set("timezone")(e.target.value)}
+            className="w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2.5 text-[13px] text-foreground focus:border-foreground/20 focus:outline-none"
+          >
+            <option value="Europe/London">Europe/London (GMT+1)</option>
+            <option value="America/New_York">America/New_York (GMT-4)</option>
+            <option value="Asia/Dubai">Asia/Dubai (GMT+4)</option>
           </select>
         </div>
         <div>
           <label className="mb-1.5 block text-[12.5px] font-medium text-muted-foreground">Currency</label>
-          <select className="w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2.5 text-[13px] text-foreground focus:border-foreground/20 focus:outline-none">
-            <option>GBP — British Pound (£)</option>
-            <option>USD — US Dollar ($)</option>
-            <option>EUR — Euro (€)</option>
+          <select
+            value={form.currency}
+            onChange={(e) => set("currency")(e.target.value)}
+            className="w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2.5 text-[13px] text-foreground focus:border-foreground/20 focus:outline-none"
+          >
+            <option value="GBP">GBP — British Pound (£)</option>
+            <option value="USD">USD — US Dollar ($)</option>
+            <option value="EUR">EUR — Euro (€)</option>
           </select>
         </div>
       </div>
@@ -177,21 +251,69 @@ function BusinessPanel() {
         </div>
       </div>
 
-      <SaveBar />
+      <SaveBar onSave={handleSave} saving={saving} feedback={feedback} />
     </div>
   );
 }
 
+// ─── Panel: Account ───────────────────────────────────────────────────────────
+
 function AccountPanel() {
+  const { profile, user, refreshProfile } = useAuthContext();
+  const [form, setForm] = useState({ first_name: "", last_name: "", phone: "" });
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState<Feedback>(null);
+
+  useEffect(() => {
+    if (profile) {
+      setForm({
+        first_name: profile.first_name ?? "",
+        last_name: profile.last_name ?? "",
+        phone: profile.phone ?? "",
+      });
+    }
+  }, [profile?.id]);
+
+  const handleSave = async () => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      await updateProfile(user.id, {
+        first_name: form.first_name || null,
+        last_name: form.last_name || null,
+        full_name: [form.first_name, form.last_name].filter(Boolean).join(" ") || null,
+        phone: form.phone || null,
+      });
+      await refreshProfile();
+      setFeedback("saved");
+      setTimeout(() => setFeedback(null), 3000);
+    } catch {
+      setFeedback("error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!profile) return <PanelSkeleton />;
+
+  const displayName = profile.full_name ?? user?.email?.split("@")[0] ?? "User";
+  const initials = displayName.charAt(0).toUpperCase();
+
   return (
     <div className="space-y-6">
       <SectionHeader title="Account" description="Your personal profile, password and active sessions." />
 
       <div className="flex items-center gap-4">
-        <div className="grid h-16 w-16 place-items-center rounded-2xl bg-brand/10 text-[22px] font-bold text-brand">D</div>
+        {profile.avatar_url ? (
+          <img src={profile.avatar_url} alt={displayName} className="h-16 w-16 rounded-2xl object-cover" />
+        ) : (
+          <div className="grid h-16 w-16 place-items-center rounded-2xl bg-brand/10 text-[22px] font-bold text-brand">
+            {initials}
+          </div>
+        )}
         <div>
-          <div className="text-[14px] font-semibold text-foreground">Dom Crediedge</div>
-          <div className="text-[12.5px] text-muted-foreground">dom@crediedge.co.uk</div>
+          <div className="text-[14px] font-semibold text-foreground">{displayName}</div>
+          <div className="text-[12.5px] text-muted-foreground">{user?.email}</div>
         </div>
         <button className="ml-auto rounded-xl border border-border bg-secondary px-3.5 py-2 text-[12.5px] font-medium text-foreground transition-colors hover:bg-secondary/70">
           Change Photo
@@ -199,10 +321,10 @@ function AccountPanel() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <FormField label="First Name" defaultValue="Dom" />
-        <FormField label="Last Name" defaultValue="Crediedge" />
-        <FormField label="Email Address" defaultValue="dom@crediedge.co.uk" />
-        <FormField label="Phone Number" defaultValue="+44 7700 900000" />
+        <FormField label="First Name" value={form.first_name} onChange={(v) => setForm((f) => ({ ...f, first_name: v }))} />
+        <FormField label="Last Name" value={form.last_name} onChange={(v) => setForm((f) => ({ ...f, last_name: v }))} />
+        <FormField label="Email Address" defaultValue={user?.email} type="email" hint="Email changes require re-authentication." />
+        <FormField label="Phone Number" value={form.phone} onChange={(v) => setForm((f) => ({ ...f, phone: v }))} />
       </div>
 
       <div className="space-y-2">
@@ -213,17 +335,24 @@ function AccountPanel() {
         <SettingsRow label="Active Devices" description="MacBook Pro, iPhone 15" action={<ActionButton label="Manage" />} />
       </div>
 
-      <SaveBar />
+      <SaveBar onSave={handleSave} saving={saving} feedback={feedback} />
     </div>
   );
 }
 
+// ─── Panel: Organisation ──────────────────────────────────────────────────────
+
 function OrganisationPanel() {
-  const roles = [
-    { name: "Dom Crediedge", email: "dom@crediedge.co.uk", role: "Owner", status: "active" },
-    { name: "Sarah Johnson", email: "sarah@crediedge.co.uk", role: "Admin", status: "active" },
-    { name: "James Wilson", email: "james@crediedge.co.uk", role: "Staff", status: "pending" },
-  ];
+  const { profile, membership, business } = useAuthContext();
+
+  const roles = profile ? [
+    {
+      name: profile.full_name ?? profile.first_name ?? "You",
+      email: "",
+      role: membership?.role ?? "Owner",
+      status: "active",
+    },
+  ] : [];
 
   const rolePermissions = [
     { role: "Owner", permissions: ["Full access", "Billing", "Users", "Delete data", "API keys"] },
@@ -238,25 +367,26 @@ function OrganisationPanel() {
 
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <div className="text-[13px] font-semibold text-foreground">Team Members</div>
+          <div className="text-[13px] font-semibold text-foreground">
+            Team Members{business?.name ? ` — ${business.name}` : ""}
+          </div>
           <button className="rounded-xl bg-brand px-3.5 py-2 text-[12.5px] font-semibold text-white transition-opacity hover:opacity-80">
             Invite Member
           </button>
         </div>
         <div className="overflow-hidden rounded-xl border border-border">
           {roles.map((r, i) => (
-            <div key={r.email} className={`flex items-center gap-4 px-4 py-3.5 ${i < roles.length - 1 ? "border-b border-border" : ""}`}>
+            <div key={i} className={`flex items-center gap-4 px-4 py-3.5 ${i < roles.length - 1 ? "border-b border-border" : ""}`}>
               <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand/10 text-[12px] font-bold text-brand">
-                {r.name[0]}
+                {r.name[0]?.toUpperCase() ?? "?"}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-[13px] font-medium text-foreground">{r.name}</div>
-                <div className="text-[11.5px] text-muted-foreground">{r.email}</div>
+                {r.email && <div className="text-[11.5px] text-muted-foreground">{r.email}</div>}
               </div>
-              <span className={`rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${r.status === "active" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
-                {r.status === "active" ? r.role : "Pending"}
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-700">
+                {r.role.charAt(0).toUpperCase() + r.role.slice(1)}
               </span>
-              <button className="text-[12px] text-muted-foreground transition-colors hover:text-foreground">Edit</button>
             </div>
           ))}
         </div>
@@ -284,7 +414,10 @@ function OrganisationPanel() {
   );
 }
 
+// ─── Panel: Notifications ─────────────────────────────────────────────────────
+
 function NotificationsPanel() {
+  const { settings, membership, refreshSettings } = useAuthContext();
   const [prefs, setPrefs] = useState<Record<string, { email: boolean; push: boolean; sms: boolean }>>({
     new_enquiry: { email: true, push: true, sms: true },
     invoice_overdue: { email: true, push: true, sms: false },
@@ -295,6 +428,44 @@ function NotificationsPanel() {
     mission_updates: { email: false, push: true, sms: false },
     ai_insights: { email: true, push: true, sms: false },
   });
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState<Feedback>(null);
+
+  useEffect(() => {
+    if (settings) {
+      setPrefs((p) => ({
+        ...p,
+        daily_briefing: { ...p.daily_briefing, email: settings.daily_briefing },
+        weekly_report: { ...p.weekly_report, email: settings.weekly_report },
+        new_enquiry: { ...p.new_enquiry, email: settings.email_notifications, push: settings.push_notifications, sms: settings.sms_notifications },
+      }));
+    }
+  }, [settings?.id]);
+
+  const toggle = (id: string, channel: "email" | "push" | "sms") => {
+    setPrefs((p) => ({ ...p, [id]: { ...p[id], [channel]: !p[id][channel] } }));
+  };
+
+  const handleSave = async () => {
+    if (!membership?.business_id) return;
+    setSaving(true);
+    try {
+      await updateBusinessSettings(membership.business_id, {
+        email_notifications: prefs.new_enquiry.email,
+        push_notifications: prefs.new_enquiry.push,
+        sms_notifications: prefs.new_enquiry.sms,
+        daily_briefing: prefs.daily_briefing.email,
+        weekly_report: prefs.weekly_report.email,
+      });
+      await refreshSettings();
+      setFeedback("saved");
+      setTimeout(() => setFeedback(null), 3000);
+    } catch {
+      setFeedback("error");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const items = [
     { id: "new_enquiry", label: "New Enquiry Received", description: "Triggered when a new lead or enquiry arrives" },
@@ -306,10 +477,6 @@ function NotificationsPanel() {
     { id: "mission_updates", label: "Mission Updates", description: "Task completion and mission progress alerts" },
     { id: "ai_insights", label: "AI Insights", description: "New AI discoveries and opportunity alerts" },
   ];
-
-  const toggle = (id: string, channel: "email" | "push" | "sms") => {
-    setPrefs((p) => ({ ...p, [id]: { ...p[id], [channel]: !p[id][channel] } }));
-  };
 
   return (
     <div className="space-y-4">
@@ -336,14 +503,48 @@ function NotificationsPanel() {
           </div>
         ))}
       </div>
+
+      <SaveBar onSave={handleSave} saving={saving} feedback={feedback} />
     </div>
   );
 }
 
+// ─── Panel: Appearance ────────────────────────────────────────────────────────
+
 function AppearancePanel() {
+  const { settings, membership, refreshSettings } = useAuthContext();
   const [theme, setTheme] = useState("Light");
   const [accent, setAccent] = useState("#E31B23");
   const [compact, setCompact] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState<Feedback>(null);
+
+  useEffect(() => {
+    if (settings) {
+      setTheme(settings.theme === "dark" ? "Dark" : settings.theme === "system" ? "System" : "Light");
+      setAccent(settings.accent_colour ?? "#E31B23");
+      setCompact(settings.compact_mode);
+    }
+  }, [settings?.id]);
+
+  const handleSave = async () => {
+    if (!membership?.business_id) return;
+    setSaving(true);
+    try {
+      await updateBusinessSettings(membership.business_id, {
+        theme: theme.toLowerCase(),
+        accent_colour: accent,
+        compact_mode: compact,
+      });
+      await refreshSettings();
+      setFeedback("saved");
+      setTimeout(() => setFeedback(null), 3000);
+    } catch {
+      setFeedback("error");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const colors = [
     { value: "#E31B23", label: "CrediEdge Red" },
@@ -361,11 +562,7 @@ function AppearancePanel() {
       <div>
         <label className="mb-2.5 block text-[13px] font-semibold text-foreground">Theme</label>
         <div className="flex gap-2">
-          {[
-            { label: "Light", icon: Sun },
-            { label: "Dark", icon: Moon },
-            { label: "System", icon: Monitor },
-          ].map(({ label, icon: Icon }) => (
+          {[{ label: "Light", icon: Sun }, { label: "Dark", icon: Moon }, { label: "System", icon: Monitor }].map(({ label, icon: Icon }) => (
             <button
               key={label}
               onClick={() => setTheme(label)}
@@ -399,14 +596,66 @@ function AppearancePanel() {
           <SettingsRow label="Compact Mode" description="Reduce spacing and padding for a denser interface" action={<Toggle on={compact} onChange={setCompact} />} />
         </div>
       </div>
+
+      <SaveBar onSave={handleSave} saving={saving} feedback={feedback} />
     </div>
   );
 }
 
+// ─── Panel: AI Settings ───────────────────────────────────────────────────────
+
 function AIPanel() {
-  const [autoReports, setAutoReports] = useState(true);
-  const [scheduledRefresh, setScheduledRefresh] = useState(true);
-  const [insights, setInsights] = useState(true);
+  const { settings, membership, refreshSettings } = useAuthContext();
+  const [form, setForm] = useState({
+    ai_provider: "openai",
+    ai_model: "gpt-4o",
+    ai_creativity: 65,
+    ai_enabled: true,
+    daily_briefing: true,
+    weekly_report: true,
+    business_context: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState<Feedback>(null);
+
+  useEffect(() => {
+    if (settings) {
+      setForm({
+        ai_provider: settings.ai_provider ?? "openai",
+        ai_model: settings.ai_model ?? "gpt-4o",
+        ai_creativity: settings.ai_creativity ?? 65,
+        ai_enabled: settings.ai_enabled,
+        daily_briefing: settings.daily_briefing,
+        weekly_report: settings.weekly_report,
+        business_context: settings.business_context ?? "",
+      });
+    }
+  }, [settings?.id]);
+
+  const handleSave = async () => {
+    if (!membership?.business_id) return;
+    setSaving(true);
+    try {
+      await updateBusinessSettings(membership.business_id, {
+        ai_provider: form.ai_provider,
+        ai_model: form.ai_model,
+        ai_creativity: form.ai_creativity,
+        ai_enabled: form.ai_enabled,
+        daily_briefing: form.daily_briefing,
+        weekly_report: form.weekly_report,
+        business_context: form.business_context || null,
+      });
+      await refreshSettings();
+      setFeedback("saved");
+      setTimeout(() => setFeedback(null), 3000);
+    } catch {
+      setFeedback("error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!settings) return <PanelSkeleton />;
 
   return (
     <div className="space-y-6">
@@ -415,18 +664,26 @@ function AIPanel() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label className="mb-1.5 block text-[12.5px] font-medium text-muted-foreground">AI Provider</label>
-          <select className="w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2.5 text-[13px] text-foreground focus:outline-none">
-            <option>OpenAI (GPT-4o)</option>
-            <option>Anthropic (Claude 3.5)</option>
-            <option>Google (Gemini 1.5)</option>
+          <select
+            value={form.ai_provider}
+            onChange={(e) => setForm((f) => ({ ...f, ai_provider: e.target.value }))}
+            className="w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2.5 text-[13px] text-foreground focus:outline-none"
+          >
+            <option value="openai">OpenAI (GPT-4o)</option>
+            <option value="anthropic">Anthropic (Claude 3.5)</option>
+            <option value="google">Google (Gemini 1.5)</option>
           </select>
         </div>
         <div>
           <label className="mb-1.5 block text-[12.5px] font-medium text-muted-foreground">Preferred Model</label>
-          <select className="w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2.5 text-[13px] text-foreground focus:outline-none">
-            <option>GPT-4o (Recommended)</option>
-            <option>GPT-4o Mini (Faster)</option>
-            <option>GPT-o1 (Advanced Reasoning)</option>
+          <select
+            value={form.ai_model}
+            onChange={(e) => setForm((f) => ({ ...f, ai_model: e.target.value }))}
+            className="w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2.5 text-[13px] text-foreground focus:outline-none"
+          >
+            <option value="gpt-4o">GPT-4o (Recommended)</option>
+            <option value="gpt-4o-mini">GPT-4o Mini (Faster)</option>
+            <option value="o1">GPT-o1 (Advanced Reasoning)</option>
           </select>
         </div>
         <div>
@@ -450,7 +707,12 @@ function AIPanel() {
 
       <div>
         <div className="mb-2.5 text-[13px] font-semibold text-foreground">Creativity Level</div>
-        <input type="range" min={0} max={100} defaultValue={60} className="w-full accent-brand" />
+        <input
+          type="range" min={0} max={100}
+          value={form.ai_creativity}
+          onChange={(e) => setForm((f) => ({ ...f, ai_creativity: Number(e.target.value) }))}
+          className="w-full accent-brand"
+        />
         <div className="mt-1 flex justify-between text-[11px] text-muted-foreground">
           <span>Precise</span>
           <span>Balanced</span>
@@ -459,52 +721,52 @@ function AIPanel() {
       </div>
 
       <div className="space-y-2">
-        <SettingsRow label="Automatic AI Reports" description="Generate weekly executive reports automatically" action={<Toggle on={autoReports} onChange={setAutoReports} />} />
-        <SettingsRow label="Scheduled AI Refresh" description="Re-analyse all data at 06:00 each morning" action={<Toggle on={scheduledRefresh} onChange={setScheduledRefresh} />} />
-        <SettingsRow label="Proactive AI Insights" description="Push new discoveries and opportunities automatically" action={<Toggle on={insights} onChange={setInsights} />} />
+        <SettingsRow label="AI Enabled" description="Enable AI analysis and insights across the platform" action={<Toggle on={form.ai_enabled} onChange={(v) => setForm((f) => ({ ...f, ai_enabled: v }))} />} />
+        <SettingsRow label="Scheduled AI Refresh" description="Re-analyse all data at 06:00 each morning" action={<Toggle on={form.daily_briefing} onChange={(v) => setForm((f) => ({ ...f, daily_briefing: v }))} />} />
+        <SettingsRow label="Automatic AI Reports" description="Generate weekly executive reports automatically" action={<Toggle on={form.weekly_report} onChange={(v) => setForm((f) => ({ ...f, weekly_report: v }))} />} />
       </div>
 
       <div>
         <label className="mb-1.5 block text-[12.5px] font-medium text-muted-foreground">Business Context</label>
         <textarea
-          defaultValue="We are a premium automotive service business in London. Our primary goal is to increase customer retention and grow recurring revenue. Our main challenge is converting online enquiries to bookings."
+          value={form.business_context}
+          onChange={(e) => setForm((f) => ({ ...f, business_context: e.target.value }))}
+          placeholder="Describe your business, goals and challenges to help the AI provide more relevant insights..."
           rows={4}
           className="w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2.5 text-[13px] text-foreground placeholder:text-muted-foreground/60 focus:border-foreground/20 focus:outline-none"
         />
         <p className="mt-1 text-[11px] text-muted-foreground">This context helps the AI understand your business goals and provide more relevant insights.</p>
       </div>
 
-      <SaveBar />
+      <SaveBar onSave={handleSave} saving={saving} feedback={feedback} />
     </div>
   );
 }
+
+// ─── Static panels ────────────────────────────────────────────────────────────
 
 function DataPanel() {
   return (
     <div className="space-y-5">
       <SectionHeader title="Data & Privacy" description="Manage your data, exports, backups and privacy settings." />
-
       <div className="space-y-2">
         <div className="text-[13px] font-semibold text-foreground">Data Management</div>
         <SettingsRow label="Export All Data" description="Download a full export of your business data as CSV / JSON" action={<ActionButton label="Export" />} />
         <SettingsRow label="Import Data" description="Import contacts, jobs or financial data from CSV" action={<ActionButton label="Import" />} />
         <SettingsRow label="Data Retention" description="Automatically archive records older than 24 months" action={<ActionButton label="Configure" />} />
       </div>
-
       <div className="space-y-2">
         <div className="text-[13px] font-semibold text-foreground">Backups</div>
         <SettingsRow label="Create Backup" description="Generate a full backup of your platform data now" action={<ActionButton label="Backup Now" />} />
         <SettingsRow label="Last Backup" description="Completed successfully — 6 Jul 2026 at 02:00" action={<ActionButton label="Download" />} />
         <SettingsRow label="Restore from Backup" description="Restore a previous backup to this account" action={<ActionButton label="Restore" />} />
       </div>
-
       <div className="space-y-2">
         <div className="text-[13px] font-semibold text-foreground">Privacy & GDPR</div>
         <SettingsRow label="Privacy Controls" description="Manage what data is collected and processed" action={<ActionButton label="Manage" />} />
         <SettingsRow label="GDPR Compliance" description="View your data processing agreements" action={<ActionButton label="View DPA" />} />
         <SettingsRow label="Cookie Preferences" description="Control analytical and functional cookies" action={<ActionButton label="Configure" />} />
       </div>
-
       <div className="rounded-xl border border-red-200 bg-red-50 p-4">
         <div className="mb-1 text-[13px] font-semibold text-red-700">Danger Zone</div>
         <p className="mb-3 text-[12px] text-red-600">This action is irreversible. All data will be permanently deleted.</p>
@@ -516,33 +778,24 @@ function DataPanel() {
 
 function SecurityPanel() {
   const [twoFa, setTwoFa] = useState(false);
-
   const devices = [
     { name: "MacBook Pro 14", location: "London, UK", lastActive: "Now", current: true },
     { name: "iPhone 15 Pro", location: "London, UK", lastActive: "1 hour ago", current: false },
   ];
-
   const auditLog = [
     { action: "Logged in", device: "MacBook Pro", time: "Today 09:31", status: "success" },
     { action: "Changed password", device: "MacBook Pro", time: "7 Jul 09:18", status: "success" },
     { action: "API key generated", device: "MacBook Pro", time: "6 Jul 14:52", status: "success" },
     { action: "Failed login attempt", device: "Unknown", time: "5 Jul 22:14", status: "warning" },
   ];
-
   return (
     <div className="space-y-6">
       <SectionHeader title="Security" description="Protect your account with advanced security controls." />
-
       <div className="space-y-2">
         <div className="text-[13px] font-semibold text-foreground">Authentication</div>
         <SettingsRow label="Password" description="Last changed 30 days ago" action={<ActionButton label="Change Password" />} />
-        <SettingsRow
-          label="Two-Factor Authentication"
-          description={twoFa ? "Enabled — authenticator app configured" : "Not enabled — adds an extra layer of security"}
-          action={<Toggle on={twoFa} onChange={setTwoFa} />}
-        />
+        <SettingsRow label="Two-Factor Authentication" description={twoFa ? "Enabled — authenticator app configured" : "Not enabled — adds an extra layer of security"} action={<Toggle on={twoFa} onChange={setTwoFa} />} />
       </div>
-
       <div>
         <div className="mb-3 text-[13px] font-semibold text-foreground">Active Devices</div>
         <div className="overflow-hidden rounded-xl border border-border">
@@ -563,7 +816,6 @@ function SecurityPanel() {
           ))}
         </div>
       </div>
-
       <div>
         <div className="mb-3 text-[13px] font-semibold text-foreground">Audit Log</div>
         <div className="overflow-hidden rounded-xl border border-border">
@@ -585,26 +837,25 @@ function SecurityPanel() {
 }
 
 function BillingPanel() {
+  const { business } = useAuthContext();
+  const plan = business?.subscription_plan ?? "Professional";
   const invoices = [
     { number: "INV-2026-007", date: "1 Jul 2026", amount: "£299.00", status: "paid" },
     { number: "INV-2026-006", date: "1 Jun 2026", amount: "£299.00", status: "paid" },
     { number: "INV-2026-005", date: "1 May 2026", amount: "£299.00", status: "paid" },
   ];
-
   return (
     <div className="space-y-6">
       <SectionHeader title="Billing" description="Manage your subscription, payment method and invoices." />
-
       <div className="rounded-2xl border border-brand/20 bg-brand/5 p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="text-[15px] font-bold text-foreground">Growth Plan</div>
+            <div className="text-[15px] font-bold text-foreground">{plan} Plan</div>
             <div className="mt-1 text-[13px] text-muted-foreground">£299 / month · Renews 1 August 2026</div>
             <div className="mt-3 flex flex-wrap gap-1.5">
               {["Unlimited contacts", "All DNA modules", "AI analysis", "Priority support", "API access"].map((f) => (
                 <span key={f} className="flex items-center gap-1 rounded-full bg-brand/10 px-2.5 py-0.5 text-[11px] font-medium text-brand">
-                  <CheckCircle2 className="h-3 w-3" strokeWidth={2} />
-                  {f}
+                  <CheckCircle2 className="h-3 w-3" strokeWidth={2} />{f}
                 </span>
               ))}
             </div>
@@ -616,12 +867,10 @@ function BillingPanel() {
           <ActionButton label="Manage Subscription" />
         </div>
       </div>
-
       <div className="space-y-2">
         <div className="text-[13px] font-semibold text-foreground">Payment Method</div>
         <SettingsRow label="Visa ending 4242" description="Expires 12/26 · Default payment method" action={<ActionButton label="Update" />} />
       </div>
-
       <div>
         <div className="mb-3 text-[13px] font-semibold text-foreground">Invoice History</div>
         <div className="overflow-hidden rounded-xl border border-border">
@@ -638,7 +887,6 @@ function BillingPanel() {
           ))}
         </div>
       </div>
-
       <div>
         <div className="mb-3 text-[13px] font-semibold text-foreground">AI Credits Usage</div>
         <div className="rounded-xl border border-border bg-secondary/20 p-4">
@@ -660,7 +908,6 @@ function WhiteLabelPanel() {
   return (
     <div className="space-y-5">
       <SectionHeader title="White Label" description="Customise CrediEdgeOS with your own branding for client portals." />
-
       <div className="rounded-2xl border border-dashed border-border bg-secondary/20 p-6 text-center">
         <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl border border-border bg-card">
           <Layers className="h-6 w-6 text-muted-foreground/50" strokeWidth={1.25} />
@@ -673,8 +920,7 @@ function WhiteLabelPanel() {
           Upgrade to Enterprise
         </button>
       </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 opacity-40 pointer-events-none">
+      <div className="pointer-events-none grid grid-cols-1 gap-4 opacity-40 sm:grid-cols-2">
         <FormField label="Custom Logo URL" defaultValue="" hint="Displayed in place of CrediEdgeOS logo" />
         <FormField label="Custom Domain" defaultValue="" hint="e.g. app.yourbusiness.com" />
         <FormField label="Primary Brand Colour" defaultValue="#E31B23" />
@@ -695,11 +941,9 @@ function SystemStatusPanel() {
     { name: "Email Delivery", status: "degraded", uptime: "98.2%" },
     { name: "SMS Gateway", status: "operational", uptime: "99.76%" },
   ];
-
   return (
     <div className="space-y-5">
       <SectionHeader title="System Status" description="Real-time health and performance of all platform services." />
-
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-border bg-card p-4">
           <div className="text-[11px] font-medium text-muted-foreground">Platform Version</div>
@@ -717,7 +961,6 @@ function SystemStatusPanel() {
           <div className="mt-0.5 text-[11px] text-emerald-600">All responding</div>
         </div>
       </div>
-
       <div className="overflow-hidden rounded-xl border border-border">
         <div className="grid grid-cols-[1fr_120px_80px] border-b border-border bg-secondary/30 px-4 py-2.5">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Service</div>
@@ -729,9 +972,7 @@ function SystemStatusPanel() {
             <span className="text-[13px] font-medium text-foreground">{s.name}</span>
             <div className="flex items-center gap-1.5">
               <div className={`h-1.5 w-1.5 rounded-full ${s.status === "operational" ? "bg-emerald-500" : "bg-amber-500"}`} />
-              <span className={`text-[12px] font-medium capitalize ${s.status === "operational" ? "text-emerald-700" : "text-amber-700"}`}>
-                {s.status}
-              </span>
+              <span className={`text-[12px] font-medium capitalize ${s.status === "operational" ? "text-emerald-700" : "text-amber-700"}`}>{s.status}</span>
             </div>
             <div className="text-right text-[12px] font-medium text-muted-foreground">{s.uptime}</div>
           </div>
@@ -750,7 +991,6 @@ function HelpPanel() {
     { label: "Public Roadmap", description: "See what's coming next in CrediEdgeOS", icon: Activity, action: "View Roadmap" },
     { label: "Changelog", description: "See recent updates and new features", icon: Clock, action: "View Changes" },
   ];
-
   return (
     <div className="space-y-4">
       <SectionHeader title="Help & Support" description="Find resources, report issues or contact the team." />
@@ -802,7 +1042,6 @@ export function SettingsHub() {
 
   return (
     <div className="flex gap-5">
-      {/* Sidebar nav */}
       <aside className="w-52 shrink-0">
         <nav className="rounded-2xl border border-border bg-card shadow-soft">
           <div className="space-y-4 p-2">
@@ -837,7 +1076,6 @@ export function SettingsHub() {
         </nav>
       </aside>
 
-      {/* Content panel */}
       <div className="min-w-0 flex-1 overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
         <div className="flex items-center gap-3 border-b border-border px-6 py-4">
           <div className="grid h-9 w-9 place-items-center rounded-xl bg-brand/10">
