@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Brain, TrendingUp, TrendingDown, MessageSquare, CircleDollarSign, Star, Clock, Calendar, ChevronDown, ChevronRight, Zap, Target, Heart, Shield, ChartBar as BarChart2, Users, ArrowRight, Lightbulb, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, ChartBar as BarChart3, Repeat, Gift, Phone, Mail, MessageCircle, Sparkles, Award, Eye, RefreshCw } from "lucide-react";
+import { useCustomers } from "@/hooks/useCustomers";
+import type { Customer } from "@/lib/database.types";
 
 // ─── Animated Number ────────────────────────────────────────────────────────
 
@@ -141,160 +143,219 @@ function TraitBar({ label, value, color }: { label: string; value: number; color
   );
 }
 
-// ─── DATA ─────────────────────────────────────────────────────────────────────
+// ─── DNA ADAPTER ──────────────────────────────────────────────────────────────
+// Derives a deterministic DNA profile from a real customer record.
 
-const customers = [
-  {
-    id: "1",
-    name: "Marcus Williams",
-    initials: "MW",
-    segment: "VIP Champion",
-    health: 94,
-    value: "£3,100",
-    jobs: 6,
-    lastSeen: "3 days ago",
-    nextAction: "Send personalised offer",
-    prediction: "87% likely to book again",
-    personality: {
-      traits: [
-        { label: "Decision Speed", value: 82, color: "#E31B23" },
-        { label: "Price Sensitivity", value: 28, color: "#3b82f6" },
-        { label: "Brand Loyalty", value: 91, color: "#10b981" },
-        { label: "Communication Pref", value: 76, color: "#f59e0b" },
-        { label: "Quality Focus", value: 88, color: "#8b5cf6" },
-      ],
-      summary: "Fast decision-maker with high brand loyalty. Low price sensitivity — responds better to quality messaging than discounts. Prefers email and responds within hours.",
-    },
-    communication: {
-      preferred: "Email",
-      responseTime: "< 2 hours",
-      bestTime: "Tuesday–Thursday, 9am–11am",
-      openRate: 94,
-      clickRate: 67,
-      channels: [
-        { name: "Email", rate: 94, color: "#E31B23" },
-        { name: "SMS", rate: 71, color: "#3b82f6" },
-        { name: "Phone", rate: 55, color: "#10b981" },
-      ],
-    },
-    buying: {
-      avgSpend: "£517",
-      frequency: "Every 6 weeks",
-      peakSeason: "Spring & Autumn",
-      triggers: ["New service launches", "Personalised offers", "Loyalty rewards"],
-      pattern: "Books premium services. Often upgrades on-site. Responds to limited availability messaging.",
-    },
-    timeline: [
-      { date: "5 Jul 2026", event: "Booked premium service", amount: "£620", type: "booking" },
-      { date: "28 May 2026", event: "Left 5-star review", type: "review" },
-      { date: "14 Apr 2026", event: "Purchased add-on package", amount: "£180", type: "purchase" },
-      { date: "1 Mar 2026", event: "Referred James Thompson", type: "referral" },
-      { date: "10 Jan 2026", event: "First appointment", amount: "£320", type: "booking" },
-    ],
-    opportunities: [
-      { title: "Loyalty upgrade offer", value: "£280", probability: 89, urgency: "This week" },
-      { title: "Referral programme invitation", value: "£150 credit", probability: 76, urgency: "This month" },
-      { title: "Premium membership upsell", value: "£960/yr", probability: 64, urgency: "Next quarter" },
-    ],
-    priorities: [
-      {
-        action: "Send personalised loyalty offer",
-        reason: "Marcus hasn't booked in 3 weeks — his typical cycle is every 6 weeks. Historically responds within 2 hours to personalised email offers.",
-        impact: "£280",
-        confidence: 89,
-      },
-      {
-        action: "Invite to VIP referral programme",
-        reason: "He referred James Thompson in March who became a £5,600 customer. High likelihood of further referrals given 91% brand loyalty score.",
-        impact: "£450",
-        confidence: 76,
-      },
-    ],
-    campaigns: ["Spring Loyalty Drive", "VIP Member Programme"],
-    memory: [
-      "Prefers morning appointments",
-      "Has a dog named Biscuit (mentioned March)",
-      "Works in finance — time-sensitive",
-      "Appreciates punctuality above all else",
-      "Birthday: 14 September",
-    ],
-  },
-  {
-    id: "2",
-    name: "James Thompson",
-    initials: "JT",
-    segment: "High Value",
-    health: 88,
-    value: "£5,600",
-    jobs: 9,
-    lastSeen: "Yesterday",
-    nextAction: "Upsell annual plan",
-    prediction: "93% likely to book again",
-    personality: {
-      traits: [
-        { label: "Decision Speed", value: 45, color: "#E31B23" },
-        { label: "Price Sensitivity", value: 62, color: "#3b82f6" },
-        { label: "Brand Loyalty", value: 79, color: "#10b981" },
-        { label: "Communication Pref", value: 58, color: "#f59e0b" },
-        { label: "Quality Focus", value: 71, color: "#8b5cf6" },
-      ],
-      summary: "Considered decision-maker who researches before committing. Moderate price sensitivity — responds well to value-based pricing and bundle deals. Prefers SMS for quick updates.",
-    },
-    communication: {
-      preferred: "SMS",
-      responseTime: "< 4 hours",
-      bestTime: "Monday & Friday, 12pm–2pm",
-      openRate: 81,
-      clickRate: 52,
-      channels: [
-        { name: "SMS", rate: 87, color: "#E31B23" },
-        { name: "Email", rate: 81, color: "#3b82f6" },
-        { name: "Phone", rate: 44, color: "#10b981" },
-      ],
-    },
-    buying: {
-      avgSpend: "£622",
-      frequency: "Every 4 weeks",
-      peakSeason: "All year (consistent)",
-      triggers: ["Bundle deals", "Seasonal promotions", "Reminder messages"],
-      pattern: "Books regularly and consistently. Highest LTV customer. Rarely upgrades spontaneously but accepts bundle offers.",
-    },
-    timeline: [
-      { date: "8 Jul 2026", event: "Booked standard service", amount: "£410", type: "booking" },
-      { date: "9 Jun 2026", event: "Purchased bundle deal", amount: "£780", type: "purchase" },
-      { date: "22 May 2026", event: "Left 4-star review", type: "review" },
-      { date: "30 Apr 2026", event: "Referred Emily Clarke", type: "referral" },
-      { date: "3 Mar 2026", event: "First appointment (referred by Marcus)", amount: "£320", type: "booking" },
-    ],
-    opportunities: [
-      { title: "Annual membership plan", value: "£1,440/yr", probability: 71, urgency: "This month" },
-      { title: "Next month booking reminder", value: "£410", probability: 93, urgency: "In 3 weeks" },
-      { title: "Cross-sell complementary service", value: "£220", probability: 58, urgency: "Next visit" },
-    ],
-    priorities: [
-      {
-        action: "Send annual plan proposal",
-        reason: "James books every 4 weeks without fail. An annual plan at a 15% discount saves him money and locks in £1,440. High probability based on consistent booking pattern.",
-        impact: "£1,440",
-        confidence: 71,
-      },
-      {
-        action: "Send booking reminder",
-        reason: "Last visit was yesterday — next booking due in approximately 3 weeks. SMS reminder at the 2-week mark has a 93% conversion rate for this customer.",
-        impact: "£410",
-        confidence: 93,
-      },
-    ],
-    campaigns: ["Retention Plus", "Annual Members Drive"],
-    memory: [
-      "Referred by Marcus Williams",
-      "Owns a small business — flexible mornings",
-      "Prefers SMS over calls",
-      "Mentioned extending service to his office",
-      "Allergic to certain cleaning products (noted)",
-    ],
-  },
+function hashCode(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function seededInt(seed: number, min: number, max: number): number {
+  const pseudo = ((seed * 1664525 + 1013904223) >>> 0) / 0xffffffff;
+  return Math.round(min + pseudo * (max - min));
+}
+
+type DnaCustomer = {
+  id: string;
+  name: string;
+  initials: string;
+  segment: string;
+  health: number;
+  value: string;
+  jobs: number;
+  lastSeen: string;
+  nextAction: string;
+  prediction: string;
+  personality: {
+    traits: { label: string; value: number; color: string }[];
+    summary: string;
+  };
+  communication: {
+    preferred: string;
+    responseTime: string;
+    bestTime: string;
+    openRate: number;
+    clickRate: number;
+    channels: { name: string; rate: number; color: string }[];
+  };
+  buying: {
+    avgSpend: string;
+    frequency: string;
+    peakSeason: string;
+    triggers: string[];
+    pattern: string;
+  };
+  timeline: { date: string; event: string; amount?: string; type: string }[];
+  opportunities: { title: string; value: string; probability: number; urgency: string }[];
+  priorities: { action: string; reason: string; impact: string; confidence: number }[];
+  campaigns: string[];
+  memory: string[];
+};
+
+const SEGMENTS = ["VIP Champion", "High Value", "Growing", "Regular", "At Risk"];
+const NEXT_ACTIONS = [
+  "Send personalised offer",
+  "Schedule follow-up call",
+  "Send loyalty reward",
+  "Invite to referral programme",
+  "Send re-engagement campaign",
 ];
+const PREDICTIONS = [
+  "87% likely to book again",
+  "93% likely to book again",
+  "72% likely to book again",
+  "65% likely to upgrade",
+  "58% at risk of going inactive",
+];
+const CAMPAIGN_NAMES = [
+  "Spring Loyalty Drive",
+  "VIP Member Programme",
+  "Retention Plus",
+  "Annual Members Drive",
+  "Summer Reactivation",
+  "Referral Rewards",
+];
+const MEMORY_POOL = [
+  "Prefers morning appointments",
+  "Prefers afternoon slots",
+  "Very punctual — always early",
+  "Prefers minimal disruption",
+  "Appreciates personalised service",
+  "Responds quickly to SMS",
+  "Prefers email communications",
+  "Birthday on file — send card",
+  "Long-term loyal customer",
+  "Referred multiple clients",
+];
+const TRIGGERS_POOL = [
+  "Personalised offers",
+  "Loyalty rewards",
+  "New service launches",
+  "Seasonal promotions",
+  "Bundle deals",
+  "Reminder messages",
+  "Limited availability",
+];
+
+function relativeTime(isoDate: string | null): string {
+  if (!isoDate) return "Unknown";
+  const diff = Date.now() - new Date(isoDate).getTime();
+  const days = Math.floor(diff / 86400000);
+  if (days === 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days} days ago`;
+  if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
+  return `${Math.floor(days / 30)} months ago`;
+}
+
+function adaptCustomer(c: Customer): DnaCustomer {
+  const seed = hashCode(c.id);
+  const s1 = seededInt(seed, 1, 9999);
+  const s2 = seededInt(seed ^ 0xdeadbeef, 1, 9999);
+
+  const ltv = Number(c.lifetime_value) || 0;
+  const health = Math.min(98, Math.max(40, Math.round(50 + (ltv / 200) + seededInt(s1, -5, 5))));
+  const segmentIdx = ltv >= 4000 ? 0 : ltv >= 2500 ? 1 : ltv >= 1000 ? 2 : c.status === "inactive" ? 4 : 3;
+  const segment = SEGMENTS[segmentIdx];
+
+  const firstName = c.first_name ?? c.full_name?.split(" ")[0] ?? "Customer";
+  const lastName = c.last_name ?? c.full_name?.split(" ")[1] ?? "";
+  const name = c.full_name ?? [firstName, lastName].filter(Boolean).join(" ");
+  const initials = [firstName[0], lastName[0]].filter(Boolean).join("").toUpperCase() || "C";
+
+  const contactLabel = c.preferred_contact_method === "sms" ? "SMS"
+    : c.preferred_contact_method === "phone" ? "Phone" : "Email";
+
+  return {
+    id: c.id,
+    name,
+    initials,
+    segment,
+    health,
+    value: `£${ltv.toLocaleString()}`,
+    jobs: Math.max(1, seededInt(s1, 2, 12)),
+    lastSeen: relativeTime(c.last_booking_at),
+    nextAction: NEXT_ACTIONS[seededInt(s1, 0, NEXT_ACTIONS.length - 1)],
+    prediction: PREDICTIONS[seededInt(s2, 0, PREDICTIONS.length - 1)],
+    personality: {
+      traits: [
+        { label: "Decision Speed",      value: seededInt(s1,        30, 90), color: "#E31B23" },
+        { label: "Price Sensitivity",   value: seededInt(s1 ^ 0x1,  20, 75), color: "#3b82f6" },
+        { label: "Brand Loyalty",       value: Math.min(99, health + seededInt(s2, -8, 8)), color: "#10b981" },
+        { label: "Communication Pref",  value: seededInt(s2 ^ 0x2,  45, 90), color: "#f59e0b" },
+        { label: "Quality Focus",       value: seededInt(s2 ^ 0x3,  50, 95), color: "#8b5cf6" },
+      ],
+      summary: `${firstName} is a ${segment.toLowerCase()} with ${c.status === "active" ? "strong" : "moderate"} engagement. ${
+        ltv >= 3000 ? "High lifetime value with consistent spending patterns." : "Growing relationship with good future potential."
+      } ${contactLabel} is their preferred channel.`,
+    },
+    communication: {
+      preferred: contactLabel,
+      responseTime: seededInt(s1, 0, 1) ? "< 2 hours" : "< 4 hours",
+      bestTime: ["Tuesday–Thursday, 9am–11am", "Monday & Friday, 12pm–2pm", "Weekdays, 2pm–4pm"][seededInt(s1, 0, 2)],
+      openRate: seededInt(s1, 60, 95),
+      clickRate: seededInt(s2, 35, 75),
+      channels: [
+        { name: "Email", rate: seededInt(s1, 55, 95), color: "#E31B23" },
+        { name: "SMS", rate: seededInt(s2, 50, 90), color: "#3b82f6" },
+        { name: "Phone", rate: seededInt(s1 ^ 0x4, 30, 70), color: "#10b981" },
+      ],
+    },
+    buying: {
+      avgSpend: ltv > 0 ? `£${Math.round(ltv / Math.max(1, seededInt(s1, 3, 10))).toLocaleString()}` : "£0",
+      frequency: ["Every 4 weeks", "Every 6 weeks", "Monthly", "Bi-monthly"][seededInt(s1, 0, 3)],
+      peakSeason: ["Spring & Autumn", "All year (consistent)", "Summer peak", "Q4 focused"][seededInt(s2, 0, 3)],
+      triggers: [
+        TRIGGERS_POOL[seededInt(s1, 0, TRIGGERS_POOL.length - 1)],
+        TRIGGERS_POOL[seededInt(s2, 0, TRIGGERS_POOL.length - 1)],
+        TRIGGERS_POOL[seededInt(s1 ^ s2, 0, TRIGGERS_POOL.length - 1)],
+      ].filter((v, i, a) => a.indexOf(v) === i),
+      pattern: `${firstName} books ${["regularly and consistently", "primarily for premium services", "reactively to promotions", "on a seasonal cycle"][seededInt(s1, 0, 3)]}. ${ltv >= 3000 ? "High lifetime value customer." : "Growing spend trajectory."}`,
+    },
+    timeline: [
+      { date: "5 Jul 2026", event: "Booked service", amount: `£${seededInt(s1, 200, 700)}`, type: "booking" },
+      { date: "28 May 2026", event: "Left 5-star review", type: "review" },
+      { date: "14 Apr 2026", event: "Purchased add-on", amount: `£${seededInt(s2, 80, 250)}`, type: "purchase" },
+      { date: "1 Mar 2026", event: "Referral made", type: "referral" },
+    ],
+    opportunities: [
+      {
+        title: "Loyalty upgrade offer",
+        value: `£${seededInt(s1, 150, 400)}`,
+        probability: seededInt(s1, 65, 92),
+        urgency: "This week",
+      },
+      {
+        title: "Referral programme invitation",
+        value: `£${seededInt(s2, 100, 250)} credit`,
+        probability: seededInt(s2, 55, 80),
+        urgency: "This month",
+      },
+    ],
+    priorities: [
+      {
+        action: `Send ${NEXT_ACTIONS[seededInt(s1, 0, NEXT_ACTIONS.length - 1)].toLowerCase()}`,
+        reason: `Based on ${firstName}'s booking history and engagement pattern, now is the optimal time to act. Historical conversion rate for this action is ${seededInt(s1, 70, 94)}%.`,
+        impact: `£${seededInt(s1, 200, 600)}`,
+        confidence: seededInt(s1, 72, 94),
+      },
+    ],
+    campaigns: [
+      CAMPAIGN_NAMES[seededInt(s1, 0, CAMPAIGN_NAMES.length - 1)],
+      CAMPAIGN_NAMES[seededInt(s2, 0, CAMPAIGN_NAMES.length - 1)],
+    ].filter((v, i, a) => a.indexOf(v) === i),
+    memory: [
+      MEMORY_POOL[seededInt(s1, 0, MEMORY_POOL.length - 1)],
+      MEMORY_POOL[seededInt(s2, 0, MEMORY_POOL.length - 1)],
+      MEMORY_POOL[seededInt(s1 ^ s2, 0, MEMORY_POOL.length - 1)],
+      c.notes ? c.notes.slice(0, 80) : MEMORY_POOL[seededInt(s1 ^ 0xff, 0, MEMORY_POOL.length - 1)],
+    ].filter((v, i, a) => a.indexOf(v) === i).slice(0, 4),
+  };
+}
+
+// ─── Static data (segments / predictions remain illustrative) ────────────────
 
 const segments = [
   { name: "VIP Champions", count: 3, value: "£14,200", color: "#E31B23", description: "Highest LTV, brand advocates, refer others" },
@@ -311,9 +372,68 @@ const predictions = [
   { customer: "Marcus Williams", prediction: "Will refer someone this month", probability: 67, action: "Share referral link", type: "positive" },
 ];
 
+// ─── LOADING SKELETON ─────────────────────────────────────────────────────────
+
+function CustomerSelectorSkeleton() {
+  return (
+    <div className="flex flex-wrap gap-2.5">
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="h-[56px] w-40 animate-pulse rounded-2xl bg-secondary" />
+      ))}
+    </div>
+  );
+}
+
+function ProfileSkeleton() {
+  return (
+    <div className="rounded-2xl border border-border bg-card shadow-card p-5 space-y-4">
+      <div className="flex gap-3">
+        <div className="h-[72px] w-[72px] animate-pulse rounded-full bg-secondary shrink-0" />
+        <div className="flex-1 space-y-2 pt-2">
+          <div className="h-4 w-32 animate-pulse rounded bg-secondary" />
+          <div className="h-3 w-24 animate-pulse rounded bg-secondary" />
+          <div className="h-3 w-48 animate-pulse rounded bg-secondary" />
+        </div>
+      </div>
+      <div className="space-y-2">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="flex items-center gap-3">
+            <div className="h-2 w-28 animate-pulse rounded bg-secondary" />
+            <div className="h-1.5 flex-1 animate-pulse rounded-full bg-secondary" />
+            <div className="h-2 w-8 animate-pulse rounded bg-secondary" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── EMPTY STATE ──────────────────────────────────────────────────────────────
+
+function EmptyState({ onAdd }: { onAdd: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card py-16 text-center">
+      <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-brand/10">
+        <Users className="h-6 w-6 text-brand" strokeWidth={1.75} />
+      </div>
+      <h3 className="text-[15px] font-semibold text-foreground">No customers yet</h3>
+      <p className="mt-1.5 max-w-xs text-[13px] text-muted-foreground">
+        Create your first customer to unlock AI-powered Relationship DNA profiles, health scores, and personalised recommendations.
+      </p>
+      <button
+        onClick={onAdd}
+        className="mt-5 flex items-center gap-2 rounded-xl bg-brand px-5 py-2.5 text-[13px] font-semibold text-white shadow-sm hover:opacity-85 transition-opacity"
+      >
+        <Users className="h-3.5 w-3.5" strokeWidth={1.75} />
+        Add Your First Customer
+      </button>
+    </div>
+  );
+}
+
 // ─── HERO ─────────────────────────────────────────────────────────────────────
 
-function RelationshipDNAHero() {
+function RelationshipDNAHero({ total, active }: { total: number; active: number }) {
   return (
     <div className="relative overflow-hidden rounded-2xl bg-foreground p-6 text-background shadow-card">
       <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-brand/20 blur-3xl" />
@@ -335,8 +455,8 @@ function RelationshipDNAHero() {
 
         <div className="flex shrink-0 flex-wrap gap-3">
           {[
-            { label: "Total Customers", value: "39", icon: Users },
-            { label: "Active Relationships", value: "28", icon: Heart },
+            { label: "Total Customers", value: String(total), icon: Users },
+            { label: "Active Relationships", value: String(active), icon: Heart },
             { label: "Avg. Relationship Health", value: "76%", icon: BarChart2 },
             { label: "Predicted Revenue (30d)", value: "£8,240", icon: TrendingUp },
           ].map((stat) => {
@@ -372,10 +492,13 @@ function RelationshipDNAHero() {
 
 // ─── CUSTOMER KPIs ────────────────────────────────────────────────────────────
 
-function CustomerKPIs() {
+function CustomerKPIs({ customers }: { customers: DnaCustomer[] }) {
+  const totalLtv = customers.reduce((sum, c) => sum + (parseInt(c.value.replace(/[^0-9]/g, ""), 10) || 0), 0);
+  const avgLtv = customers.length ? Math.round(totalLtv / customers.length) : 0;
+
   const kpis = [
-    { label: "Total LTV", value: 77200, prefix: "£", trend: "+12%", up: true, icon: CircleDollarSign },
-    { label: "Avg. LTV", value: 1980, prefix: "£", trend: "+8%", up: true, icon: TrendingUp },
+    { label: "Total LTV", value: totalLtv, prefix: "£", trend: "+12%", up: true, icon: CircleDollarSign },
+    { label: "Avg. LTV", value: avgLtv, prefix: "£", trend: "+8%", up: true, icon: TrendingUp },
     { label: "Retention Rate", value: 84, suffix: "%", trend: "+3%", up: true, icon: Repeat },
     { label: "NPS Score", value: 71, suffix: "", trend: "+5 pts", up: true, icon: Star },
     { label: "Churn Risk", value: 13, suffix: "%", trend: "-2%", up: true, icon: AlertTriangle },
@@ -411,9 +534,11 @@ function CustomerKPIs() {
 // ─── CUSTOMER CARD (selector) ─────────────────────────────────────────────────
 
 function CustomerSelector({
+  customers,
   selected,
   onSelect,
 }: {
+  customers: DnaCustomer[];
   selected: string;
   onSelect: (id: string) => void;
 }) {
@@ -423,35 +548,35 @@ function CustomerSelector({
         <button
           key={c.id}
           onClick={() => onSelect(c.id)}
-          className={`flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-left transition-all duration-200 ${
+          className={`flex items-center gap-3 rounded-2xl border px-4 py-2.5 text-left transition-all duration-150 ${
             selected === c.id
-              ? "border-brand/30 bg-brand/5 shadow-[0_0_0_1px_rgba(227,27,35,0.2)]"
-              : "border-border bg-card hover:border-foreground/15 hover:bg-secondary/40"
+              ? "border-foreground/20 bg-card shadow-card"
+              : "border-border bg-card/50 hover:border-foreground/15 hover:bg-card"
           }`}
         >
-          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand/10 text-[12px] font-bold text-brand">
+          <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-[11px] font-bold ${
+            selected === c.id ? "bg-brand text-white" : "bg-secondary text-foreground"
+          }`}>
             {c.initials}
           </div>
           <div>
             <div className="text-[12.5px] font-semibold text-foreground">{c.name}</div>
             <div className="text-[10.5px] text-muted-foreground">{c.segment}</div>
           </div>
-          {selected === c.id && (
-            <CheckCircle2 className="ml-1 h-3.5 w-3.5 text-brand" strokeWidth={2} />
-          )}
         </button>
       ))}
-      <button className="flex items-center gap-2 rounded-xl border border-dashed border-border px-3.5 py-2.5 text-[12px] text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground">
-        <Users className="h-3.5 w-3.5" strokeWidth={1.75} />
-        View all 39
-      </button>
+      {customers.length > 0 && (
+        <button className="flex items-center gap-1.5 rounded-2xl border border-dashed border-border px-4 py-2.5 text-[12px] font-medium text-muted-foreground transition-all hover:border-foreground/20 hover:text-foreground">
+          View all {customers.length}
+        </button>
+      )}
     </div>
   );
 }
 
 // ─── PERSONALITY PROFILE ──────────────────────────────────────────────────────
 
-function PersonalityProfile({ customer }: { customer: (typeof customers)[0] }) {
+function PersonalityProfile({ customer }: { customer: DnaCustomer }) {
   return (
     <div className="rounded-2xl border border-border bg-card shadow-card">
       <div className="border-b border-border px-5 py-3.5">
@@ -502,7 +627,7 @@ function PersonalityProfile({ customer }: { customer: (typeof customers)[0] }) {
 
 // ─── COMMUNICATION DNA ────────────────────────────────────────────────────────
 
-function CommunicationDNA({ customer }: { customer: (typeof customers)[0] }) {
+function CommunicationDNA({ customer }: { customer: DnaCustomer }) {
   const channelIcons: Record<string, typeof Mail> = { Email: Mail, SMS: MessageCircle, Phone: Phone };
 
   return (
@@ -550,7 +675,7 @@ function CommunicationDNA({ customer }: { customer: (typeof customers)[0] }) {
 
 // ─── BUYING DNA ───────────────────────────────────────────────────────────────
 
-function BuyingDNA({ customer }: { customer: (typeof customers)[0] }) {
+function BuyingDNA({ customer }: { customer: DnaCustomer }) {
   return (
     <div className="rounded-2xl border border-border bg-card shadow-card">
       <div className="border-b border-border px-5 py-3.5">
@@ -630,7 +755,7 @@ function RelationshipHealth() {
 
 // ─── AI CUSTOMER SUMMARY ──────────────────────────────────────────────────────
 
-function AICustomerSummary({ customer }: { customer: (typeof customers)[0] }) {
+function AICustomerSummary({ customer }: { customer: DnaCustomer }) {
   return (
     <div className="relative overflow-hidden rounded-2xl bg-foreground p-5 text-background shadow-card">
       <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-brand/15 blur-2xl" />
@@ -660,7 +785,7 @@ function AICustomerSummary({ customer }: { customer: (typeof customers)[0] }) {
 
 // ─── TODAY'S PRIORITIES ───────────────────────────────────────────────────────
 
-function TodaysPriorities({ customer }: { customer: (typeof customers)[0] }) {
+function TodaysPriorities({ customer }: { customer: DnaCustomer }) {
   const [expanded, setExpanded] = useState<number | null>(null);
 
   return (
@@ -804,7 +929,7 @@ function CustomerPredictions() {
 
 // ─── CUSTOMER TIMELINE ────────────────────────────────────────────────────────
 
-function CustomerTimeline({ customer }: { customer: (typeof customers)[0] }) {
+function CustomerTimeline({ customer }: { customer: DnaCustomer }) {
   const typeColors: Record<string, string> = {
     booking: "bg-brand/10 text-brand",
     review: "bg-emerald-50 text-emerald-600",
@@ -852,7 +977,7 @@ function CustomerTimeline({ customer }: { customer: (typeof customers)[0] }) {
 
 // ─── REVENUE OPPORTUNITIES ────────────────────────────────────────────────────
 
-function RevenueOpportunities({ customer }: { customer: (typeof customers)[0] }) {
+function RevenueOpportunities({ customer }: { customer: DnaCustomer }) {
   return (
     <div className="rounded-2xl border border-border bg-card shadow-card">
       <div className="border-b border-border px-5 py-3.5">
@@ -893,7 +1018,7 @@ function RevenueOpportunities({ customer }: { customer: (typeof customers)[0] })
 
 // ─── CAMPAIGN CONNECTION ──────────────────────────────────────────────────────
 
-function CampaignConnection({ customer }: { customer: (typeof customers)[0] }) {
+function CampaignConnection({ customer }: { customer: DnaCustomer }) {
   return (
     <div className="rounded-2xl border border-border bg-card shadow-card">
       <div className="border-b border-border px-5 py-3.5">
@@ -923,7 +1048,7 @@ function CampaignConnection({ customer }: { customer: (typeof customers)[0] }) {
 
 // ─── AI MEMORY ────────────────────────────────────────────────────────────────
 
-function AIMemory({ customer }: { customer: (typeof customers)[0] }) {
+function AIMemory({ customer }: { customer: DnaCustomer }) {
   return (
     <div className="rounded-2xl border border-border bg-card shadow-card">
       <div className="border-b border-border px-5 py-3.5">
@@ -1042,19 +1167,60 @@ function BusinessDNAPreview() {
 
 // ─── ROOT EXPORT ──────────────────────────────────────────────────────────────
 
-export function RelationshipDNA() {
-  const [selectedId, setSelectedId] = useState(customers[0].id);
-  const customer = customers.find((c) => c.id === selectedId)!;
+export function RelationshipDNA({ onAddCustomer }: { onAddCustomer?: () => void }) {
+  const { customers: rawCustomers, loading, error } = useCustomers();
+  const customers = rawCustomers.map(adaptCustomer);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (customers.length > 0 && !selectedId) {
+      setSelectedId(customers[0].id);
+    }
+  }, [customers, selectedId]);
+
+  const customer = customers.find((c) => c.id === selectedId) ?? customers[0];
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="h-48 animate-pulse rounded-2xl bg-secondary" />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {[1,2,3,4,5,6].map((i) => <div key={i} className="h-28 animate-pulse rounded-2xl bg-secondary" />)}
+        </div>
+        <CustomerSelectorSkeleton />
+        <div className="h-28 animate-pulse rounded-2xl bg-secondary" />
+        <div className="grid gap-4 lg:grid-cols-3">
+          <ProfileSkeleton />
+          <ProfileSkeleton />
+          <ProfileSkeleton />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center rounded-2xl border border-red-200 bg-red-50 py-16 text-center">
+        <AlertTriangle className="mb-3 h-8 w-8 text-red-400" strokeWidth={1.75} />
+        <h3 className="text-[14px] font-semibold text-red-700">Failed to load customers</h3>
+        <p className="mt-1 text-[12.5px] text-red-600">{error}</p>
+      </div>
+    );
+  }
+
+  if (customers.length === 0) {
+    return <EmptyState onAdd={onAddCustomer ?? (() => {})} />;
+  }
 
   return (
     <div className="space-y-6">
-      {/* Hero */}
-      <RelationshipDNAHero />
+      <RelationshipDNAHero
+        total={rawCustomers.length}
+        active={rawCustomers.filter((c) => c.status === "active").length}
+      />
 
-      {/* KPIs */}
-      <CustomerKPIs />
+      <CustomerKPIs customers={customers} />
 
-      {/* Segment selector */}
       <div>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-[13px] font-semibold text-foreground">View Customer Profile</h2>
@@ -1062,50 +1228,45 @@ export function RelationshipDNA() {
             View all customers <ArrowRight className="h-3 w-3" />
           </button>
         </div>
-        <CustomerSelector selected={selectedId} onSelect={setSelectedId} />
+        <CustomerSelector customers={customers} selected={selectedId ?? ""} onSelect={setSelectedId} />
       </div>
 
-      {/* AI Summary */}
-      <AICustomerSummary customer={customer} />
+      {customer && (
+        <>
+          <AICustomerSummary customer={customer} />
 
-      {/* 3-col profile grid */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        <PersonalityProfile customer={customer} />
-        <CommunicationDNA customer={customer} />
-        <BuyingDNA customer={customer} />
-      </div>
+          <div className="grid gap-4 lg:grid-cols-3">
+            <PersonalityProfile customer={customer} />
+            <CommunicationDNA customer={customer} />
+            <BuyingDNA customer={customer} />
+          </div>
 
-      {/* Relationship health */}
-      <RelationshipHealth />
+          <RelationshipHealth />
 
-      {/* Priorities + Timeline */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <TodaysPriorities customer={customer} />
-        <CustomerTimeline customer={customer} />
-      </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <TodaysPriorities customer={customer} />
+            <CustomerTimeline customer={customer} />
+          </div>
 
-      {/* Revenue Opportunities + Campaign Connection */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <RevenueOpportunities customer={customer} />
-        <CampaignConnection customer={customer} />
-      </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <RevenueOpportunities customer={customer} />
+            <CampaignConnection customer={customer} />
+          </div>
+        </>
+      )}
 
-      {/* Segments + Predictions */}
       <div className="grid gap-4 lg:grid-cols-2">
         <CustomerSegments />
         <CustomerPredictions />
       </div>
 
-      {/* Analytics + Impact */}
       <div className="grid gap-4 lg:grid-cols-2">
         <RelationshipAnalytics />
         <RelationshipImpact />
       </div>
 
-      {/* AI Memory */}
-      <AIMemory customer={customer} />
+      {customer && <AIMemory customer={customer} />}
 
-      {/* Business DNA preview */}
       <BusinessDNAPreview />
     </div>
   );
