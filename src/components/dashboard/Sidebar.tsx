@@ -12,7 +12,6 @@ import {
   Globe,
   Plug,
   Settings,
-  ArrowRight,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { HealthScore } from "./HealthScore";
@@ -23,7 +22,7 @@ const nav = [
   { label: "Tasks", icon: CheckSquare },
   { label: "Calendar", icon: Calendar },
   { label: "Customers", icon: Users },
-  { label: "Inbox", icon: Inbox, badge: 4 },
+  { label: "Inbox", icon: Inbox, badge: 5 },
   { label: "Reviews", icon: Star },
   { label: "Analytics", icon: BarChart3 },
   { label: "Reports", icon: FileText },
@@ -35,7 +34,7 @@ const nav = [
 
 export function Sidebar() {
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col bg-sidebar text-sidebar-foreground lg:flex">
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-border bg-card lg:flex">
       <div className="flex h-16 items-center px-5">
         <Logo />
       </div>
@@ -47,14 +46,17 @@ export function Sidebar() {
             return (
               <li key={item.label}>
                 <button
-                  className={`group flex w-full items-center justify-between rounded-lg px-3 py-2 text-[13.5px] font-medium transition-all duration-150 ${
+                  className={`group flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-[13.5px] font-medium transition-all duration-150 ${
                     item.active
                       ? "bg-brand text-white shadow-sm"
-                      : "text-white/70 hover:bg-sidebar-accent hover:text-white"
+                      : "text-foreground/80 hover:bg-secondary hover:text-foreground"
                   }`}
                 >
                   <span className="flex items-center gap-3">
-                    <Icon className="h-[17px] w-[17px]" strokeWidth={1.75} />
+                    <Icon
+                      className={`h-[17px] w-[17px] ${item.active ? "" : "text-foreground/70"}`}
+                      strokeWidth={1.75}
+                    />
                     {item.label}
                   </span>
                   {item.badge && (
@@ -73,13 +75,5 @@ export function Sidebar() {
         <HealthScore />
       </div>
     </aside>
-  );
-}
-
-export function ViewFullReportLink() {
-  return (
-    <a className="mt-3 flex items-center justify-center gap-1.5 rounded-md bg-white/10 py-2 text-xs font-medium text-white transition hover:bg-white/15">
-      View Full Report <ArrowRight className="h-3.5 w-3.5" />
-    </a>
   );
 }
