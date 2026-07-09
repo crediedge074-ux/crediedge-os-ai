@@ -1,0 +1,49 @@
+import { Menu, Search, Bell, HelpCircle, ChevronDown } from "lucide-react";
+
+export function TopNav() {
+  return (
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border bg-card/80 px-5 backdrop-blur-xl">
+      <button className="grid h-9 w-9 place-items-center rounded-md text-muted-foreground transition hover:bg-secondary lg:hidden">
+        <Menu className="h-5 w-5" strokeWidth={1.75} />
+      </button>
+      <button className="hidden h-9 w-9 place-items-center rounded-md text-muted-foreground transition hover:bg-secondary lg:grid">
+        <Menu className="h-5 w-5" strokeWidth={1.75} />
+      </button>
+
+      <div className="mx-auto w-full max-w-xl">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" strokeWidth={1.75} />
+          <input
+            type="text"
+            placeholder="Search anything..."
+            className="h-9 w-full rounded-lg border border-border bg-secondary/60 pl-9 pr-16 text-sm text-foreground placeholder:text-muted-foreground focus:border-foreground/20 focus:bg-card focus:outline-none focus:ring-4 focus:ring-foreground/5"
+          />
+          <kbd className="absolute right-2 top-1/2 -translate-y-1/2 rounded border border-border bg-card px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+            ⌘K
+          </kbd>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1">
+        <button className="relative grid h-9 w-9 place-items-center rounded-md text-muted-foreground transition hover:bg-secondary hover:text-foreground">
+          <Bell className="h-[18px] w-[18px]" strokeWidth={1.75} />
+          <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-brand" />
+        </button>
+        <button className="grid h-9 w-9 place-items-center rounded-md text-muted-foreground transition hover:bg-secondary hover:text-foreground">
+          <HelpCircle className="h-[18px] w-[18px]" strokeWidth={1.75} />
+        </button>
+        <div className="mx-1 h-6 w-px bg-border" />
+        <button className="flex items-center gap-2.5 rounded-lg px-1.5 py-1 transition hover:bg-secondary">
+          <div className="grid h-8 w-8 place-items-center rounded-full bg-foreground text-[12px] font-semibold text-background">
+            D
+          </div>
+          <div className="hidden text-left sm:block">
+            <div className="text-[13px] font-semibold leading-tight text-foreground">Dom</div>
+            <div className="text-[11px] leading-tight text-muted-foreground">Founder</div>
+          </div>
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2} />
+        </button>
+      </div>
+    </header>
+  );
+}
