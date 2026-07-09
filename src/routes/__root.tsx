@@ -87,10 +87,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         property: "og:description",
         content:
-          "One intelligent dashboard for your entire business. Powered by CrediEdge AI.",
+          "CrediEdgeOS is the AI-powered operating system for modern businesses — one intelligent dashboard for revenue, customers, tasks and growth.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "CrediEdgeOS — AI Business Operating System" },
+      { name: "twitter:description", content: "CrediEdgeOS is the AI-powered operating system for modern businesses — one intelligent dashboard for revenue, customers, tasks and growth." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/3b5da095-d98c-411f-8471-671de1b226f8/id-preview-d86dccae--06f326fe-8fe7-41df-a80e-c4c4de03fecf.lovable.app-1783587902515.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/3b5da095-d98c-411f-8471-671de1b226f8/id-preview-d86dccae--06f326fe-8fe7-41df-a80e-c4c4de03fecf.lovable.app-1783587902515.png" },
     ],
     links: [
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
