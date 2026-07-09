@@ -1,4 +1,12 @@
-import { MessageSquare, CircleDollarSign, Star, TriangleAlert as AlertTriangle, ArrowRight, CircleCheck as CheckCircle2 } from "lucide-react";
+import {
+  MessageSquare,
+  CircleDollarSign,
+  Star,
+  TriangleAlert as AlertTriangle,
+  CircleCheck as CheckCircle2,
+  UserPlus,
+  ArrowRight,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
@@ -7,68 +15,119 @@ interface Item {
   title: string;
   detail?: string;
   time: string;
-  starred?: boolean;
-  type: "enquiry" | "payment" | "review" | "alert" | "task";
+  type: "enquiry" | "payment" | "review" | "alert" | "task" | "customer";
+  action?: { label: string; to: string };
 }
 
 const items: Item[] = [
-  { icon: MessageSquare, title: "New enquiry from John Smith", time: "2 min ago", type: "enquiry" },
-  { icon: CircleDollarSign, title: "Payment received — Sarah Johnson", detail: "£450.00", time: "1 hr ago", type: "payment" },
-  { icon: Star, title: "New 5-star review on Google", time: "2 hr ago", starred: true, type: "review" },
-  { icon: AlertTriangle, title: "Website speed issue detected", time: "3 hr ago", type: "alert" },
-  { icon: CheckCircle2, title: "Job #0041 marked as complete", time: "4 hr ago", type: "task" },
+  {
+    icon: MessageSquare,
+    title: "New enquiry from John Smith",
+    time: "2 min ago",
+    type: "enquiry",
+    action: { label: "Reply", to: "/communications" },
+  },
+  {
+    icon: CircleDollarSign,
+    title: "Payment received — Sarah Johnson",
+    detail: "£450.00",
+    time: "1h ago",
+    type: "payment",
+  },
+  {
+    icon: Star,
+    title: "New 5-star review on Google",
+    detail: "★★★★★",
+    time: "2h ago",
+    type: "review",
+    action: { label: "View", to: "/reviews" },
+  },
+  {
+    icon: AlertTriangle,
+    title: "Website speed issue detected",
+    time: "3h ago",
+    type: "alert",
+    action: { label: "Fix", to: "/website" },
+  },
+  {
+    icon: CheckCircle2,
+    title: "Job #0041 marked as complete",
+    time: "4h ago",
+    type: "task",
+  },
+  {
+    icon: UserPlus,
+    title: "New appointment booked — Emma Clarke",
+    time: "5h ago",
+    type: "customer",
+    action: { label: "View", to: "/relationships" },
+  },
 ];
 
-const typeColor: Record<Item["type"], string> = {
-  enquiry: "bg-secondary text-foreground/60",
-  payment: "bg-success/10 text-success",
+const typeStyle: Record<Item["type"], string> = {
+  enquiry: "bg-blue-50 text-blue-600",
+  payment: "bg-emerald-50 text-emerald-600",
   review: "bg-brand/10 text-brand",
-  alert: "bg-warning/10 text-warning",
+  alert: "bg-amber-50 text-amber-600",
   task: "bg-secondary text-foreground/60",
+  customer: "bg-purple-50 text-purple-600",
 };
 
 export function RecentActivity() {
   return (
-    <div className="flex h-full flex-col rounded-xl border border-border bg-card p-5 shadow-soft">
-      <div className="mb-4 text-[13.5px] font-semibold tracking-tight text-foreground">
-        Recent Activity
+    <div className="flex h-full flex-col rounded-2xl border border-border bg-card shadow-card transition-all duration-200 hover:shadow-[0_4px_24px_rgba(0,0,0,0.07)]">
+      <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
+        <span className="text-[13.5px] font-semibold tracking-tight text-foreground">Recent Activity</span>
+        <Link
+          to="/intelligence"
+          className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-brand transition-all duration-200 hover:gap-1.5"
+        >
+          View All <ArrowRight className="h-3 w-3" />
+        </Link>
       </div>
 
+      {/* Timeline */}
       <ul className="flex-1 divide-y divide-border">
-        {items.map((i) => {
-          const Icon = i.icon;
+        {items.map((item, idx) => {
+          const Icon = item.icon;
           return (
-            <li key={i.title} className="flex items-start gap-3 py-2.5 first:pt-0 last:pb-0">
-              <div
-                className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg ${typeColor[i.type]}`}
-              >
-                <Icon className="h-[14px] w-[14px]" strokeWidth={1.75} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[12.5px] font-medium text-foreground">{i.title}</div>
-                {i.detail && (
-                  <div className="mt-0.5 text-[12px] font-bold text-foreground">{i.detail}</div>
+            <li
+              key={item.title}
+              className="group flex items-start gap-3 px-5 py-3.5 transition-colors duration-150 hover:bg-secondary/40"
+            >
+              {/* Timeline line */}
+              <div className="relative flex flex-col items-center">
+                <div className={`grid h-8 w-8 place-items-center rounded-xl ${typeStyle[item.type]}`}>
+                  <Icon className="h-[14px] w-[14px]" strokeWidth={1.75} />
+                </div>
+                {idx < items.length - 1 && (
+                  <div className="mt-1 h-[calc(100%-2rem)] w-px bg-border" />
                 )}
-                {i.starred && (
-                  <div className="mt-0.5 flex gap-0.5 text-brand">
-                    {Array.from({ length: 5 }).map((_, k) => (
-                      <Star key={k} className="h-2.5 w-2.5 fill-current" strokeWidth={0} />
-                    ))}
+              </div>
+
+              <div className="min-w-0 flex-1 pb-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-[12.5px] font-medium text-foreground">{item.title}</div>
+                    {item.detail && (
+                      <div className="mt-0.5 text-[12px] font-bold text-foreground">{item.detail}</div>
+                    )}
+                    <div className="mt-0.5 text-[10.5px] text-muted-foreground">{item.time}</div>
                   </div>
-                )}
+                  {item.action && (
+                    <Link
+                      to={item.action.to}
+                      className="shrink-0 rounded-lg border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-foreground opacity-0 transition-all duration-200 group-hover:opacity-100 hover:border-foreground/20 hover:bg-foreground hover:text-background"
+                    >
+                      {item.action.label}
+                    </Link>
+                  )}
+                </div>
               </div>
-              <div className="shrink-0 text-[10.5px] text-muted-foreground">{i.time}</div>
             </li>
           );
         })}
       </ul>
-
-      <Link
-        to="/intelligence"
-        className="mt-4 inline-flex items-center gap-1 self-start text-[12px] font-semibold text-brand transition-all duration-200 hover:gap-1.5"
-      >
-        View All Activity <ArrowRight className="h-3.5 w-3.5" />
-      </Link>
     </div>
   );
 }
