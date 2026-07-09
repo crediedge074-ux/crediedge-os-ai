@@ -1,56 +1,56 @@
-import { TrendingUp, ArrowRight } from "lucide-react";
+import { ArrowUp, ArrowRight } from "lucide-react";
 
 export function HealthScore() {
   const score = 84;
-  const radius = 28;
+  const radius = 34;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (score / 100) * circumference;
 
   return (
-    <div className="rounded-xl bg-white/[0.04] p-4 ring-1 ring-white/10">
-      <div className="mb-3 flex items-center justify-between">
-        <span className="text-[11px] font-medium uppercase tracking-wider text-white/50">
-          Business Health
-        </span>
+    <div className="rounded-2xl bg-[#0D0D0D] p-5 text-white">
+      <div className="mb-4 text-center text-[12px] font-semibold text-white">
+        Business Health Score
       </div>
 
-      <div className="flex items-center gap-3">
-        <div className="relative h-16 w-16 shrink-0">
-          <svg viewBox="0 0 64 64" className="h-16 w-16 -rotate-90">
+      <div className="mx-auto grid h-[104px] w-[104px] place-items-center">
+        <div className="relative h-full w-full">
+          <svg viewBox="0 0 80 80" className="h-full w-full -rotate-90">
             <circle
-              cx="32"
-              cy="32"
+              cx="40"
+              cy="40"
               r={radius}
-              stroke="rgba(255,255,255,0.08)"
-              strokeWidth="4"
+              stroke="rgba(255,255,255,0.10)"
+              strokeWidth="5"
               fill="none"
             />
             <circle
-              cx="32"
-              cy="32"
+              cx="40"
+              cy="40"
               r={radius}
               stroke="#E31B23"
-              strokeWidth="4"
+              strokeWidth="5"
               fill="none"
               strokeLinecap="round"
               strokeDasharray={circumference}
               strokeDashoffset={offset}
             />
           </svg>
-          <div className="absolute inset-0 grid place-items-center text-lg font-bold text-white">
-            {score}
-          </div>
-        </div>
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-white">Good</div>
-          <div className="mt-0.5 flex items-center gap-1 text-[11px] text-white/60">
-            <TrendingUp className="h-3 w-3 text-brand" strokeWidth={2} />
-            +6 vs yesterday
+          <div className="absolute inset-0 grid place-items-center">
+            <div className="text-center">
+              <div className="text-[28px] font-bold leading-none">{score}</div>
+              <div className="mt-1 text-[10.5px] text-white/70">Good</div>
+            </div>
           </div>
         </div>
       </div>
 
-      <button className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-md bg-white/10 py-2 text-xs font-medium text-white transition hover:bg-white/15">
+      <div className="mt-3 flex items-center justify-center gap-1 text-[11px] text-brand">
+        <ArrowUp className="h-3 w-3" strokeWidth={2.5} />
+        <span className="font-semibold">6 pts</span>
+        <span className="text-white/60">vs yesterday</span>
+      </div>
+
+      <button className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg border border-brand/40 bg-transparent py-2 text-[12px] font-semibold text-brand transition hover:bg-brand hover:text-white">
         View Full Report <ArrowRight className="h-3.5 w-3.5" />
       </button>
     </div>

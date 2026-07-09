@@ -1,9 +1,8 @@
 import {
   MessageSquare,
-  CreditCard,
+  CircleDollarSign,
   Star,
   AlertTriangle,
-  UserPlus,
   ArrowRight,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -11,44 +10,57 @@ import type { LucideIcon } from "lucide-react";
 interface Item {
   icon: LucideIcon;
   title: string;
-  desc: string;
+  detail?: string;
   time: string;
+  starred?: boolean;
 }
 
 const items: Item[] = [
-  { icon: MessageSquare, title: "New enquiry from Sarah Bennett", desc: "Kitchen renovation quote request", time: "12m ago" },
-  { icon: CreditCard, title: "Payment received", desc: "£2,400 from J. Harrington", time: "1h ago" },
-  { icon: Star, title: "New 5-star review", desc: "\"Absolutely brilliant service\"", time: "3h ago" },
-  { icon: UserPlus, title: "New customer onboarded", desc: "M. Thompson added to CRM", time: "5h ago" },
-  { icon: AlertTriangle, title: "Website alert", desc: "Contact form conversion dropped 12%", time: "Yesterday" },
+  { icon: MessageSquare, title: "New enquiry from John Smith", time: "2 minutes ago" },
+  { icon: CircleDollarSign, title: "Payment received from Sarah Johnson", detail: "£450.00", time: "1 hour ago" },
+  { icon: Star, title: "New 5-star review on Google", time: "2 hours ago", starred: true },
+  { icon: AlertTriangle, title: "Website speed issue detected", time: "3 hours ago" },
 ];
 
 export function RecentActivity() {
   return (
-    <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
-      <div className="mb-5 text-[15px] font-semibold tracking-tight text-foreground">
+    <div className="flex h-full flex-col rounded-2xl border border-border bg-card p-6 shadow-soft">
+      <div className="mb-4 text-[15px] font-semibold tracking-tight text-foreground">
         Recent Activity
       </div>
-      <ol className="relative space-y-4">
-        <div className="absolute left-[15px] top-2 bottom-2 w-px bg-border" />
+
+      <ul className="flex-1 divide-y divide-border">
         {items.map((i) => {
           const Icon = i.icon;
           return (
-            <li key={i.title} className="relative flex gap-3">
-              <div className="relative z-10 grid h-8 w-8 shrink-0 place-items-center rounded-full border border-border bg-card text-brand">
-                <Icon className="h-[14px] w-[14px]" strokeWidth={1.75} />
+            <li key={i.title} className="flex items-center gap-3 py-3 first:pt-0">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-secondary text-foreground/70">
+                <Icon className="h-[16px] w-[16px]" strokeWidth={1.75} />
               </div>
-              <div className="min-w-0 flex-1 pt-0.5">
-                <div className="text-[13px] font-medium text-foreground">{i.title}</div>
-                <div className="mt-0.5 text-[11.5px] text-muted-foreground">{i.desc}</div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] font-medium text-foreground">
+                  {i.title}
+                </div>
+                {i.detail && (
+                  <div className="mt-0.5 text-[12px] font-semibold text-foreground">
+                    {i.detail}
+                  </div>
+                )}
+                {i.starred && (
+                  <div className="mt-0.5 flex gap-0.5 text-brand">
+                    {Array.from({ length: 5 }).map((_, k) => (
+                      <Star key={k} className="h-3 w-3 fill-current" strokeWidth={0} />
+                    ))}
+                  </div>
+                )}
               </div>
-              <div className="shrink-0 pt-1 text-[11px] text-muted-foreground">{i.time}</div>
+              <div className="shrink-0 text-[11px] text-muted-foreground">{i.time}</div>
             </li>
           );
         })}
-      </ol>
+      </ul>
 
-      <button className="mt-5 inline-flex items-center gap-1 text-[12.5px] font-medium text-foreground transition hover:text-brand">
+      <button className="mt-4 inline-flex items-center gap-1 self-start text-[12.5px] font-semibold text-brand transition hover:gap-1.5">
         View All Activity <ArrowRight className="h-3.5 w-3.5" />
       </button>
     </div>
