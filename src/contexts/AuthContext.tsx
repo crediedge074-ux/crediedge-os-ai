@@ -30,24 +30,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<BusinessSettings | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const clearUserData = () => {
+    setProfile(null);
+    setMembership(null);
+    setBusiness(null);
+    setSettings(null);
+  };
+
   const loadUserData = async (userId: string) => {
     try {
       const [prof, mem] = await Promise.all([
         getProfile(userId),
         getPrimaryMembership(userId),
       ]);
+
       setProfile(prof);
       setMembership(mem);
-      if (mem?.business_id) {
-        const [biz, bizSettings] = await Promise.all([
-          getBusiness(mem.business_id),
-          getBusinessSettings(mem.business_id),
-        ]);
-        setBusiness(biz);
-        setSettings(bizSettings);
+
+      if (!mem?.business_id) {
+        setBusiness(null);
+        setSettings(null);
+        return;
       }
+
+      const [biz, bizSettings] = await Promise.all([
+        getBusiness(mem.business_id),
+        getBusinessSettings(mem.business_id),
+      ]);
+      setBusiness(biz);
+      setSettings(bizSettings);
     } catch (err) {
       console.error("Failed to load user data:", err);
+      clearUserData();
     }
   };
 
@@ -75,28 +89,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    supabase.auth.getSession().then(async ({ data: { session: s } }) => {
-      if (!mounted) return;
-      setSession(s);
-      setUser(s?.user ?? null);
-      if (s?.user) {
-        await loadUserData(s.user.id);
-      }
-      if (mounted) setLoading(false);
-    });
+    const initialise = async () => {
+      try {
+        const {
+          data: { session: initialSession },
+          error,
+        } = await supabase.auth.getSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
-      setSession(s);
-      setUser(s?.user ?? null);
-      if (s?.user) {
-        (async () => {
-          await loadUserData(s.user.id);
-        })();
+        if (error) throw error;
+        if (!mounted) return;
+
+        setSession(initialSession);
+        setUser(initialSession?.user ?? null);
+
+        if (initialSession?.user) {
+          await loadUserData(initialSession.user.id);
+        } else {
+          clearUserData();
+        }
+      } catch (err) {
+        console.error("Failed to restore session:", err);
+        if (mounted) {
+          setSession(null);
+          setUser(null);
+          clearUserData();
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    void initialise();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
+
+      if (nextSession?.user) {
+        void loadUserData(nextSession.user.id);
       } else {
-        setProfile(null);
-        setMembership(null);
-        setBusiness(null);
-        setSettings(null);
+        clearUserData();
       }
     });
 
