@@ -1,14 +1,16 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  Navigate,
   Outlet,
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthProvider, useAuthContext } from "@/contexts/AuthContext";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -128,14 +130,40 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+function AuthGate() {
+  const { loading, session } = useAuthContext();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+
+  if (pathname === "/login") {
+    return <Outlet />;
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div
+          aria-label="Loading your workspace"
+          className="h-10 w-10 animate-spin rounded-full border-2 border-border border-t-brand"
+          role="status"
+        />
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <Outlet />;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-        <Outlet />
+        <AuthGate />
       </AuthProvider>
     </QueryClientProvider>
   );
