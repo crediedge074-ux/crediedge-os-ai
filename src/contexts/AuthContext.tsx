@@ -37,11 +37,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSettings(null);
   }, []);
 
-  const loadUserData = useCallback(async (
-    userId: string,
-    isMounted: () => boolean = () => true,
-  ) => {
-    try {
+  const loadUserData = useCallback(
+    async (userId: string, isMounted: () => boolean = () => true) => {
+      try {
       const [prof, mem] = await Promise.all([
         getProfile(userId),
         getPrimaryMembership(userId),
@@ -65,11 +63,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!isMounted()) return;
       setBusiness(biz);
       setSettings(bizSettings);
-    } catch (err) {
-      console.error("Failed to load user data:", err);
-      if (isMounted()) clearUserData();
-    }
-  }, [clearUserData]);
+      } catch (err) {
+        console.error("Failed to load user data:", err);
+        if (isMounted()) clearUserData();
+      }
+    },
+    [clearUserData],
+  );
 
   const refreshProfile = async () => {
     if (user) {
@@ -150,7 +150,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, membership, business, settings, loading, refreshProfile, refreshBusiness, refreshSettings }}
+      value={{
+        session,
+        user,
+        profile,
+        membership,
+        business,
+        settings,
+        loading,
+        refreshProfile,
+        refreshBusiness,
+        refreshSettings,
+      }}
     >
       {children}
     </AuthContext.Provider>
