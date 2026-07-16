@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import type { Profile, Business, Membership, BusinessSettings } from "@/lib/database.types";
@@ -30,14 +30,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<BusinessSettings | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const clearUserData = () => {
+  const clearUserData = useCallback(() => {
     setProfile(null);
     setMembership(null);
     setBusiness(null);
     setSettings(null);
-  };
+  }, []);
 
-  const loadUserData = async (
+  const loadUserData = useCallback(async (
     userId: string,
     isMounted: () => boolean = () => true,
   ) => {
@@ -69,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error("Failed to load user data:", err);
       if (isMounted()) clearUserData();
     }
-  };
+  }, [clearUserData]);
 
   const refreshProfile = async () => {
     if (user) {
@@ -146,7 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [clearUserData, loadUserData]);
 
   return (
     <AuthContext.Provider
