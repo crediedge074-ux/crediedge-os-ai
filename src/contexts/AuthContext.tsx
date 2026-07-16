@@ -37,13 +37,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSettings(null);
   };
 
-  const loadUserData = async (userId: string) => {
+  const loadUserData = async (
+    userId: string,
+    isMounted: () => boolean = () => true,
+  ) => {
     try {
       const [prof, mem] = await Promise.all([
         getProfile(userId),
         getPrimaryMembership(userId),
       ]);
 
+      if (!isMounted()) return;
       setProfile(prof);
       setMembership(mem);
 
@@ -57,11 +61,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         getBusiness(mem.business_id),
         getBusinessSettings(mem.business_id),
       ]);
+
+      if (!isMounted()) return;
       setBusiness(biz);
       setSettings(bizSettings);
     } catch (err) {
       console.error("Failed to load user data:", err);
-      clearUserData();
+      if (isMounted()) clearUserData();
     }
   };
 
@@ -103,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(initialSession?.user ?? null);
 
         if (initialSession?.user) {
-          await loadUserData(initialSession.user.id);
+          await loadUserData(initialSession.user.id, () => mounted);
         } else {
           clearUserData();
         }
@@ -124,11 +130,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!mounted) return;
+
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
 
       if (nextSession?.user) {
-        void loadUserData(nextSession.user.id);
+        void loadUserData(nextSession.user.id, () => mounted);
       } else {
         clearUserData();
       }
