@@ -3,6 +3,7 @@ import { useAuthContext } from "@/contexts/AuthContext";
 import {
   archiveCustomer,
   createCustomer,
+  demoDataEnabled,
   getCustomer,
   getCustomers,
   seedDemoCustomers,
@@ -20,9 +21,6 @@ export const customerKeys = {
 
 const getErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
-
-const demoDataEnabled =
-  import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO_DATA === "true";
 
 export function useCustomers() {
   const { membership } = useAuthContext();
@@ -175,9 +173,6 @@ export function useSeedDemoCustomers() {
 
   const mutation = useMutation({
     mutationFn: async () => {
-      if (!demoDataEnabled) {
-        throw new Error("Demo data is only available in explicitly enabled development environments");
-      }
       if (!businessId || !user) throw new Error("No authenticated business user");
 
       await seedDemoCustomers(businessId, user.id);
