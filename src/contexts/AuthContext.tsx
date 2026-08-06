@@ -1,7 +1,19 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-import type { Profile, Business, Membership, BusinessSettings } from "@/lib/database.types";
+import type {
+  Profile,
+  Business,
+  Membership,
+  BusinessSettings,
+} from "@/lib/database.types";
 import { getProfile } from "@/services/profiles";
 import { getBusiness, getPrimaryMembership } from "@/services/business";
 import { getBusinessSettings } from "@/services/settings";
@@ -40,29 +52,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loadUserData = useCallback(
     async (userId: string, isMounted: () => boolean = () => true) => {
       try {
-      const [prof, mem] = await Promise.all([
-        getProfile(userId),
-        getPrimaryMembership(userId),
-      ]);
+        const [prof, mem] = await Promise.all([
+          getProfile(userId),
+          getPrimaryMembership(userId),
+        ]);
 
-      if (!isMounted()) return;
-      setProfile(prof);
-      setMembership(mem);
+        if (!isMounted()) return;
+        setProfile(prof);
+        setMembership(mem);
 
-      if (!mem?.business_id) {
-        setBusiness(null);
-        setSettings(null);
-        return;
-      }
+        if (!mem?.business_id) {
+          setBusiness(null);
+          setSettings(null);
+          return;
+        }
 
-      const [biz, bizSettings] = await Promise.all([
-        getBusiness(mem.business_id),
-        getBusinessSettings(mem.business_id),
-      ]);
+        const [biz, bizSettings] = await Promise.all([
+          getBusiness(mem.business_id),
+          getBusinessSettings(mem.business_id),
+        ]);
 
-      if (!isMounted()) return;
-      setBusiness(biz);
-      setSettings(bizSettings);
+        if (!isMounted()) return;
+        setBusiness(biz);
+        setSettings(bizSettings);
       } catch (err) {
         console.error("Failed to load user data:", err);
         if (isMounted()) clearUserData();
