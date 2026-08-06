@@ -1,6 +1,9 @@
 import { supabase } from "@/lib/supabase";
 import type { Customer, CustomerInsert, CustomerUpdate } from "@/lib/database.types";
 
+export const demoDataEnabled =
+  import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO_DATA === "true";
+
 const DEMO_CUSTOMERS: Omit<CustomerInsert, "business_id">[] = [
   {
     first_name: "Marcus", last_name: "Williams", full_name: "Marcus Williams",
@@ -223,6 +226,12 @@ export async function searchCustomers(businessId: string, query: string): Promis
 }
 
 export async function seedDemoCustomers(businessId: string, userId: string): Promise<void> {
+  if (!demoDataEnabled) {
+    throw new Error(
+      "Demo data is only available in explicitly enabled development environments",
+    );
+  }
+
   const inserts: CustomerInsert[] = DEMO_CUSTOMERS.map((c) => ({
     ...c,
     business_id: businessId,
