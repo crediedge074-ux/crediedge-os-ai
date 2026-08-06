@@ -37,6 +37,7 @@ export interface Database {
           job_title?: string | null;
           updated_at?: string;
         };
+        Relationships: [];
       };
       businesses: {
         Row: {
@@ -89,6 +90,7 @@ export interface Database {
           vat_number?: string | null;
           updated_at?: string;
         };
+        Relationships: [];
       };
       memberships: {
         Row: {
@@ -112,6 +114,7 @@ export interface Database {
           role?: string;
           status?: string;
         };
+        Relationships: [];
       };
       settings: {
         Row: {
@@ -170,6 +173,7 @@ export interface Database {
           business_context?: string | null;
           updated_at?: string;
         };
+        Relationships: [];
       };
       customers: {
         Row: {
@@ -270,7 +274,12 @@ export interface Database {
           updated_by?: string | null;
           updated_at?: string;
         };
+        Relationships: [];
       };
     };
+    Views: {};
+    Functions: {};
+    Enums: {};
+    CompositeTypes: {};
   };
 }
