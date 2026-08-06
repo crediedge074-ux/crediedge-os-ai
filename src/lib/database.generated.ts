@@ -274,14 +274,3 @@ export interface Database {
     };
   };
 }
-
-export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
-export type ProfileUpdate = Database["public"]["Tables"]["profiles"]["Update"];
-export type Business = Database["public"]["Tables"]["businesses"]["Row"];
-export type BusinessUpdate = Database["public"]["Tables"]["businesses"]["Update"];
-export type Membership = Database["public"]["Tables"]["memberships"]["Row"];
-export type BusinessSettings = Database["public"]["Tables"]["settings"]["Row"];
-export type BusinessSettingsUpdate = Database["public"]["Tables"]["settings"]["Update"];
-export type Customer = Database["public"]["Tables"]["customers"]["Row"];
-export type CustomerInsert = Database["public"]["Tables"]["customers"]["Insert"];
-export type CustomerUpdate = Database["public"]["Tables"]["customers"]["Update"];
