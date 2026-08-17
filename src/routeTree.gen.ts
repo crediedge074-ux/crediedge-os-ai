@@ -15,11 +15,13 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ReviewsRouteImport } from './routes/reviews'
 import { Route as RelationshipsRouteImport } from './routes/relationships'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as JobsRouteImport } from './routes/jobs'
 import { Route as IntelligenceRouteImport } from './routes/intelligence'
 import { Route as IntegrationsRouteImport } from './routes/integrations'
 import { Route as InsightsRouteImport } from './routes/insights'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as GoalsRouteImport } from './routes/goals'
+import { Route as FinanceRouteImport } from './routes/finance'
 import { Route as CommunicationsRouteImport } from './routes/communications'
 import { Route as CalendarRouteImport } from './routes/calendar'
 import { Route as AdvisorRouteImport } from './routes/advisor'
@@ -55,6 +57,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const JobsRoute = JobsRouteImport.update({
+  id: '/jobs',
+  path: '/jobs',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IntelligenceRoute = IntelligenceRouteImport.update({
   id: '/intelligence',
   path: '/intelligence',
@@ -78,6 +85,11 @@ const HealthRoute = HealthRouteImport.update({
 const GoalsRoute = GoalsRouteImport.update({
   id: '/goals',
   path: '/goals',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FinanceRoute = FinanceRouteImport.update({
+  id: '/finance',
+  path: '/finance',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CommunicationsRoute = CommunicationsRouteImport.update({
@@ -106,11 +118,13 @@ export interface FileRoutesByFullPath {
   '/advisor': typeof AdvisorRoute
   '/calendar': typeof CalendarRoute
   '/communications': typeof CommunicationsRoute
+  '/finance': typeof FinanceRoute
   '/goals': typeof GoalsRoute
   '/health': typeof HealthRoute
   '/insights': typeof InsightsRoute
   '/integrations': typeof IntegrationsRoute
   '/intelligence': typeof IntelligenceRoute
+  '/jobs': typeof JobsRoute
   '/login': typeof LoginRoute
   '/relationships': typeof RelationshipsRoute
   '/reviews': typeof ReviewsRoute
@@ -123,11 +137,13 @@ export interface FileRoutesByTo {
   '/advisor': typeof AdvisorRoute
   '/calendar': typeof CalendarRoute
   '/communications': typeof CommunicationsRoute
+  '/finance': typeof FinanceRoute
   '/goals': typeof GoalsRoute
   '/health': typeof HealthRoute
   '/insights': typeof InsightsRoute
   '/integrations': typeof IntegrationsRoute
   '/intelligence': typeof IntelligenceRoute
+  '/jobs': typeof JobsRoute
   '/login': typeof LoginRoute
   '/relationships': typeof RelationshipsRoute
   '/reviews': typeof ReviewsRoute
@@ -141,11 +157,13 @@ export interface FileRoutesById {
   '/advisor': typeof AdvisorRoute
   '/calendar': typeof CalendarRoute
   '/communications': typeof CommunicationsRoute
+  '/finance': typeof FinanceRoute
   '/goals': typeof GoalsRoute
   '/health': typeof HealthRoute
   '/insights': typeof InsightsRoute
   '/integrations': typeof IntegrationsRoute
   '/intelligence': typeof IntelligenceRoute
+  '/jobs': typeof JobsRoute
   '/login': typeof LoginRoute
   '/relationships': typeof RelationshipsRoute
   '/reviews': typeof ReviewsRoute
@@ -160,11 +178,13 @@ export interface FileRouteTypes {
     | '/advisor'
     | '/calendar'
     | '/communications'
+    | '/finance'
     | '/goals'
     | '/health'
     | '/insights'
     | '/integrations'
     | '/intelligence'
+    | '/jobs'
     | '/login'
     | '/relationships'
     | '/reviews'
@@ -177,11 +197,13 @@ export interface FileRouteTypes {
     | '/advisor'
     | '/calendar'
     | '/communications'
+    | '/finance'
     | '/goals'
     | '/health'
     | '/insights'
     | '/integrations'
     | '/intelligence'
+    | '/jobs'
     | '/login'
     | '/relationships'
     | '/reviews'
@@ -194,11 +216,13 @@ export interface FileRouteTypes {
     | '/advisor'
     | '/calendar'
     | '/communications'
+    | '/finance'
     | '/goals'
     | '/health'
     | '/insights'
     | '/integrations'
     | '/intelligence'
+    | '/jobs'
     | '/login'
     | '/relationships'
     | '/reviews'
@@ -212,11 +236,13 @@ export interface RootRouteChildren {
   AdvisorRoute: typeof AdvisorRoute
   CalendarRoute: typeof CalendarRoute
   CommunicationsRoute: typeof CommunicationsRoute
+  FinanceRoute: typeof FinanceRoute
   GoalsRoute: typeof GoalsRoute
   HealthRoute: typeof HealthRoute
   InsightsRoute: typeof InsightsRoute
   IntegrationsRoute: typeof IntegrationsRoute
   IntelligenceRoute: typeof IntelligenceRoute
+  JobsRoute: typeof JobsRoute
   LoginRoute: typeof LoginRoute
   RelationshipsRoute: typeof RelationshipsRoute
   ReviewsRoute: typeof ReviewsRoute
@@ -269,6 +295,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/jobs': {
+      id: '/jobs'
+      path: '/jobs'
+      fullPath: '/jobs'
+      preLoaderRoute: typeof JobsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/intelligence': {
       id: '/intelligence'
       path: '/intelligence'
@@ -302,6 +335,13 @@ declare module '@tanstack/react-router' {
       path: '/goals'
       fullPath: '/goals'
       preLoaderRoute: typeof GoalsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/finance': {
+      id: '/finance'
+      path: '/finance'
+      fullPath: '/finance'
+      preLoaderRoute: typeof FinanceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/communications': {
@@ -340,11 +380,13 @@ const rootRouteChildren: RootRouteChildren = {
   AdvisorRoute: AdvisorRoute,
   CalendarRoute: CalendarRoute,
   CommunicationsRoute: CommunicationsRoute,
+  FinanceRoute: FinanceRoute,
   GoalsRoute: GoalsRoute,
   HealthRoute: HealthRoute,
   InsightsRoute: InsightsRoute,
   IntegrationsRoute: IntegrationsRoute,
   IntelligenceRoute: IntelligenceRoute,
+  JobsRoute: JobsRoute,
   LoginRoute: LoginRoute,
   RelationshipsRoute: RelationshipsRoute,
   ReviewsRoute: ReviewsRoute,

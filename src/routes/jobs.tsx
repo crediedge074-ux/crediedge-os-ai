@@ -8,11 +8,11 @@ import { useBusiness } from "@/hooks/useBusiness";
 import type { Job } from "@/lib/database.types";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/jobs" as any)({
+export const Route = createFileRoute("/jobs")({
   component: JobsPage,
 });
 
-export function JobsPage() {
+function JobsPage() {
   const { business } = useBusiness();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);

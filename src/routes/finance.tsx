@@ -2,17 +2,17 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { AppLayout } from "@/components/ui/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { PoundSterling, Plus, FileText, TrendingUp, CreditCard, ArrowUpRight, ArrowDownRight, Calendar } from "lucide-react";
-import { getInvoices, getPayments, createInvoice, createPayment } from "@/services/finance";
+import { PoundSterling, Plus, FileText, CreditCard, ArrowUpRight } from "lucide-react";
+import { getInvoices, getPayments, createInvoice } from "@/services/finance";
 import { useBusiness } from "@/hooks/useBusiness";
 import type { Invoice, Payment } from "@/lib/database.types";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/finance" as any)({
+export const Route = createFileRoute("/finance")({
   component: FinancePage,
 });
 
-export function FinancePage() {
+function FinancePage() {
   const { business } = useBusiness();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
