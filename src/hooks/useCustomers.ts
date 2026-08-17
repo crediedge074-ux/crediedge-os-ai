@@ -6,36 +6,36 @@ import {
   createCustomer,
   updateCustomer,
   archiveCustomer,
-  seedDemoCustomers,
+  searchCustomers,
 } from "@/services/customers";
 import type { Customer, CustomerInsert, CustomerUpdate } from "@/lib/database.types";
 
-export function useCustomers() {
-  const { membership, user } = useAuthContext();
+export function useCustomers(query?: string) {
+  const { membership } = useAuthContext();
   const businessId = membership?.business_id;
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!businessId) return;
+    if (!businessId) {
+      setLoading(false);
+      return;
+    }
     let mounted = true;
     setLoading(true);
     setError(null);
     try {
-      let data = await getCustomers(businessId);
-      if (data.length === 0 && user) {
-        await seedDemoCustomers(businessId, user.id);
-        data = await getCustomers(businessId);
-      }
+      const data = query && query.trim() !== ""
+        ? await searchCustomers(businessId, query)
+        : await getCustomers(businessId);
       if (mounted) setCustomers(data);
     } catch (err) {
       if (mounted) setError(err instanceof Error ? err.message : "Failed to load customers");
     } finally {
       if (mounted) setLoading(false);
     }
-    return () => { mounted = false; };
-  }, [businessId, user]);
+  }, [businessId, query]);
 
   useEffect(() => {
     load();
@@ -55,7 +55,7 @@ export function useCustomer(id: string | null) {
     setLoading(true);
     getCustomer(id)
       .then((data) => { if (mounted) setCustomer(data); })
-      .catch((err) => { if (mounted) setError(err instanceof Error ? err.message : "Failed to load"); })
+      .catch((err) => { if (mounted) setError(err instanceof Error ? err.message : "Failed to load customer"); })
       .finally(() => { if (mounted) setLoading(false); });
     return () => { mounted = false; };
   }, [id]);
