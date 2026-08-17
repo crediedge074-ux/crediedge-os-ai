@@ -675,6 +675,198 @@ export interface Database {
         };
         Relationships: [];
       };
+      goals: {
+        Row: {
+          id: string;
+          created_at: string;
+          updated_at: string;
+          business_id: string;
+          title: string;
+          description: string | null;
+          target_value: number;
+          current_value: number;
+          unit: string | null;
+          category: string | null;
+          status: string;
+          start_date: string | null;
+          target_date: string | null;
+          created_by: string | null;
+        };
+        Insert: {
+          business_id: string;
+          title: string;
+          description?: string | null;
+          target_value?: number;
+          current_value?: number;
+          unit?: string | null;
+          category?: string | null;
+          status?: string;
+          start_date?: string | null;
+          target_date?: string | null;
+          created_by?: string | null;
+        };
+        Update: {
+          title?: string;
+          description?: string | null;
+          target_value?: number;
+          current_value?: number;
+          unit?: string | null;
+          category?: string | null;
+          status?: string;
+          start_date?: string | null;
+          target_date?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      ai_recommendations: {
+        Row: {
+          id: string;
+          created_at: string;
+          updated_at: string;
+          business_id: string;
+          customer_id: string | null;
+          job_id: string | null;
+          category: string;
+          title: string;
+          description: string;
+          action_type: string | null;
+          action_payload: Json;
+          estimated_impact: string | null;
+          impact_score: number | null;
+          confidence_score: number | null;
+          status: string;
+        };
+        Insert: {
+          business_id: string;
+          customer_id?: string | null;
+          job_id?: string | null;
+          category?: string;
+          title: string;
+          description: string;
+          action_type?: string | null;
+          action_payload?: Json;
+          estimated_impact?: string | null;
+          impact_score?: number | null;
+          confidence_score?: number | null;
+          status?: string;
+        };
+        Update: {
+          customer_id?: string | null;
+          job_id?: string | null;
+          category?: string;
+          title?: string;
+          description?: string;
+          action_type?: string | null;
+          action_payload?: Json;
+          estimated_impact?: string | null;
+          impact_score?: number | null;
+          confidence_score?: number | null;
+          status?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      ai_recommendation_outcomes: {
+        Row: {
+          id: string;
+          created_at: string;
+          business_id: string;
+          recommendation_id: string | null;
+          action_taken: string;
+          user_id: string | null;
+          result_metrics: Json;
+          feedback_notes: string | null;
+        };
+        Insert: {
+          business_id: string;
+          recommendation_id?: string | null;
+          action_taken: string;
+          user_id?: string | null;
+          result_metrics?: Json;
+          feedback_notes?: string | null;
+        };
+        Update: {
+          recommendation_id?: string | null;
+          action_taken?: string;
+          user_id?: string | null;
+          result_metrics?: Json;
+          feedback_notes?: string | null;
+        };
+        Relationships: [];
+      };
+      business_metrics: {
+        Row: {
+          id: string;
+          created_at: string;
+          updated_at: string;
+          business_id: string;
+          metric_date: string;
+          crediedge_score: number | null;
+          revenue_mtd: number | null;
+          revenue_today: number | null;
+          conversion_rate: number | null;
+          avg_review_rating: number | null;
+          response_time_minutes: number | null;
+          active_customers_count: number | null;
+          metrics_breakdown: Json;
+        };
+        Insert: {
+          business_id: string;
+          metric_date?: string;
+          crediedge_score?: number | null;
+          revenue_mtd?: number | null;
+          revenue_today?: number | null;
+          conversion_rate?: number | null;
+          avg_review_rating?: number | null;
+          response_time_minutes?: number | null;
+          active_customers_count?: number | null;
+          metrics_breakdown?: Json;
+        };
+        Update: {
+          metric_date?: string;
+          crediedge_score?: number | null;
+          revenue_mtd?: number | null;
+          revenue_today?: number | null;
+          conversion_rate?: number | null;
+          avg_review_rating?: number | null;
+          response_time_minutes?: number | null;
+          active_customers_count?: number | null;
+          metrics_breakdown?: Json;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      integrations: {
+        Row: {
+          id: string;
+          created_at: string;
+          updated_at: string;
+          business_id: string;
+          provider: string;
+          status: string;
+          credentials_encrypted: string | null;
+          settings: Json;
+          last_synced_at: string | null;
+        };
+        Insert: {
+          business_id: string;
+          provider: string;
+          status?: string;
+          credentials_encrypted?: string | null;
+          settings?: Json;
+          last_synced_at?: string | null;
+        };
+        Update: {
+          provider?: string;
+          status?: string;
+          credentials_encrypted?: string | null;
+          settings?: Json;
+          last_synced_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -729,3 +921,9 @@ export type ReviewInsert = Database["public"]["Tables"]["reviews"]["Insert"];
 
 export type AppNotification = Database["public"]["Tables"]["notifications"]["Row"];
 export type ActivityLog = Database["public"]["Tables"]["activity_logs"]["Row"];
+
+export type Goal = Database["public"]["Tables"]["goals"]["Row"];
+export type AIRecommendation = Database["public"]["Tables"]["ai_recommendations"]["Row"];
+export type AIRecommendationOutcome = Database["public"]["Tables"]["ai_recommendation_outcomes"]["Row"];
+export type BusinessMetric = Database["public"]["Tables"]["business_metrics"]["Row"];
+export type Integration = Database["public"]["Tables"]["integrations"]["Row"];
