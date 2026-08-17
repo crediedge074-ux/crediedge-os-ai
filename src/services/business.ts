@@ -7,7 +7,7 @@ export async function getPrimaryMembership(userId: string): Promise<Membership |
     .from("memberships")
     .select("*")
     .eq("user_id", userId)
-    .order("joined_at", { ascending: true })
+    .order("created_at", { ascending: true })
     .limit(1);
 
   if (error) {
