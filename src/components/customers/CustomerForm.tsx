@@ -109,23 +109,27 @@ export function CustomerForm({ open, onClose, onSave, initial, saving }: Custome
       ? companyName
       : [firstName, lastName].filter(Boolean).join(" ");
 
-    await onSave({
-      first_name: firstName || null,
-      last_name: lastName || null,
-      full_name: fullName || null,
-      company_name: companyName || null,
-      email: email || null,
-      phone: phone || null,
-      customer_type: customerType,
-      source: source || null,
-      city: city || null,
-      postcode: postcode || null,
-      preferred_contact_method: preferredContact,
-      tags,
-      notes: notes || null,
-      marketing_consent: marketingConsent,
-      gdpr_consent: gdprConsent,
-    });
+    try {
+      await onSave({
+        first_name: firstName || null,
+        last_name: lastName || null,
+        full_name: fullName || null,
+        company_name: companyName || null,
+        email: email || null,
+        phone: phone || null,
+        customer_type: customerType,
+        source: source || null,
+        city: city || null,
+        postcode: postcode || null,
+        preferred_contact_method: preferredContact,
+        tags,
+        notes: notes || null,
+        marketing_consent: marketingConsent,
+        gdpr_consent: gdprConsent,
+      });
+    } catch (err: any) {
+      setError(err?.message || "Failed to save customer. Please try again.");
+    }
   };
 
   if (!open) return null;

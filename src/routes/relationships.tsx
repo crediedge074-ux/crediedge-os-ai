@@ -20,13 +20,17 @@ function RelationshipsPage() {
   const { refresh } = useCustomers(searchQuery);
 
   const handleSave = async (data: Omit<CustomerInsert, "business_id">) => {
-    const result = await create(data);
-    if (result) {
-      toast.success(`Customer ${result.full_name || 'record'} created successfully!`);
-      setFormOpen(false);
-      refresh();
-    } else if (createError) {
-      toast.error(createError);
+    try {
+      const result = await create(data);
+      if (result) {
+        toast.success(`Customer ${result.full_name || 'record'} created successfully!`);
+        setFormOpen(false);
+        refresh();
+      } else {
+        toast.error(createError || "Failed to create customer. Please check workspace permissions.");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "An unexpected error occurred while saving the customer.");
     }
   };
 
