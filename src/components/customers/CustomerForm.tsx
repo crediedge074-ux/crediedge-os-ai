@@ -101,11 +101,19 @@ export function CustomerForm({ open, onClose, onSave, initial, saving }: Custome
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     console.log("[CustomerForm] submit event triggered");
+
     if (!firstName.trim() && !companyName.trim()) {
       console.log("[CustomerForm] validation failed: missing first name and company name");
       setError("Please enter a first name or company name.");
       return;
     }
+
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      console.log("[CustomerForm] validation failed: invalid email format");
+      setError("Please enter a valid email address.");
+      return;
+    }
+
     setError(null);
     const fullName = customerType === "business" && companyName
       ? companyName
@@ -167,7 +175,7 @@ export function CustomerForm({ open, onClose, onSave, initial, saving }: Custome
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="max-h-[calc(100vh-160px)] overflow-y-auto">
+        <form noValidate onSubmit={handleSubmit} className="max-h-[calc(100vh-160px)] overflow-y-auto">
           <div className="space-y-5 p-5">
             {/* Type */}
             <div>
