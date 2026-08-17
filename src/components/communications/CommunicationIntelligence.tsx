@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Brain, TrendingUp, TrendingDown, MessageSquare, Mail, Phone, Clock, ChevronDown, ChevronRight, Zap, Target, Star, Shield, Users, ArrowRight, Lightbulb, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, ChartBar as BarChart3, Gift, MessageCircle, Sparkles, Award, Eye, Send, RefreshCw, Wand as Wand2, Volume2, Smile, ThumbsUp, ThumbsDown, Minus, Calendar, CircleDollarSign, BookOpen, Mic, Instagram, Globe } from "lucide-react";
+import { Brain, TrendingUp, TrendingDown, MessageSquare, Mail, Phone, Clock, ChevronDown, ChevronRight, Zap, Target, Star, Shield, Users, ArrowRight, Lightbulb, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, ChartBar as BarChart3, Gift, MessageCircle, Sparkles, Award, Eye, Send, RefreshCw, Wand as Wand2, Volume2, Smile, ThumbsUp, ThumbsDown, Minus, Calendar, CircleDollarSign, BookOpen, Mic, Instagram, Globe, Heart } from "lucide-react";
 
 // ─── Animated Number ──────────────────────────────────────────────────────────
 

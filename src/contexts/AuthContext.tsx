@@ -1,7 +1,19 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-import type { Profile, Business, Membership, BusinessSettings } from "@/lib/database.types";
+import type {
+  Profile,
+  Business,
+  Membership,
+  BusinessSettings,
+} from "@/lib/database.types";
 import { getProfile } from "@/services/profiles";
 import { getBusiness, getPrimaryMembership } from "@/services/business";
 import { getBusinessSettings } from "@/services/settings";
@@ -30,26 +42,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<BusinessSettings | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadUserData = async (userId: string) => {
-    try {
-      const [prof, mem] = await Promise.all([
-        getProfile(userId),
-        getPrimaryMembership(userId),
-      ]);
-      setProfile(prof);
-      setMembership(mem);
-      if (mem?.business_id) {
+  const clearUserData = useCallback(() => {
+    setProfile(null);
+    setMembership(null);
+    setBusiness(null);
+    setSettings(null);
+  }, []);
+
+  const loadUserData = useCallback(
+    async (userId: string, isMounted: () => boolean = () => true) => {
+      try {
+        const [prof, mem] = await Promise.all([
+          getProfile(userId),
+          getPrimaryMembership(userId),
+        ]);
+
+        if (!isMounted()) return;
+        setProfile(prof);
+        setMembership(mem);
+
+        if (!mem?.business_id) {
+          setBusiness(null);
+          setSettings(null);
+          return;
+        }
+
         const [biz, bizSettings] = await Promise.all([
           getBusiness(mem.business_id),
           getBusinessSettings(mem.business_id),
         ]);
+
+        if (!isMounted()) return;
         setBusiness(biz);
         setSettings(bizSettings);
+      } catch (err) {
+        console.error("Failed to load user data:", err);
+        if (isMounted()) clearUserData();
       }
-    } catch (err) {
-      console.error("Failed to load user data:", err);
-    }
-  };
+    },
+    [clearUserData],
+  );
 
   const refreshProfile = async () => {
     if (user) {
@@ -75,28 +107,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    supabase.auth.getSession().then(async ({ data: { session: s } }) => {
-      if (!mounted) return;
-      setSession(s);
-      setUser(s?.user ?? null);
-      if (s?.user) {
-        await loadUserData(s.user.id);
-      }
-      if (mounted) setLoading(false);
-    });
+    const initialise = async () => {
+      try {
+        const {
+          data: { session: initialSession },
+          error,
+        } = await supabase.auth.getSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
-      setSession(s);
-      setUser(s?.user ?? null);
-      if (s?.user) {
-        (async () => {
-          await loadUserData(s.user.id);
-        })();
+        if (error) throw error;
+        if (!mounted) return;
+
+        setSession(initialSession);
+        setUser(initialSession?.user ?? null);
+
+        if (initialSession?.user) {
+          await loadUserData(initialSession.user.id, () => mounted);
+        } else {
+          clearUserData();
+        }
+      } catch (err) {
+        console.error("Failed to restore session:", err);
+        if (mounted) {
+          setSession(null);
+          setUser(null);
+          clearUserData();
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    void initialise();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!mounted) return;
+
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
+
+      if (nextSession?.user) {
+        void loadUserData(nextSession.user.id, () => mounted);
       } else {
-        setProfile(null);
-        setMembership(null);
-        setBusiness(null);
-        setSettings(null);
+        clearUserData();
       }
     });
 
@@ -104,11 +158,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [clearUserData, loadUserData]);
 
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, membership, business, settings, loading, refreshProfile, refreshBusiness, refreshSettings }}
+      value={{
+        session,
+        user,
+        profile,
+        membership,
+        business,
+        settings,
+        loading,
+        refreshProfile,
+        refreshBusiness,
+        refreshSettings,
+      }}
     >
       {children}
     </AuthContext.Provider>
