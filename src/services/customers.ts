@@ -32,23 +32,34 @@ export async function getCustomer(id: string): Promise<Customer | null> {
 }
 
 export async function createCustomer(insert: CustomerInsert): Promise<Customer> {
+  console.log("[createCustomer] inserting customer into Supabase table:", insert);
   const { data, error } = await supabase
     .from("customers")
     .insert(insert)
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    console.error("[createCustomer] Supabase insert failed:", error);
+    throw error;
+  }
 
-  await logActivity({
-    business_id: data.business_id,
-    customer_id: data.id,
-    entity_type: "customer",
-    entity_id: data.id,
-    action: "created",
-    description: `Added new customer: ${data.full_name || data.email || 'Customer'}`,
-    actor_id: data.created_by,
-  });
+  console.log("[createCustomer] Supabase insert succeeded, row:", data);
+
+  try {
+    await logActivity({
+      business_id: data.business_id,
+      customer_id: data.id,
+      entity_type: "customer",
+      entity_id: data.id,
+      action: "created",
+      description: `Added new customer: ${data.full_name || data.email || 'Customer'}`,
+      actor_id: data.created_by,
+    });
+    console.log("[createCustomer] Activity logged successfully");
+  } catch (actErr) {
+    console.error("[createCustomer] Activity logging failed (non-blocking):", actErr);
+  }
 
   return data;
 }

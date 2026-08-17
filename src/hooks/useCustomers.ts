@@ -72,6 +72,7 @@ export function useCreateCustomer() {
   const create = async (data: Omit<CustomerInsert, "business_id">): Promise<Customer | null> => {
     setCreating(true);
     setError(null);
+    console.log("[useCreateCustomer] starting create with businessId:", businessId, "userId:", user?.id);
     try {
       if (!businessId) {
         throw new Error("No active workspace found for your account. Please log in or select a business.");
@@ -81,9 +82,11 @@ export function useCreateCustomer() {
         business_id: businessId,
         created_by: user?.id ?? null,
       });
+      console.log("[useCreateCustomer] customer created successfully, ID:", customer.id);
       return customer;
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : "Failed to create customer";
+    } catch (err: any) {
+      console.error("[useCreateCustomer] error in create:", err);
+      const errMsg = err?.message || "Failed to create customer";
       setError(errMsg);
       throw new Error(errMsg);
     } finally {

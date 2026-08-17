@@ -100,7 +100,9 @@ export function CustomerForm({ open, onClose, onSave, initial, saving }: Custome
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("[CustomerForm] submit event triggered");
     if (!firstName.trim() && !companyName.trim()) {
+      console.log("[CustomerForm] validation failed: missing first name and company name");
       setError("Please enter a first name or company name.");
       return;
     }
@@ -109,25 +111,31 @@ export function CustomerForm({ open, onClose, onSave, initial, saving }: Custome
       ? companyName
       : [firstName, lastName].filter(Boolean).join(" ");
 
+    const payload = {
+      first_name: firstName.trim() || null,
+      last_name: lastName.trim() || null,
+      full_name: fullName.trim() || null,
+      company_name: companyName.trim() || null,
+      email: email.trim() || null,
+      phone: phone.trim() || null,
+      customer_type: customerType,
+      source: source || null,
+      city: city.trim() || null,
+      postcode: postcode.trim() || null,
+      preferred_contact_method: preferredContact,
+      tags,
+      notes: notes.trim() || null,
+      marketing_consent: marketingConsent,
+      gdpr_consent: gdprConsent,
+    };
+
+    console.log("[CustomerForm] validation passed, calling onSave with payload:", payload);
+
     try {
-      await onSave({
-        first_name: firstName || null,
-        last_name: lastName || null,
-        full_name: fullName || null,
-        company_name: companyName || null,
-        email: email || null,
-        phone: phone || null,
-        customer_type: customerType,
-        source: source || null,
-        city: city || null,
-        postcode: postcode || null,
-        preferred_contact_method: preferredContact,
-        tags,
-        notes: notes || null,
-        marketing_consent: marketingConsent,
-        gdpr_consent: gdprConsent,
-      });
+      await onSave(payload);
+      console.log("[CustomerForm] onSave completed successfully");
     } catch (err: any) {
+      console.error("[CustomerForm] onSave error caught:", err);
       setError(err?.message || "Failed to save customer. Please try again.");
     }
   };
