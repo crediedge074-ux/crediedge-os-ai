@@ -6,36 +6,36 @@ import {
   createCustomer,
   updateCustomer,
   archiveCustomer,
-  seedDemoCustomers,
+  searchCustomers,
 } from "@/services/customers";
 import type { Customer, CustomerInsert, CustomerUpdate } from "@/lib/database.types";
 
-export function useCustomers() {
-  const { membership, user } = useAuthContext();
+export function useCustomers(query?: string) {
+  const { membership } = useAuthContext();
   const businessId = membership?.business_id;
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!businessId) return;
+    if (!businessId) {
+      setLoading(false);
+      return;
+    }
     let mounted = true;
     setLoading(true);
     setError(null);
     try {
-      let data = await getCustomers(businessId);
-      if (data.length === 0 && user) {
-        await seedDemoCustomers(businessId, user.id);
-        data = await getCustomers(businessId);
-      }
+      const data = query && query.trim() !== ""
+        ? await searchCustomers(businessId, query)
+        : await getCustomers(businessId);
       if (mounted) setCustomers(data);
     } catch (err) {
       if (mounted) setError(err instanceof Error ? err.message : "Failed to load customers");
     } finally {
       if (mounted) setLoading(false);
     }
-    return () => { mounted = false; };
-  }, [businessId, user]);
+  }, [businessId, query]);
 
   useEffect(() => {
     load();
@@ -55,7 +55,7 @@ export function useCustomer(id: string | null) {
     setLoading(true);
     getCustomer(id)
       .then((data) => { if (mounted) setCustomer(data); })
-      .catch((err) => { if (mounted) setError(err instanceof Error ? err.message : "Failed to load"); })
+      .catch((err) => { if (mounted) setError(err instanceof Error ? err.message : "Failed to load customer"); })
       .finally(() => { if (mounted) setLoading(false); });
     return () => { mounted = false; };
   }, [id]);
@@ -70,19 +70,25 @@ export function useCreateCustomer() {
   const [error, setError] = useState<string | null>(null);
 
   const create = async (data: Omit<CustomerInsert, "business_id">): Promise<Customer | null> => {
-    if (!businessId) return null;
     setCreating(true);
     setError(null);
+    console.log("[useCreateCustomer] starting create with businessId:", businessId, "userId:", user?.id);
     try {
+      if (!businessId) {
+        throw new Error("No active workspace found for your account. Please log in or select a business.");
+      }
       const customer = await createCustomer({
         ...data,
         business_id: businessId,
         created_by: user?.id ?? null,
       });
+      console.log("[useCreateCustomer] customer created successfully, ID:", customer.id);
       return customer;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create customer");
-      return null;
+    } catch (err: any) {
+      console.error("[useCreateCustomer] error in create:", err);
+      const errMsg = err?.message || "Failed to create customer";
+      setError(errMsg);
+      throw new Error(errMsg);
     } finally {
       setCreating(false);
     }
@@ -102,9 +108,10 @@ export function useUpdateCustomer() {
     try {
       const customer = await updateCustomer(id, { ...updates, updated_by: user?.id ?? null });
       return customer;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update customer");
-      return null;
+    } catch (err: any) {
+      const msg = err?.message || "Failed to update customer";
+      setError(msg);
+      throw new Error(msg);
     } finally {
       setSaving(false);
     }

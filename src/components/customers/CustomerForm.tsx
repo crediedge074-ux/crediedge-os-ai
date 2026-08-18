@@ -100,32 +100,52 @@ export function CustomerForm({ open, onClose, onSave, initial, saving }: Custome
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("[CustomerForm] submit event triggered");
+
     if (!firstName.trim() && !companyName.trim()) {
+      console.log("[CustomerForm] validation failed: missing first name and company name");
       setError("Please enter a first name or company name.");
       return;
     }
+
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      console.log("[CustomerForm] validation failed: invalid email format");
+      setError("Please enter a valid email address.");
+      return;
+    }
+
     setError(null);
     const fullName = customerType === "business" && companyName
       ? companyName
       : [firstName, lastName].filter(Boolean).join(" ");
 
-    await onSave({
-      first_name: firstName || null,
-      last_name: lastName || null,
-      full_name: fullName || null,
-      company_name: companyName || null,
-      email: email || null,
-      phone: phone || null,
+    const payload = {
+      first_name: firstName.trim() || null,
+      last_name: lastName.trim() || null,
+      full_name: fullName.trim() || null,
+      company_name: companyName.trim() || null,
+      email: email.trim() || null,
+      phone: phone.trim() || null,
       customer_type: customerType,
       source: source || null,
-      city: city || null,
-      postcode: postcode || null,
+      city: city.trim() || null,
+      postcode: postcode.trim() || null,
       preferred_contact_method: preferredContact,
       tags,
-      notes: notes || null,
+      notes: notes.trim() || null,
       marketing_consent: marketingConsent,
       gdpr_consent: gdprConsent,
-    });
+    };
+
+    console.log("[CustomerForm] validation passed, calling onSave with payload:", payload);
+
+    try {
+      await onSave(payload);
+      console.log("[CustomerForm] onSave completed successfully");
+    } catch (err: any) {
+      console.error("[CustomerForm] onSave error caught:", err);
+      setError(err?.message || "Failed to save customer. Please try again.");
+    }
   };
 
   if (!open) return null;
@@ -155,7 +175,7 @@ export function CustomerForm({ open, onClose, onSave, initial, saving }: Custome
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="max-h-[calc(100vh-160px)] overflow-y-auto">
+        <form noValidate onSubmit={handleSubmit} className="max-h-[calc(100vh-160px)] overflow-y-auto">
           <div className="space-y-5 p-5">
             {/* Type */}
             <div>

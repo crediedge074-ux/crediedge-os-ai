@@ -537,10 +537,12 @@ function CustomerSelector({
   customers,
   selected,
   onSelect,
+  onViewAll,
 }: {
   customers: DnaCustomer[];
   selected: string;
   onSelect: (id: string) => void;
+  onViewAll?: () => void;
 }) {
   return (
     <div className="flex flex-wrap gap-2.5">
@@ -550,7 +552,7 @@ function CustomerSelector({
           onClick={() => onSelect(c.id)}
           className={`flex items-center gap-3 rounded-2xl border px-4 py-2.5 text-left transition-all duration-150 ${
             selected === c.id
-              ? "border-foreground/20 bg-card shadow-card"
+              ? "border-brand bg-card shadow-card ring-1 ring-brand/30"
               : "border-border bg-card/50 hover:border-foreground/15 hover:bg-card"
           }`}
         >
@@ -566,7 +568,10 @@ function CustomerSelector({
         </button>
       ))}
       {customers.length > 0 && (
-        <button className="flex items-center gap-1.5 rounded-2xl border border-dashed border-border px-4 py-2.5 text-[12px] font-medium text-muted-foreground transition-all hover:border-foreground/20 hover:text-foreground">
+        <button
+          onClick={onViewAll}
+          className="flex items-center gap-1.5 rounded-2xl border border-dashed border-border px-4 py-2.5 text-[12px] font-medium text-muted-foreground transition-all hover:border-foreground/20 hover:text-foreground"
+        >
           View all {customers.length}
         </button>
       )}
@@ -755,29 +760,46 @@ function RelationshipHealth() {
 
 // ─── AI CUSTOMER SUMMARY ──────────────────────────────────────────────────────
 
-function AICustomerSummary({ customer }: { customer: DnaCustomer }) {
+function AICustomerSummary({
+  customer,
+  onEdit,
+}: {
+  customer: DnaCustomer;
+  onEdit?: () => void;
+}) {
   return (
     <div className="relative overflow-hidden rounded-2xl bg-foreground p-5 text-background shadow-card">
       <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-brand/15 blur-2xl" />
-      <div className="relative flex items-start gap-3">
-        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-background/15">
-          <Brain className="h-4 w-4 text-background" strokeWidth={1.75} />
-        </div>
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-background/60">AI Summary — {customer.name}</span>
-            <span className="rounded-md bg-brand/30 px-1.5 py-0.5 text-[9.5px] font-bold text-background">LIVE</span>
+      <div className="relative flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-background/15">
+            <Brain className="h-4 w-4 text-background" strokeWidth={1.75} />
           </div>
-          <p className="text-[13px] leading-relaxed text-background/85">
-            {customer.name} is your <span className="font-semibold text-background">{customer.segment.toLowerCase()} customer</span> with {customer.jobs} completed jobs and a total spend of {customer.value}. Their relationship health score of <span className="font-semibold text-brand">{customer.health}/100</span> indicates an exceptionally strong bond. {customer.personality.summary}
-          </p>
-          <div className="mt-3 flex items-center gap-2">
-            <div className="flex items-center gap-1.5 rounded-lg bg-background/10 px-2.5 py-1.5">
-              <Target className="h-3 w-3 text-background/70" strokeWidth={1.75} />
-              <span className="text-[11px] text-background/80">Next action: <span className="font-semibold text-background">{customer.nextAction}</span></span>
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-background/60">AI Summary — {customer.name}</span>
+              <span className="rounded-md bg-brand/30 px-1.5 py-0.5 text-[9.5px] font-bold text-background">LIVE</span>
+            </div>
+            <p className="text-[13px] leading-relaxed text-background/85">
+              {customer.name} is your <span className="font-semibold text-background">{customer.segment.toLowerCase()} customer</span> with {customer.jobs} completed jobs and a total spend of {customer.value}. Their relationship health score of <span className="font-semibold text-brand">{customer.health}/100</span> indicates an exceptionally strong bond. {customer.personality.summary}
+            </p>
+            <div className="mt-3 flex items-center gap-2">
+              <div className="flex items-center gap-1.5 rounded-lg bg-background/10 px-2.5 py-1.5">
+                <Target className="h-3 w-3 text-background/70" strokeWidth={1.75} />
+                <span className="text-[11px] text-background/80">Next action: <span className="font-semibold text-background">{customer.nextAction}</span></span>
+              </div>
             </div>
           </div>
         </div>
+
+        {onEdit && (
+          <button
+            onClick={onEdit}
+            className="shrink-0 flex items-center gap-1.5 rounded-xl bg-brand px-3.5 py-2 text-[12px] font-semibold text-white shadow-sm transition-all hover:opacity-90"
+          >
+            Edit Profile
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1167,7 +1189,15 @@ function BusinessDNAPreview() {
 
 // ─── ROOT EXPORT ──────────────────────────────────────────────────────────────
 
-export function RelationshipDNA({ onAddCustomer }: { onAddCustomer?: () => void }) {
+export function RelationshipDNA({
+  onAddCustomer,
+  onEditCustomer,
+  onViewAllCustomers,
+}: {
+  onAddCustomer?: () => void;
+  onEditCustomer?: (customer: Customer) => void;
+  onViewAllCustomers?: () => void;
+}) {
   const { customers: rawCustomers, loading, error } = useCustomers();
   const customers = rawCustomers.map(adaptCustomer);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -1175,10 +1205,13 @@ export function RelationshipDNA({ onAddCustomer }: { onAddCustomer?: () => void 
   useEffect(() => {
     if (customers.length > 0 && !selectedId) {
       setSelectedId(customers[0].id);
+    } else if (customers.length > 0 && selectedId && !customers.some((c) => c.id === selectedId)) {
+      setSelectedId(customers[0].id);
     }
   }, [customers, selectedId]);
 
   const customer = customers.find((c) => c.id === selectedId) ?? customers[0];
+  const rawCustomer = rawCustomers.find((c) => c.id === selectedId) ?? rawCustomers[0];
 
   if (loading) {
     return (
@@ -1224,16 +1257,27 @@ export function RelationshipDNA({ onAddCustomer }: { onAddCustomer?: () => void 
       <div>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-[13px] font-semibold text-foreground">View Customer Profile</h2>
-          <button className="flex items-center gap-1 text-[11.5px] font-semibold text-brand transition-all hover:gap-1.5">
+          <button
+            onClick={onViewAllCustomers}
+            className="flex items-center gap-1 text-[11.5px] font-semibold text-brand transition-all hover:gap-1.5"
+          >
             View all customers <ArrowRight className="h-3 w-3" />
           </button>
         </div>
-        <CustomerSelector customers={customers} selected={selectedId ?? ""} onSelect={setSelectedId} />
+        <CustomerSelector
+          customers={customers}
+          selected={selectedId ?? ""}
+          onSelect={setSelectedId}
+          onViewAll={onViewAllCustomers}
+        />
       </div>
 
       {customer && (
         <>
-          <AICustomerSummary customer={customer} />
+          <AICustomerSummary
+            customer={customer}
+            onEdit={rawCustomer && onEditCustomer ? () => onEditCustomer(rawCustomer) : undefined}
+          />
 
           <div className="grid gap-4 lg:grid-cols-3">
             <PersonalityProfile customer={customer} />

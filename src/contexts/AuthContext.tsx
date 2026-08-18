@@ -31,23 +31,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const loadUserData = async (userId: string) => {
+    console.log("[AuthContext] loading user data for userId:", userId);
     try {
-      const [prof, mem] = await Promise.all([
-        getProfile(userId),
-        getPrimaryMembership(userId),
-      ]);
+      const prof = await getProfile(userId).catch((e) => {
+        console.error("[AuthContext] getProfile error:", e);
+        return null;
+      });
+      console.log("[AuthContext] loaded profile:", prof);
       setProfile(prof);
+
+      const mem = await getPrimaryMembership(userId).catch((e) => {
+        console.error("[AuthContext] getPrimaryMembership error:", e);
+        return null;
+      });
+      console.log("[AuthContext] loaded primary membership:", mem);
       setMembership(mem);
+
       if (mem?.business_id) {
-        const [biz, bizSettings] = await Promise.all([
-          getBusiness(mem.business_id),
-          getBusinessSettings(mem.business_id),
-        ]);
+        console.log("[AuthContext] loading business for business_id:", mem.business_id);
+        const biz = await getBusiness(mem.business_id).catch((e) => {
+          console.error("[AuthContext] getBusiness error:", e);
+          return null;
+        });
+        console.log("[AuthContext] loaded business:", biz);
         setBusiness(biz);
+
+        const bizSettings = await getBusinessSettings(mem.business_id).catch((e) => {
+          console.error("[AuthContext] getBusinessSettings error:", e);
+          return null;
+        });
         setSettings(bizSettings);
+      } else {
+        console.warn("[AuthContext] user has no active membership / business_id linked");
       }
     } catch (err) {
-      console.error("Failed to load user data:", err);
+      console.error("[AuthContext] Failed to load user data:", err);
     }
   };
 
