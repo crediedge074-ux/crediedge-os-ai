@@ -1,31 +1,16 @@
 import { ArrowUp, ArrowDown, ArrowRight, TrendingUp, Info } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState, useRef } from "react";
+import { useAuthContext } from "@/contexts/AuthContext";
+import { fetchCrediEdgeScore, type CrediEdgeScoreData, type CategoryScore } from "@/services/score";
 
-interface Category {
-  name: string;
-  score: number;
-  color: string;
-  description: string;
-}
-
-const categories: Category[] = [
-  { name: "Communication", score: 92, color: "#10B981", description: "Response times, follow-up rate, and message quality." },
-  { name: "Customer Experience", score: 89, color: "#3B82F6", description: "Reviews, satisfaction scores, and repeat business." },
-  { name: "Operations", score: 81, color: "#8B5CF6", description: "Job completion rate, efficiency, and scheduling accuracy." },
-  { name: "Finance", score: 80, color: "#F59E0B", description: "Invoice collection, cash flow health, and profit margins." },
-  { name: "Marketing", score: 73, color: "#06B6D4", description: "Lead generation, ad performance, and brand presence." },
-  { name: "Website", score: 68, color: "#F97316", description: "Speed, SEO ranking, and conversion performance." },
-  { name: "Automation", score: 55, color: "#E31B23", description: "Workflow automation and time saved through AI tools." },
-];
-
-function CategoryBar({ cat, animate }: { cat: Category; animate: boolean }) {
+function CategoryBar({ cat, animate }: { cat: CategoryScore; animate: boolean }) {
   const [width, setWidth] = useState(0);
   const [showTip, setShowTip] = useState(false);
 
   useEffect(() => {
     if (animate) {
-      const t = setTimeout(() => setWidth(cat.score), 100 + categories.indexOf(cat) * 60);
+      const t = setTimeout(() => setWidth(cat.score), 100);
       return () => clearTimeout(t);
     }
   }, [animate, cat]);
@@ -52,7 +37,7 @@ function CategoryBar({ cat, animate }: { cat: Category; animate: boolean }) {
           />
         </div>
         <div className={`w-7 shrink-0 text-right text-[12px] font-bold ${scoreColor}`}>
-          {cat.score}
+          {cat.hasData ? cat.score : "—"}
         </div>
         <Info className="h-3 w-3 shrink-0 cursor-help text-muted-foreground/40 transition-colors group-hover:text-muted-foreground" strokeWidth={1.75} />
       </div>
@@ -60,7 +45,7 @@ function CategoryBar({ cat, animate }: { cat: Category; animate: boolean }) {
       {/* Tooltip */}
       {showTip && (
         <div className="pointer-events-none absolute right-0 top-6 z-20 w-52 rounded-xl border border-border bg-card px-3 py-2.5 shadow-card">
-          <div className="mb-1 text-[11px] font-semibold text-foreground">{cat.name}</div>
+          <div className="mb-1 text-[11px] font-semibold text-foreground">{cat.name} (Weight: {cat.weight}%)</div>
           <div className="text-[10.5px] leading-relaxed text-muted-foreground">{cat.description}</div>
         </div>
       )}
@@ -69,40 +54,68 @@ function CategoryBar({ cat, animate }: { cat: Category; animate: boolean }) {
 }
 
 export function CrediEdgeScore() {
-  const target = 84;
-  const [score, setScore] = useState(0);
+  const { membership } = useAuthContext();
+  const businessId = membership?.business_id;
+
+  const [scoreData, setScoreData] = useState<CrediEdgeScoreData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [displayScore, setDisplayScore] = useState(0);
   const [animate, setAnimate] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    fetchCrediEdgeScore(businessId)
+      .then((data) => {
+        if (mounted) {
+          setScoreData(data);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to fetch CrediEdge score:", err);
+        if (mounted) setLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [businessId]);
+
+  useEffect(() => {
+    if (!scoreData || !scoreData.hasSufficientData) return;
+
+    const target = scoreData.overallScore;
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
           setAnimate(true);
-          const timer = setTimeout(() => {
-            let current = 0;
-            const step = () => {
-              current = Math.min(current + 1, target);
-              setScore(current);
-              if (current < target) requestAnimationFrame(step);
-            };
-            requestAnimationFrame(step);
-          }, 200);
+          let current = 0;
+          const step = () => {
+            current = Math.min(current + 1, target);
+            setDisplayScore(current);
+            if (current < target) requestAnimationFrame(step);
+          };
+          requestAnimationFrame(step);
           observer.disconnect();
-          return () => clearTimeout(timer);
         }
       },
       { threshold: 0.3 }
     );
+
     if (ref.current) observer.observe(ref.current);
     return () => observer.disconnect();
-  }, []);
+  }, [scoreData]);
 
-  const radius = 54;
+  const targetScore = scoreData?.hasSufficientData ? displayScore : 0;
+
+  // Geometry for circular progress ring
+  const size = 136;
+  const radius = 50;
   const strokeWidth = 7;
   const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (score / 100) * circumference;
-  const size = 128;
+  const offset = circumference - (targetScore / 100) * circumference;
   const cx = size / 2;
   const cy = size / 2;
 
@@ -121,78 +134,114 @@ export function CrediEdgeScore() {
         </Link>
       </div>
 
-      {/* Score + Stats row */}
-      <div className="flex items-center gap-5">
-        {/* Circular gauge */}
-        <div className="relative shrink-0">
-          <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
-            {/* Track */}
-            <circle
-              cx={cx}
-              cy={cy}
-              r={radius}
-              stroke="oklch(0.928 0 0)"
-              strokeWidth={strokeWidth}
-              fill="none"
-            />
-            {/* Progress */}
-            <circle
-              cx={cx}
-              cy={cy}
-              r={radius}
-              stroke="#E31B23"
-              strokeWidth={strokeWidth}
-              fill="none"
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={offset}
-              style={{ transition: "stroke-dashoffset 0.04s linear" }}
-            />
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <div className="text-[34px] font-extrabold leading-none tracking-tight text-foreground">
-              {score}
-            </div>
-            <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-widest text-brand">
-              Excellent
-            </div>
+      {loading ? (
+        <div className="py-12 text-center text-xs text-muted-foreground">
+          Calculating CrediEdge Score from real workspace metrics...
+        </div>
+      ) : !scoreData?.hasSufficientData ? (
+        <div className="rounded-xl border border-dashed border-border bg-secondary/30 p-4 text-center">
+          <div className="text-[13px] font-semibold text-foreground mb-1">Score Pending Workspace Data</div>
+          <div className="text-[11.5px] leading-relaxed text-muted-foreground">
+            {scoreData?.explanation.summary}
           </div>
         </div>
-
-        {/* Stats */}
-        <div className="flex flex-1 flex-col gap-3">
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-xl bg-secondary/60 px-3 py-2.5">
-              <div className="flex items-center gap-1 text-brand">
-                <ArrowUp className="h-3 w-3" strokeWidth={2.5} />
-                <span className="text-[13px] font-bold">+3</span>
+      ) : (
+        <>
+          {/* Score + Stats row */}
+          <div className="flex items-center gap-5">
+            {/* Circular gauge with generous inner spacing to prevent text collision */}
+            <div className="relative shrink-0 flex items-center justify-center" style={{ width: size, height: size }}>
+              <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+                {/* Track */}
+                <circle
+                  cx={cx}
+                  cy={cy}
+                  r={radius}
+                  stroke="oklch(0.928 0 0)"
+                  strokeWidth={strokeWidth}
+                  fill="none"
+                />
+                {/* Progress Ring */}
+                <circle
+                  cx={cx}
+                  cy={cy}
+                  r={radius}
+                  stroke="#E31B23"
+                  strokeWidth={strokeWidth}
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeDasharray={circumference}
+                  strokeDashoffset={offset}
+                  style={{ transition: "stroke-dashoffset 0.04s linear" }}
+                />
+              </svg>
+              {/* Inner score text - centered cleanly inside circle radius */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <div className="text-[32px] font-extrabold leading-none tracking-tight text-foreground">
+                  {displayScore}
+                </div>
+                <div className="mt-1 text-[9.5px] font-bold uppercase tracking-wider text-brand">
+                  {scoreData.ratingLabel}
+                </div>
               </div>
-              <div className="mt-0.5 text-[10px] text-muted-foreground">Today</div>
             </div>
-            <div className="rounded-xl bg-secondary/60 px-3 py-2.5">
-              <div className="flex items-center gap-1 text-brand">
-                <ArrowUp className="h-3 w-3" strokeWidth={2.5} />
-                <span className="text-[13px] font-bold">+7</span>
+
+            {/* Stats */}
+            <div className="flex flex-1 flex-col gap-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-xl bg-secondary/60 px-3 py-2.5">
+                  <div className="flex items-center gap-1 text-brand">
+                    {scoreData.todayChange !== null && scoreData.todayChange < 0 ? (
+                      <ArrowDown className="h-3 w-3 text-destructive" strokeWidth={2.5} />
+                    ) : (
+                      <ArrowUp className="h-3 w-3" strokeWidth={2.5} />
+                    )}
+                    <span className="text-[13px] font-bold">
+                      {scoreData.todayChange !== null
+                        ? `${scoreData.todayChange >= 0 ? "+" : ""}${scoreData.todayChange}`
+                        : "0"}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 text-[10px] text-muted-foreground">Today</div>
+                </div>
+                <div className="rounded-xl bg-secondary/60 px-3 py-2.5">
+                  <div className="flex items-center gap-1 text-brand">
+                    {scoreData.weeklyChange !== null && scoreData.weeklyChange < 0 ? (
+                      <ArrowDown className="h-3 w-3 text-destructive" strokeWidth={2.5} />
+                    ) : (
+                      <ArrowUp className="h-3 w-3" strokeWidth={2.5} />
+                    )}
+                    <span className="text-[13px] font-bold">
+                      {scoreData.weeklyChange !== null
+                        ? `${scoreData.weeklyChange >= 0 ? "+" : ""}${scoreData.weeklyChange}`
+                        : "0"}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 text-[10px] text-muted-foreground">This week</div>
+                </div>
               </div>
-              <div className="mt-0.5 text-[10px] text-muted-foreground">This week</div>
+              <div className="rounded-xl bg-brand/5 border border-brand/15 px-3 py-2.5">
+                <div className="flex items-center gap-1.5">
+                  <TrendingUp className="h-3.5 w-3.5 text-brand" strokeWidth={2} />
+                  <span className="text-[12px] font-semibold text-foreground">
+                    {scoreData.percentileRank ? `Top ${scoreData.percentileRank}%` : "Active Workspace"}
+                  </span>
+                </div>
+                <div className="mt-0.5 text-[10.5px] text-muted-foreground">
+                  {scoreData.percentileRank ? "of similar businesses" : "health index tracking"}
+                </div>
+              </div>
             </div>
           </div>
-          <div className="rounded-xl bg-brand/5 border border-brand/15 px-3 py-2.5">
-            <div className="flex items-center gap-1.5">
-              <TrendingUp className="h-3.5 w-3.5 text-brand" strokeWidth={2} />
-              <span className="text-[12px] font-semibold text-foreground">Top 12%</span>
-            </div>
-            <div className="mt-0.5 text-[10.5px] text-muted-foreground">of similar businesses</div>
-          </div>
-        </div>
-      </div>
 
-      {/* Category breakdown */}
-      <div className="mt-5 space-y-2.5 border-t border-border pt-4">
-        {categories.map((cat) => (
-          <CategoryBar key={cat.name} cat={cat} animate={animate} />
-        ))}
-      </div>
+          {/* Category breakdown */}
+          <div className="mt-5 space-y-2.5 border-t border-border pt-4">
+            {scoreData.categories.map((cat) => (
+              <CategoryBar key={cat.name} cat={cat} animate={animate} />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
