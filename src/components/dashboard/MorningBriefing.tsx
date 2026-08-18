@@ -1,57 +1,79 @@
+import { useState, useEffect } from "react";
 import { Sparkles, MessageSquare, Users, Star, Globe, ArrowRight, TrendingUp, ChevronRight } from "lucide-react";
 import { Link } from "@tanstack/react-router";
-import type { LucideIcon } from "lucide-react";
-
-interface QuickAction {
-  icon: LucideIcon;
-  label: string;
-  sublabel: string;
-  impact: string;
-  cta: string;
-  to: string;
-  urgent?: boolean;
-}
-
-const actions: QuickAction[] = [
-  {
-    icon: MessageSquare,
-    label: "Reply to Enquiries",
-    sublabel: "4 awaiting response",
-    impact: "+£1,800",
-    cta: "Reply Now",
-    to: "/communications",
-    urgent: true,
-  },
-  {
-    icon: Users,
-    label: "Open CRM",
-    sublabel: "2 overdue invoices",
-    impact: "+£950",
-    cta: "View CRM",
-    to: "/relationships",
-    urgent: true,
-  },
-  {
-    icon: Star,
-    label: "Send Review Requests",
-    sublabel: "6 customers eligible",
-    impact: "+£340",
-    cta: "Send Now",
-    to: "/reviews",
-  },
-  {
-    icon: Globe,
-    label: "View Customers",
-    sublabel: "3 awaiting follow-up",
-    impact: "Retention",
-    cta: "View",
-    to: "/relationships",
-  },
-];
+import { useAuthContext } from "@/contexts/AuthContext";
+import { fetchMorningBriefingMetrics, type BriefingMetrics } from "@/services/briefing";
 
 export function MorningBriefing() {
+  const { membership, profile } = useAuthContext();
+  const businessId = membership?.business_id;
+  const firstName = profile?.first_name || profile?.full_name?.split(" ")[0];
+
+  const [metrics, setMetrics] = useState<BriefingMetrics | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    fetchMorningBriefingMetrics(businessId, firstName)
+      .then((res) => {
+        if (mounted) setMetrics(res);
+      })
+      .catch((err) => {
+        console.error("Failed to load briefing metrics:", err);
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [businessId, firstName]);
+
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+
+  const greetingName = metrics?.greetingName || firstName || "there";
+
+  const actions = [
+    {
+      icon: MessageSquare,
+      label: "Reply to Enquiries",
+      sublabel: loading ? "Loading..." : `${metrics?.awaitingEnquiriesCount ?? 0} awaiting response`,
+      impact: loading ? "..." : `${metrics?.awaitingEnquiriesCount ?? 0} pending`,
+      cta: "Reply Now",
+      to: "/communications",
+      urgent: (metrics?.awaitingEnquiriesCount ?? 0) > 0,
+    },
+    {
+      icon: Users,
+      label: "Open CRM",
+      sublabel: loading ? "Loading..." : `${metrics?.overdueInvoicesCount ?? 0} overdue invoices`,
+      impact: loading ? "..." : (metrics?.overdueInvoicesAmount ? `+£${metrics.overdueInvoicesAmount.toLocaleString()}` : "£0"),
+      cta: "View CRM",
+      to: "/relationships",
+      urgent: (metrics?.overdueInvoicesCount ?? 0) > 0,
+    },
+    {
+      icon: Star,
+      label: "Send Review Requests",
+      sublabel: loading ? "Loading..." : `${metrics?.eligibleReviewsCount ?? 0} customers eligible`,
+      impact: loading ? "..." : `${metrics?.eligibleReviewsCount ?? 0} eligible`,
+      cta: "Send Now",
+      to: "/reviews",
+      urgent: false,
+    },
+    {
+      icon: Globe,
+      label: "View Customers",
+      sublabel: loading ? "Loading..." : `${metrics?.pendingFollowupsCount ?? 0} awaiting follow-up`,
+      impact: "Retention",
+      cta: "View",
+      to: "/relationships",
+      urgent: false,
+    },
+  ];
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-border bg-card shadow-card transition-all duration-200 hover:shadow-[0_4px_24px_rgba(0,0,0,0.07)]">
@@ -72,20 +94,22 @@ export function MorningBriefing() {
           <div className="pointer-events-none absolute bottom-0 left-12 h-24 w-24 rounded-full bg-brand/20 blur-2xl" />
 
           <p className="relative text-[14px] font-semibold leading-snug">
-            {greeting}, Dom <span className="inline-block">👋</span>
+            {greeting}, {greetingName} <span className="inline-block">👋</span>
           </p>
+
           <p className="relative mt-2.5 text-[13px] leading-[1.65] text-background/80">
-            Yesterday your business performed well. Revenue increased by{" "}
-            <span className="font-semibold text-background">12%</span> above target. You received{" "}
-            <span className="font-semibold text-background">5 new enquiries</span> and response times
-            improved. However, two invoices remain unpaid and three customers are still waiting for replies.
+            {loading
+              ? "Gathering real-time workspace metrics..."
+              : metrics?.revenueInsightText}
           </p>
 
           <div className="relative mt-4 flex items-center gap-2.5 rounded-lg bg-white/10 px-3.5 py-2.5">
             <TrendingUp className="h-4 w-4 shrink-0 text-background/70" strokeWidth={2} />
             <div>
               <span className="text-[12px] text-background/80">Estimated opportunity today: </span>
-              <span className="text-[13px] font-bold text-background">+£3,090</span>
+              <span className="text-[13px] font-bold text-background">
+                {loading ? "..." : `+£${(metrics?.totalOpportunityToday ?? 0).toLocaleString()}`}
+              </span>
             </div>
           </div>
         </div>
