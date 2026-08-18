@@ -108,9 +108,10 @@ export function useUpdateCustomer() {
     try {
       const customer = await updateCustomer(id, { ...updates, updated_by: user?.id ?? null });
       return customer;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update customer");
-      return null;
+    } catch (err: any) {
+      const msg = err?.message || "Failed to update customer";
+      setError(msg);
+      throw new Error(msg);
     } finally {
       setSaving(false);
     }
