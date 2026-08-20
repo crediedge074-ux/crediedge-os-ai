@@ -1,4 +1,4 @@
-import { Sparkles, Bell, HelpCircle, ChevronDown, Menu, LogOut, ArrowRight, AlertTriangle, Mail, Star, FileText, Shield, Rocket } from "lucide-react";
+import { Sparkles, Bell, HelpCircle, ChevronDown, Menu, LogOut, AlertTriangle, Mail, Star, FileText, Shield, Rocket, X, ArrowRight } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, Link } from "@tanstack/react-router";
@@ -63,9 +63,18 @@ export function TopNav() {
     };
   }, [businessId, userId]);
 
-  const unreadCount = notifications.filter((n) => !n.is_read).length;
+  const unreadNotifications = notifications.filter((n) => !n.is_read);
+  const unreadCount = unreadNotifications.length;
 
-  const handleNotificationClick = async (notif: AppNotification) => {
+  const handleDismissRelease = async (e: React.MouseEvent, notif: AppNotification) => {
+    e.stopPropagation();
+    await markNotificationRead(notif.id, userId);
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === notif.id ? { ...n, is_read: true } : n))
+    );
+  };
+
+  const handleBusinessNotificationClick = async (notif: AppNotification) => {
     if (!notif.is_read) {
       await markNotificationRead(notif.id, userId);
       setNotifications((prev) =>
@@ -147,37 +156,61 @@ export function TopNav() {
               </div>
 
               <div className="max-h-80 overflow-y-auto divide-y divide-border">
-                {notifications.length === 0 ? (
+                {unreadNotifications.length === 0 ? (
                   <div className="p-6 text-center text-xs text-muted-foreground">
-                    No notifications for your workspace yet.
+                    No unread notifications for your workspace.
                   </div>
                 ) : (
-                  notifications.map((n) => {
+                  unreadNotifications.map((n) => {
                     const Icon = getNotificationIcon(n.type);
                     const isSystemRelease = n.type === "system_release";
+
+                    if (isSystemRelease) {
+                      return (
+                        <div
+                          key={n.id}
+                          className="flex w-full items-start gap-3 p-3 bg-brand/10 border-l-2 border-l-brand relative"
+                        >
+                          <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg mt-0.5 bg-brand/15 text-brand">
+                            <Icon className="h-3.5 w-3.5" />
+                          </div>
+                          <div className="min-w-0 flex-1 pr-5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[12px] font-semibold text-foreground truncate">{n.title}</span>
+                              <span className="rounded bg-brand/20 px-1 py-0.2 text-[8.5px] font-bold text-brand uppercase">
+                                UPDATE
+                              </span>
+                            </div>
+                            <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{n.message}</p>
+                            <span className="mt-1 block text-[10px] text-muted-foreground/70">{formatRelativeTime(n.created_at)}</span>
+                          </div>
+
+                          {/* Dismiss Button */}
+                          <button
+                            type="button"
+                            onClick={(e) => handleDismissRelease(e, n)}
+                            title="Dismiss notification"
+                            className="absolute right-2 top-2.5 grid h-5 w-5 place-items-center rounded text-muted-foreground hover:bg-brand/20 hover:text-foreground transition-colors"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      );
+                    }
 
                     return (
                       <button
                         key={n.id}
-                        onClick={() => handleNotificationClick(n)}
-                        className={`flex w-full items-start gap-3 p-3 text-left transition-colors hover:bg-secondary/50 ${
-                          !n.is_read ? (isSystemRelease ? "bg-brand/10 border-l-2 border-l-brand" : "bg-brand/5") : ""
-                        }`}
+                        onClick={() => handleBusinessNotificationClick(n)}
+                        className="flex w-full items-start gap-3 p-3 text-left transition-colors hover:bg-secondary/50 bg-brand/5"
                       >
-                        <div className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg mt-0.5 ${
-                          isSystemRelease ? "bg-brand/15 text-brand" : "bg-secondary text-foreground/70"
-                        }`}>
+                        <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg mt-0.5 bg-secondary text-foreground/70">
                           <Icon className="h-3.5 w-3.5" />
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-1">
                             <span className="text-[12px] font-semibold text-foreground truncate">{n.title}</span>
-                            {isSystemRelease && (
-                              <span className="rounded bg-brand/20 px-1 py-0.2 text-[8.5px] font-bold text-brand uppercase">
-                                UPDATE
-                              </span>
-                            )}
-                            {!n.is_read && !isSystemRelease && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />}
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />
                           </div>
                           <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground line-clamp-2">{n.message}</p>
                           <span className="mt-1 block text-[10px] text-muted-foreground/70">{formatRelativeTime(n.created_at)}</span>
