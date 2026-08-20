@@ -1,9 +1,30 @@
-import { Sparkles, Bell, HelpCircle, ChevronDown, Menu, LogOut } from "lucide-react";
+import { Sparkles, Bell, HelpCircle, ChevronDown, Menu, LogOut, Check, ArrowRight, AlertTriangle, Mail, Star, FileText, Shield } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, Link } from "@tanstack/react-router";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { signOut } from "@/services/auth";
-import { getNotifications } from "@/services/notifications";
+import { getNotifications, markNotificationRead } from "@/services/notifications";
+import type { AppNotification } from "@/lib/database.types";
+
+function formatRelativeTime(isoDate: string): string {
+  const diff = Date.now() - new Date(isoDate).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function getNotificationIcon(type: string): LucideIcon {
+  if (type === "critical" || type === "overdue_invoice" || type === "urgent") return AlertTriangle;
+  if (type === "message" || type === "enquiry") return Mail;
+  if (type === "review") return Star;
+  if (type === "security" || type === "report") return Shield;
+  return FileText;
+}
 
 export function TopNav() {
   const { profile, membership, user } = useAuthContext();
@@ -11,9 +32,11 @@ export function TopNav() {
   const navigate = useNavigate();
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifPopoverOpen, setNotifPopoverOpen] = useState(false);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
   const menuRef = useRef<HTMLDivElement>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
 
   const displayName = profile?.full_name ?? user?.email?.split("@")[0] ?? "User";
   const initials = displayName.charAt(0).toUpperCase();
@@ -27,18 +50,32 @@ export function TopNav() {
       getNotifications(businessId)
         .then((raw) => {
           if (mounted) {
-            const unread = raw.filter((n) => !n.is_read).length;
-            setUnreadCount(unread);
+            setNotifications(raw);
           }
         })
         .catch((err) => {
-          console.error("Failed to load header notification count:", err);
+          console.error("Failed to load header notifications:", err);
         });
     }
     return () => {
       mounted = false;
     };
   }, [businessId]);
+
+  const unreadCount = notifications.filter((n) => !n.is_read).length;
+
+  const handleNotificationClick = async (notif: AppNotification) => {
+    if (!notif.is_read) {
+      await markNotificationRead(notif.id);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === notif.id ? { ...n, is_read: true } : n))
+      );
+    }
+    setNotifPopoverOpen(false);
+    if (notif.action_url) {
+      navigate({ to: notif.action_url as any });
+    }
+  };
 
   const handleSignOut = async () => {
     setMenuOpen(false);
@@ -50,6 +87,9 @@ export function TopNav() {
     const handler = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
+      }
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifPopoverOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);
@@ -77,24 +117,84 @@ export function TopNav() {
       </div>
 
       <div className="flex items-center gap-0.5">
-        {/* Functional Bell Notification Button */}
-        <Link
-          to="/communications"
-          title="View Notifications"
-          className="relative grid h-8 w-8 place-items-center rounded-lg text-foreground/60 transition-colors duration-150 hover:bg-secondary hover:text-foreground"
-        >
-          <Bell className="h-[17px] w-[17px]" strokeWidth={1.75} />
-          {unreadCount > 0 && (
-            <span className="absolute right-1 top-1 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-brand px-0.5 text-[8px] font-bold text-white">
-              {unreadCount}
-            </span>
-          )}
-        </Link>
+        {/* Notification Bell Dropdown Popover */}
+        <div className="relative" ref={notifRef}>
+          <button
+            onClick={() => setNotifPopoverOpen(!notifPopoverOpen)}
+            title="Notifications"
+            className="relative grid h-8 w-8 place-items-center rounded-lg text-foreground/60 transition-colors duration-150 hover:bg-secondary hover:text-foreground"
+          >
+            <Bell className="h-[17px] w-[17px]" strokeWidth={1.75} />
+            {unreadCount > 0 && (
+              <span className="absolute right-1 top-1 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-brand px-0.5 text-[8px] font-bold text-white">
+                {unreadCount}
+              </span>
+            )}
+          </button>
 
-        {/* Circular Control: System Help & Support */}
+          {notifPopoverOpen && (
+            <div className="absolute right-0 top-full mt-2 w-80 overflow-hidden rounded-2xl border border-border bg-card shadow-2xl z-40">
+              <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-[13px] font-semibold text-foreground">Notifications</span>
+                  {unreadCount > 0 && (
+                    <span className="rounded-full bg-brand px-2 py-0.5 text-[10px] font-bold text-white">
+                      {unreadCount} unread
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="max-h-80 overflow-y-auto divide-y divide-border">
+                {notifications.length === 0 ? (
+                  <div className="p-6 text-center text-xs text-muted-foreground">
+                    No notifications for your workspace yet.
+                  </div>
+                ) : (
+                  notifications.map((n) => {
+                    const Icon = getNotificationIcon(n.type);
+                    return (
+                      <button
+                        key={n.id}
+                        onClick={() => handleNotificationClick(n)}
+                        className={`flex w-full items-start gap-3 p-3 text-left transition-colors hover:bg-secondary/50 ${
+                          !n.is_read ? "bg-brand/5" : ""
+                        }`}
+                      >
+                        <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-secondary text-foreground/70 mt-0.5">
+                          <Icon className="h-3.5 w-3.5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-[12px] font-semibold text-foreground truncate">{n.title}</span>
+                            {!n.is_read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />}
+                          </div>
+                          <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground line-clamp-2">{n.message}</p>
+                          <span className="mt-1 block text-[10px] text-muted-foreground/70">{formatRelativeTime(n.created_at)}</span>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="border-t border-border p-2 text-center bg-secondary/20">
+                <Link
+                  to="/communications"
+                  onClick={() => setNotifPopoverOpen(false)}
+                  className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-brand hover:gap-1.5 transition-all"
+                >
+                  View Communications Hub <ArrowRight className="h-3 w-3" />
+                </Link>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Circular Support Control -> /support */}
         <Link
-          to="/advisor"
-          title="Help & System Support"
+          to="/support"
+          title="Support"
           className="grid h-8 w-8 place-items-center rounded-lg text-foreground/60 transition-colors duration-150 hover:bg-secondary hover:text-foreground"
         >
           <HelpCircle className="h-[17px] w-[17px]" strokeWidth={1.75} />

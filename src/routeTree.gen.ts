@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WebsiteRouteImport } from './routes/website'
 import { Route as TasksRouteImport } from './routes/tasks'
+import { Route as SupportRouteImport } from './routes/support'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ReviewsRouteImport } from './routes/reviews'
 import { Route as RelationshipsRouteImport } from './routes/relationships'
@@ -35,6 +36,11 @@ const WebsiteRoute = WebsiteRouteImport.update({
 const TasksRoute = TasksRouteImport.update({
   id: '/tasks',
   path: '/tasks',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SupportRoute = SupportRouteImport.update({
+  id: '/support',
+  path: '/support',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -129,6 +135,7 @@ export interface FileRoutesByFullPath {
   '/relationships': typeof RelationshipsRoute
   '/reviews': typeof ReviewsRoute
   '/settings': typeof SettingsRoute
+  '/support': typeof SupportRoute
   '/tasks': typeof TasksRoute
   '/website': typeof WebsiteRoute
 }
@@ -148,6 +155,7 @@ export interface FileRoutesByTo {
   '/relationships': typeof RelationshipsRoute
   '/reviews': typeof ReviewsRoute
   '/settings': typeof SettingsRoute
+  '/support': typeof SupportRoute
   '/tasks': typeof TasksRoute
   '/website': typeof WebsiteRoute
 }
@@ -168,6 +176,7 @@ export interface FileRoutesById {
   '/relationships': typeof RelationshipsRoute
   '/reviews': typeof ReviewsRoute
   '/settings': typeof SettingsRoute
+  '/support': typeof SupportRoute
   '/tasks': typeof TasksRoute
   '/website': typeof WebsiteRoute
 }
@@ -189,6 +198,7 @@ export interface FileRouteTypes {
     | '/relationships'
     | '/reviews'
     | '/settings'
+    | '/support'
     | '/tasks'
     | '/website'
   fileRoutesByTo: FileRoutesByTo
@@ -208,6 +218,7 @@ export interface FileRouteTypes {
     | '/relationships'
     | '/reviews'
     | '/settings'
+    | '/support'
     | '/tasks'
     | '/website'
   id:
@@ -227,6 +238,7 @@ export interface FileRouteTypes {
     | '/relationships'
     | '/reviews'
     | '/settings'
+    | '/support'
     | '/tasks'
     | '/website'
   fileRoutesById: FileRoutesById
@@ -247,6 +259,7 @@ export interface RootRouteChildren {
   RelationshipsRoute: typeof RelationshipsRoute
   ReviewsRoute: typeof ReviewsRoute
   SettingsRoute: typeof SettingsRoute
+  SupportRoute: typeof SupportRoute
   TasksRoute: typeof TasksRoute
   WebsiteRoute: typeof WebsiteRoute
 }
@@ -265,6 +278,13 @@ declare module '@tanstack/react-router' {
       path: '/tasks'
       fullPath: '/tasks'
       preLoaderRoute: typeof TasksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/support': {
+      id: '/support'
+      path: '/support'
+      fullPath: '/support'
+      preLoaderRoute: typeof SupportRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -391,6 +411,7 @@ const rootRouteChildren: RootRouteChildren = {
   RelationshipsRoute: RelationshipsRoute,
   ReviewsRoute: ReviewsRoute,
   SettingsRoute: SettingsRoute,
+  SupportRoute: SupportRoute,
   TasksRoute: TasksRoute,
   WebsiteRoute: WebsiteRoute,
 }
