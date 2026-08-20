@@ -1,10 +1,10 @@
-import { Sparkles, Bell, HelpCircle, ChevronDown, Menu, LogOut, Check, ArrowRight, AlertTriangle, Mail, Star, FileText, Shield } from "lucide-react";
+import { Sparkles, Bell, HelpCircle, ChevronDown, Menu, LogOut, ArrowRight, AlertTriangle, Mail, Star, FileText, Shield, Rocket } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, Link } from "@tanstack/react-router";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { signOut } from "@/services/auth";
-import { getNotifications, markNotificationRead } from "@/services/notifications";
+import { getAllCombinedNotifications, markNotificationRead } from "@/services/notifications";
 import type { AppNotification } from "@/lib/database.types";
 
 function formatRelativeTime(isoDate: string): string {
@@ -19,6 +19,7 @@ function formatRelativeTime(isoDate: string): string {
 }
 
 function getNotificationIcon(type: string): LucideIcon {
+  if (type === "system_release") return Rocket;
   if (type === "critical" || type === "overdue_invoice" || type === "urgent") return AlertTriangle;
   if (type === "message" || type === "enquiry") return Mail;
   if (type === "review") return Star;
@@ -29,6 +30,7 @@ function getNotificationIcon(type: string): LucideIcon {
 export function TopNav() {
   const { profile, membership, user } = useAuthContext();
   const businessId = membership?.business_id;
+  const userId = user?.id;
   const navigate = useNavigate();
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -46,27 +48,26 @@ export function TopNav() {
 
   useEffect(() => {
     let mounted = true;
-    if (businessId) {
-      getNotifications(businessId)
-        .then((raw) => {
-          if (mounted) {
-            setNotifications(raw);
-          }
-        })
-        .catch((err) => {
-          console.error("Failed to load header notifications:", err);
-        });
-    }
+    getAllCombinedNotifications(businessId, userId)
+      .then((combined) => {
+        if (mounted) {
+          setNotifications(combined);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load header notifications:", err);
+      });
+
     return () => {
       mounted = false;
     };
-  }, [businessId]);
+  }, [businessId, userId]);
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   const handleNotificationClick = async (notif: AppNotification) => {
     if (!notif.is_read) {
-      await markNotificationRead(notif.id);
+      await markNotificationRead(notif.id, userId);
       setNotifications((prev) =>
         prev.map((n) => (n.id === notif.id ? { ...n, is_read: true } : n))
       );
@@ -153,21 +154,30 @@ export function TopNav() {
                 ) : (
                   notifications.map((n) => {
                     const Icon = getNotificationIcon(n.type);
+                    const isSystemRelease = n.type === "system_release";
+
                     return (
                       <button
                         key={n.id}
                         onClick={() => handleNotificationClick(n)}
                         className={`flex w-full items-start gap-3 p-3 text-left transition-colors hover:bg-secondary/50 ${
-                          !n.is_read ? "bg-brand/5" : ""
+                          !n.is_read ? (isSystemRelease ? "bg-brand/10 border-l-2 border-l-brand" : "bg-brand/5") : ""
                         }`}
                       >
-                        <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-secondary text-foreground/70 mt-0.5">
+                        <div className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg mt-0.5 ${
+                          isSystemRelease ? "bg-brand/15 text-brand" : "bg-secondary text-foreground/70"
+                        }`}>
                           <Icon className="h-3.5 w-3.5" />
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-1">
                             <span className="text-[12px] font-semibold text-foreground truncate">{n.title}</span>
-                            {!n.is_read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />}
+                            {isSystemRelease && (
+                              <span className="rounded bg-brand/20 px-1 py-0.2 text-[8.5px] font-bold text-brand uppercase">
+                                UPDATE
+                              </span>
+                            )}
+                            {!n.is_read && !isSystemRelease && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />}
                           </div>
                           <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground line-clamp-2">{n.message}</p>
                           <span className="mt-1 block text-[10px] text-muted-foreground/70">{formatRelativeTime(n.created_at)}</span>

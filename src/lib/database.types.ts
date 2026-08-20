@@ -867,6 +867,57 @@ export interface Database {
         };
         Relationships: [];
       };
+      app_releases: {
+        Row: {
+          id: string;
+          created_at: string;
+          version: string;
+          title: string;
+          description: string;
+          release_type: string;
+          published_at: string | null;
+          is_published: boolean;
+          changelog_notes: string | null;
+          deployment_id: string | null;
+        };
+        Insert: {
+          version: string;
+          title: string;
+          description: string;
+          release_type?: string;
+          published_at?: string | null;
+          is_published?: boolean;
+          changelog_notes?: string | null;
+          deployment_id?: string | null;
+        };
+        Update: {
+          version?: string;
+          title?: string;
+          description?: string;
+          release_type?: string;
+          published_at?: string | null;
+          is_published?: boolean;
+          changelog_notes?: string | null;
+          deployment_id?: string | null;
+        };
+        Relationships: [];
+      };
+      user_release_reads: {
+        Row: {
+          user_id: string;
+          release_id: string;
+          read_at: string;
+        };
+        Insert: {
+          user_id: string;
+          release_id: string;
+          read_at?: string;
+        };
+        Update: {
+          read_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -927,3 +978,6 @@ export type AIRecommendation = Database["public"]["Tables"]["ai_recommendations"
 export type AIRecommendationOutcome = Database["public"]["Tables"]["ai_recommendation_outcomes"]["Row"];
 export type BusinessMetric = Database["public"]["Tables"]["business_metrics"]["Row"];
 export type Integration = Database["public"]["Tables"]["integrations"]["Row"];
+
+export type AppRelease = Database["public"]["Tables"]["app_releases"]["Row"];
+export type UserReleaseRead = Database["public"]["Tables"]["user_release_reads"]["Row"];
