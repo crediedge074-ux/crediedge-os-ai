@@ -1,13 +1,18 @@
-import { Sparkles, Bell, Circle as HelpCircle, ChevronDown, Menu, LogOut } from "lucide-react";
+import { Sparkles, Bell, HelpCircle, ChevronDown, Menu, LogOut } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, Link } from "@tanstack/react-router";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { signOut } from "@/services/auth";
+import { getNotifications } from "@/services/notifications";
 
 export function TopNav() {
   const { profile, membership, user } = useAuthContext();
+  const businessId = membership?.business_id;
   const navigate = useNavigate();
+
   const [menuOpen, setMenuOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
   const menuRef = useRef<HTMLDivElement>(null);
 
   const displayName = profile?.full_name ?? user?.email?.split("@")[0] ?? "User";
@@ -15,6 +20,25 @@ export function TopNav() {
   const role = membership?.role
     ? membership.role.charAt(0).toUpperCase() + membership.role.slice(1)
     : "Owner";
+
+  useEffect(() => {
+    let mounted = true;
+    if (businessId) {
+      getNotifications(businessId)
+        .then((raw) => {
+          if (mounted) {
+            const unread = raw.filter((n) => !n.is_read).length;
+            setUnreadCount(unread);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to load header notification count:", err);
+        });
+    }
+    return () => {
+      mounted = false;
+    };
+  }, [businessId]);
 
   const handleSignOut = async () => {
     setMenuOpen(false);
@@ -53,15 +77,29 @@ export function TopNav() {
       </div>
 
       <div className="flex items-center gap-0.5">
-        <button className="relative grid h-8 w-8 place-items-center rounded-lg text-foreground/60 transition-colors duration-150 hover:bg-secondary hover:text-foreground">
+        {/* Functional Bell Notification Button */}
+        <Link
+          to="/communications"
+          title="View Notifications"
+          className="relative grid h-8 w-8 place-items-center rounded-lg text-foreground/60 transition-colors duration-150 hover:bg-secondary hover:text-foreground"
+        >
           <Bell className="h-[17px] w-[17px]" strokeWidth={1.75} />
-          <span className="absolute right-1 top-1 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-brand px-0.5 text-[8px] font-bold text-white">
-            5
-          </span>
-        </button>
-        <button className="grid h-8 w-8 place-items-center rounded-lg text-foreground/60 transition-colors duration-150 hover:bg-secondary hover:text-foreground">
+          {unreadCount > 0 && (
+            <span className="absolute right-1 top-1 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-brand px-0.5 text-[8px] font-bold text-white">
+              {unreadCount}
+            </span>
+          )}
+        </Link>
+
+        {/* Circular Control: System Help & Support */}
+        <Link
+          to="/advisor"
+          title="Help & System Support"
+          className="grid h-8 w-8 place-items-center rounded-lg text-foreground/60 transition-colors duration-150 hover:bg-secondary hover:text-foreground"
+        >
           <HelpCircle className="h-[17px] w-[17px]" strokeWidth={1.75} />
-        </button>
+        </Link>
+
         <div className="mx-1.5 h-5 w-px bg-border" />
 
         {/* Profile dropdown */}
