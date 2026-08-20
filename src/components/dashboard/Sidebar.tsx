@@ -1,8 +1,9 @@
-import { LayoutDashboard, Sparkles, SquareCheck as CheckSquare, Calendar, Users, Inbox, Star, ChartBar as BarChart3, FileText, Target, Globe, Plug, Settings, Menu, X } from "lucide-react";
+import { LayoutDashboard, Sparkles, SquareCheck as CheckSquare, Calendar, Users, Inbox, Star, ChartBar as BarChart3, FileText, Target, Globe, Plug, Settings, Menu, X, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Link, useLocation } from "@tanstack/react-router";
 import { Logo } from "./Logo";
 import { HealthScore } from "./HealthScore";
 import { useState } from "react";
+import { useSidebarContext } from "@/contexts/SidebarContext";
 
 const nav = [
   { label: "Command Centre", icon: LayoutDashboard, to: "/" },
@@ -22,17 +23,21 @@ const nav = [
 
 export function Sidebar() {
   const { pathname } = useLocation();
+  const { isCollapsed, toggleSidebar } = useSidebarContext();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const NavItem = ({ item }: { item: (typeof nav)[number] }) => {
     const isActive = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
     const Icon = item.icon;
     return (
-      <li>
+      <li className="relative group">
         <Link
           to={item.to}
           onClick={() => setMobileOpen(false)}
-          className={`group flex w-full items-center justify-between rounded-lg px-3 py-2 text-[12.5px] font-medium transition-all duration-150 xl:py-2 xl:text-[13px] ${
+          aria-label={item.label}
+          className={`flex items-center rounded-lg transition-all duration-150 ${
+            isCollapsed ? "h-10 w-10 justify-center mx-auto" : "w-full justify-between px-3 py-2 text-[12.5px] font-medium xl:py-2 xl:text-[13px]"
+          } ${
             isActive
               ? "bg-brand text-white shadow-sm"
               : "text-foreground/70 hover:bg-secondary hover:text-foreground"
@@ -45,14 +50,27 @@ export function Sidebar() {
               }`}
               strokeWidth={1.75}
             />
-            {item.label}
+            {!isCollapsed && <span>{item.label}</span>}
           </span>
-          {item.badge && !isActive && (
+
+          {!isCollapsed && item.badge && !isActive && (
             <span className="grid h-5 min-w-5 place-items-center rounded-full bg-brand px-1 text-[10px] font-semibold text-white">
               {item.badge}
             </span>
           )}
+
+          {isCollapsed && item.badge && !isActive && (
+            <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-brand" />
+          )}
         </Link>
+
+        {/* Tooltip in Collapsed Mode */}
+        {isCollapsed && (
+          <div className="pointer-events-none absolute left-14 top-1/2 z-50 -translate-y-1/2 rounded-xl border border-border bg-card px-3 py-1.5 text-[11.5px] font-semibold text-foreground opacity-0 shadow-xl transition-all duration-150 group-hover:opacity-100 whitespace-nowrap">
+            {item.label}
+            {item.badge && <span className="ml-1.5 rounded-full bg-brand px-1.5 py-0.2 text-[9.5px] font-bold text-white">{item.badge}</span>}
+          </div>
+        )}
       </li>
     );
   };
@@ -77,12 +95,29 @@ export function Sidebar() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-60 flex-col border-r border-border bg-card transition-transform duration-200 lg:translate-x-0 xl:w-64 ${
-          mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        }`}
+        className={`fixed inset-y-0 left-0 z-50 flex flex-col border-r border-border bg-card transition-all duration-200 lg:translate-x-0 ${
+          mobileOpen ? "translate-x-0 w-60" : "-translate-x-full lg:translate-x-0"
+        } ${isCollapsed ? "lg:w-16" : "lg:w-60 xl:w-64"}`}
       >
-        <div className="flex h-[60px] items-center justify-between border-b border-border px-4 xl:px-5">
-          <Logo />
+        <div className="flex h-[60px] items-center justify-between border-b border-border px-3 xl:px-4">
+          {!isCollapsed ? (
+            <Logo />
+          ) : (
+            <div className="mx-auto grid h-7 w-7 place-items-center rounded-lg bg-brand text-[12px] font-bold text-white">
+              C
+            </div>
+          )}
+
+          {/* Desktop Collapse/Expand Toggle */}
+          <button
+            onClick={toggleSidebar}
+            title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+            className="hidden lg:grid h-7 w-7 place-items-center rounded-lg text-foreground/50 transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            {isCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </button>
+
+          {/* Mobile Close Button */}
           <button
             onClick={() => setMobileOpen(false)}
             className="grid h-7 w-7 place-items-center rounded-lg text-foreground/50 transition-colors hover:bg-secondary hover:text-foreground lg:hidden"
@@ -91,16 +126,16 @@ export function Sidebar() {
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-2.5 py-2 xl:px-3">
-          <ul className="space-y-0.5">
+        <nav className="flex-1 overflow-y-auto px-2 py-2">
+          <ul className="space-y-1">
             {nav.map((item) => (
               <NavItem key={item.to} item={item} />
             ))}
           </ul>
         </nav>
 
-        <div className="p-2.5 xl:p-3">
-          <HealthScore />
+        <div className={isCollapsed ? "p-2.5 flex justify-center" : "p-2.5 xl:p-3"}>
+          <HealthScore compact={isCollapsed} />
         </div>
       </aside>
     </>

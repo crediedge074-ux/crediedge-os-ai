@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { TopNav } from "@/components/dashboard/TopNav";
 import { useAuthContext } from "@/contexts/AuthContext";
+import { SidebarProvider, useSidebarContext } from "@/contexts/SidebarContext";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -32,6 +33,22 @@ function AppSkeleton() {
   );
 }
 
+function LayoutContent({ children }: { children: ReactNode }) {
+  const { isCollapsed } = useSidebarContext();
+
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      <Sidebar />
+      <div className={`transition-all duration-200 ease-in-out ${isCollapsed ? "lg:pl-16" : "lg:pl-60 xl:pl-64"}`}>
+        <TopNav />
+        <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-7 xl:px-8">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}
+
 export function AppLayout({ children }: AppLayoutProps) {
   const { session, loading } = useAuthContext();
   const navigate = useNavigate();
@@ -46,14 +63,8 @@ export function AppLayout({ children }: AppLayoutProps) {
   if (!session) return null;
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <Sidebar />
-      <div className="lg:pl-60 xl:pl-64">
-        <TopNav />
-        <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-7 xl:px-8">
-          {children}
-        </main>
-      </div>
-    </div>
+    <SidebarProvider>
+      <LayoutContent>{children}</LayoutContent>
+    </SidebarProvider>
   );
 }

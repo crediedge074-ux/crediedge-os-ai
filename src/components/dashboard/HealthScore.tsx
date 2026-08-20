@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { fetchCrediEdgeScore, type CrediEdgeScoreData } from "@/services/score";
 
-export function HealthScore() {
+export function HealthScore({ compact = false }: { compact?: boolean }) {
   const { membership } = useAuthContext();
   const businessId = membership?.business_id;
 
@@ -48,12 +48,55 @@ export function HealthScore() {
     return () => clearTimeout(timer);
   }, [scoreData]);
 
-  // Refined SVG gauge dimensions to eliminate text/ring collision completely
-  const radius = 26;
-  const strokeWidth = 4;
+  const radius = 22;
+  const strokeWidth = 3.5;
   const circumference = 2 * Math.PI * radius;
   const targetScore = scoreData?.hasSufficientData ? displayScore : 0;
   const offset = circumference - (targetScore / 100) * circumference;
+
+  if (compact) {
+    return (
+      <Link
+        to="/health"
+        title={`CrediEdge Score™: ${scoreData?.hasSufficientData ? scoreData.overallScore : "Pending"} (${scoreData?.ratingLabel ?? "Health"})`}
+        className="group relative flex h-11 w-11 items-center justify-center rounded-xl bg-[#0D0D0D] text-white transition-all duration-200 hover:border hover:border-brand/40 hover:bg-[#121212]"
+      >
+        <svg viewBox="0 0 52 52" className="h-10 w-10 -rotate-90">
+          <circle
+            cx="26"
+            cy="26"
+            r={radius}
+            stroke="rgba(255,255,255,0.08)"
+            strokeWidth={strokeWidth}
+            fill="none"
+          />
+          <circle
+            cx="26"
+            cy="26"
+            r={radius}
+            stroke="#E31B23"
+            strokeWidth={strokeWidth}
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            style={{ transition: "stroke-dashoffset 0.05s linear" }}
+          />
+        </svg>
+        <span className="absolute inset-0 flex items-center justify-center text-[12px] font-extrabold text-white">
+          {scoreData?.hasSufficientData ? displayScore : "—"}
+        </span>
+
+        {/* Hover Tooltip */}
+        <div className="pointer-events-none absolute left-14 top-1/2 z-50 -translate-y-1/2 rounded-xl border border-border bg-card px-3 py-2 text-left opacity-0 shadow-xl transition-all duration-150 group-hover:opacity-100 whitespace-nowrap">
+          <div className="text-[11px] font-bold text-foreground">CrediEdge Score™</div>
+          <div className="text-[10.5px] font-semibold text-brand">
+            {scoreData?.hasSufficientData ? `${displayScore} · ${scoreData.ratingLabel}` : "Pending Data"}
+          </div>
+        </div>
+      </Link>
+    );
+  }
 
   return (
     <Link
@@ -82,17 +125,17 @@ export function HealthScore() {
               <circle
                 cx="32"
                 cy="32"
-                r={radius}
+                r={26}
                 stroke="rgba(255,255,255,0.08)"
-                strokeWidth={strokeWidth}
+                strokeWidth={4}
                 fill="none"
               />
               <circle
                 cx="32"
                 cy="32"
-                r={radius}
+                r={26}
                 stroke="#E31B23"
-                strokeWidth={strokeWidth}
+                strokeWidth={4}
                 fill="none"
                 strokeLinecap="round"
                 strokeDasharray={circumference}

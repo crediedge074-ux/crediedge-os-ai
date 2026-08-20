@@ -1,12 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  PoundSterling,
-  MessageSquare,
-  Calendar,
-  Percent,
-  Star,
-  CalendarDays,
-} from "lucide-react";
+import { CalendarDays } from "lucide-react";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { TopNav } from "@/components/dashboard/TopNav";
 import { BusinessSnapshot } from "@/components/dashboard/BusinessSnapshot";
@@ -16,12 +9,22 @@ import { RevenueChart } from "@/components/dashboard/RevenueChart";
 import { Priorities } from "@/components/dashboard/Priorities";
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
 import { Notifications } from "@/components/dashboard/Notifications";
+import { SidebarProvider, useSidebarContext } from "@/contexts/SidebarContext";
 
 export const Route = createFileRoute("/")({
-  component: Dashboard,
+  component: DashboardWithProvider,
 });
 
+function DashboardWithProvider() {
+  return (
+    <SidebarProvider>
+      <Dashboard />
+    </SidebarProvider>
+  );
+}
+
 function Dashboard() {
+  const { isCollapsed } = useSidebarContext();
   const today = new Date().toLocaleDateString("en-GB", {
     weekday: "long",
     day: "numeric",
@@ -32,7 +35,7 @@ function Dashboard() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Sidebar />
-      <div className="lg:pl-60 xl:pl-64">
+      <div className={`transition-all duration-200 ease-in-out ${isCollapsed ? "lg:pl-16" : "lg:pl-60 xl:pl-64"}`}>
         <TopNav />
 
         <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-7 xl:px-8">
