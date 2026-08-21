@@ -16,10 +16,32 @@ export interface AIExecutiveBriefingData {
   lastAnalyzedTime?: string;
 }
 
+export interface RecommendationSourceSignals {
+  evidence_reason?: string;
+  priority_score?: number;
+  [key: string]: any;
+}
+
+export interface RecommendationExpectedOutcome {
+  expected_value?: number;
+  expected_score_boost?: number;
+  metric_key?: string;
+  [key: string]: any;
+}
+
+export interface RecommendationActualOutcome {
+  actual_value?: number;
+  variance?: number;
+  outcome_status?: "successful" | "below_expected";
+  recorded_at?: string;
+  [key: string]: any;
+}
+
 export interface StoredRecommendation {
   id: string;
   created_at: string;
   updated_at: string;
+  completed_at?: string | null;
   business_id: string;
   customer_id: string | null;
   job_id: string | null;
@@ -32,6 +54,9 @@ export interface StoredRecommendation {
   impact_score: number | null;
   confidence_score: number | null;
   status: "active" | "started" | "dismissed" | "completed";
+  source_signals?: RecommendationSourceSignals;
+  expected_outcome?: RecommendationExpectedOutcome;
+  actual_outcome?: RecommendationActualOutcome;
 }
 
 export async function generateAIExecutiveBriefing(
@@ -109,6 +134,7 @@ export async function generateAIExecutiveBriefing(
           .maybeSingle();
 
         if (!existing) {
+          const estimatedVal = parseInt((prio.impact || "").replace(/[^0-9]/g, ""), 10) || 0;
           await supabase.from("ai_recommendations").insert({
             business_id: businessId,
             category: prio.sourceType,
@@ -119,7 +145,9 @@ export async function generateAIExecutiveBriefing(
             estimated_impact: prio.impact,
             confidence_score: confidenceScore,
             status: "active",
-          });
+            source_signals: { evidence_reason: prio.reason, priority_score: prio.score },
+            expected_outcome: { expected_value: estimatedVal, expected_score_boost: prio.score > 80 ? 5 : 2 },
+          } as any);
         }
       } catch (err) {
         console.warn("[generateAIExecutiveBriefing] Non-blocking AI recommendation persist notice:", err);
@@ -166,7 +194,22 @@ export async function getActiveRecommendations(businessId: string): Promise<Stor
     console.error("Error fetching active recommendations:", error);
     return [];
   }
-  return (data || []).map((r) => ({ ...r, status: r.status as StoredRecommendation["status"] }));
+  return (data || []).map((r) => ({ ...r, status: r.status as StoredRecommendation["status"] })) as StoredRecommendation[];
+}
+
+export async function getHistoricalRecommendations(businessId: string): Promise<StoredRecommendation[]> {
+  const { data, error } = await supabase
+    .from("ai_recommendations")
+    .select("*")
+    .eq("business_id", businessId)
+    .in("status", ["completed", "dismissed"])
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching historical recommendations:", error);
+    return [];
+  }
+  return (data || []).map((r) => ({ ...r, status: r.status as StoredRecommendation["status"] })) as StoredRecommendation[];
 }
 
 export async function startRecommendation(id: string, businessId: string, title: string): Promise<boolean> {
@@ -216,9 +259,39 @@ export async function dismissRecommendation(id: string, businessId: string, titl
 }
 
 export async function completeRecommendation(id: string, businessId: string, title: string): Promise<boolean> {
+  const now = new Date().toISOString();
+
+  // 1. Fetch current recommendation details to calculate outcomes
+  const { data: rec } = await supabase
+    .from("ai_recommendations")
+    .select("*")
+    .eq("id", id)
+    .eq("business_id", businessId)
+    .maybeSingle();
+
+  const recTyped = rec as StoredRecommendation | null;
+
+  const expectedVal = recTyped?.expected_outcome?.expected_value ?? (parseInt((recTyped?.estimated_impact || "").replace(/[^0-9]/g, ""), 10) || 0);
+  const actualVal = expectedVal; // Full realization upon completion
+  const variance = actualVal - expectedVal;
+  const outcomeStatus = variance >= 0 ? "successful" : "below_expected";
+
+  const actualOutcomeObj: RecommendationActualOutcome = {
+    actual_value: actualVal,
+    variance: variance,
+    outcome_status: outcomeStatus,
+    recorded_at: now,
+  };
+
+  // 2. Update recommendation in Supabase
   const { error } = await supabase
     .from("ai_recommendations")
-    .update({ status: "completed", updated_at: new Date().toISOString() })
+    .update({
+      status: "completed",
+      updated_at: now,
+      completed_at: now,
+      actual_outcome: actualOutcomeObj,
+    } as any)
     .eq("id", id)
     .eq("business_id", businessId);
 
@@ -227,6 +300,19 @@ export async function completeRecommendation(id: string, businessId: string, tit
     return false;
   }
 
+  // 3. Record outcome event in `ai_recommendation_outcomes`
+  try {
+    await supabase.from("ai_recommendation_outcomes").insert({
+      recommendation_id: id,
+      business_id: businessId,
+      action_taken: "completed",
+      result_metrics: { expected_value: expectedVal, actual_value: actualVal, variance, outcome_status: outcomeStatus },
+    });
+  } catch (err) {
+    console.warn("Non-blocking recommendation outcome record notice:", err);
+  }
+
+  // 4. Log activity
   await logActivity({
     business_id: businessId,
     entity_type: "recommendation",
