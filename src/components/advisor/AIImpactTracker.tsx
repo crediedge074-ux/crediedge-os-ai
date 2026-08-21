@@ -1,7 +1,18 @@
 import { useState, useEffect, useRef } from "react";
-import { TrendingUp, Clock, CircleCheck as CheckCircle2, ChevronDown, ChevronUp, Star, Target, Brain, Award, MessageSquare, Globe, PoundSterling, ChartBar as BarChart3, ArrowUp, Sparkles, Calendar, Users, FileText, ShoppingBag, Trophy } from "lucide-react";
+import { TrendingUp, Clock, CircleCheck as CheckCircle2, ChevronDown, ChevronUp, Star, Target, Brain, Award, MessageSquare, Globe, PoundSterling, ChartBar as BarChart3, Sparkles, Calendar, Users, FileText, ShoppingBag, Trophy } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { getHistoricalRecommendations, type StoredRecommendation } from "@/services/advisor";
+import {
+  getHistoricalRecommendations,
+  fetchBusinessAreaMetrics,
+  fetchMonthlyImpactMetrics,
+  fetchAIPerformanceSummary,
+  fetchWorkspaceAnalysedCounts,
+  type StoredRecommendation,
+  type AreaPerformanceMetric,
+  type MonthlyImpactReport,
+  type AIPerformanceSummaryMetrics,
+  type WorkspaceAnalysedCounts,
+} from "@/services/advisor";
 import { useAuthContext } from "@/contexts/AuthContext";
 
 type RecoStatus = "successful" | "below_expected" | "pending";
@@ -12,76 +23,7 @@ interface Achievement {
   title: string;
   description: string;
   earned: boolean;
-  earnedDate?: string;
 }
-
-const achievements: Achievement[] = [
-  {
-    id: "a1",
-    icon: CheckCircle2,
-    title: "First Recommendation Completed",
-    description: "You completed your very first AI recommendation.",
-    earned: true,
-    earnedDate: "15 Jun",
-  },
-  {
-    id: "a2",
-    icon: Target,
-    title: "10 Recommendations Completed",
-    description: "You've completed 10 AI recommendations.",
-    earned: true,
-    earnedDate: "28 Jun",
-  },
-  {
-    id: "a3",
-    icon: Trophy,
-    title: "£10,000 Revenue Generated",
-    description: "AI recommendations have generated over £10,000 in revenue.",
-    earned: true,
-    earnedDate: "2 Jul",
-  },
-  {
-    id: "a4",
-    icon: Clock,
-    title: "50 Hours Saved",
-    description: "AI has saved your business over 50 hours.",
-    earned: true,
-    earnedDate: "4 Jul",
-  },
-  {
-    id: "a5",
-    icon: TrendingUp,
-    title: "Score +10 Improvement",
-    description: "CrediEdge Score™ improved by 10 points.",
-    earned: true,
-    earnedDate: "5 Jul",
-  },
-  {
-    id: "a6",
-    icon: Award,
-    title: "100 Recommendations Completed",
-    description: "Complete 100 AI recommendations to unlock.",
-    earned: false,
-  },
-];
-
-const dataPoints = [
-  { icon: MessageSquare, label: "Enquiries analysed", value: 482 },
-  { icon: ShoppingBag, label: "Bookings analysed", value: 311 },
-  { icon: Star, label: "Reviews analysed", value: 128 },
-  { icon: FileText, label: "Invoices processed", value: 43 },
-];
-
-const confidenceSources = [
-  { label: "Bookings", pct: 95 },
-  { label: "Customers", pct: 88 },
-  { label: "Revenue", pct: 91 },
-  { label: "Reviews", pct: 84 },
-  { label: "Website", pct: 76 },
-  { label: "Communications", pct: 97 },
-  { label: "Tasks", pct: 89 },
-  { label: "Goals", pct: 72 },
-];
 
 function AnimatedNumber({
   target,
@@ -169,15 +111,15 @@ function RealRecommendationCard({ reco }: { reco: StoredRecommendation }) {
 
   const isCompleted = reco.status === "completed";
   const outcomeStatus: RecoStatus = isCompleted
-    ? reco.actual_outcome?.outcome_status ?? "successful"
+    ? reco.actual_outcome?.outcome_status ?? "pending"
     : "pending";
 
   const cfg = statusConfig[outcomeStatus] ?? statusConfig.pending;
   const Icon = getCategoryIcon(reco.category);
 
   const expectedVal = reco.expected_outcome?.expected_value ?? 0;
-  const actualVal = reco.actual_outcome?.actual_value ?? expectedVal;
-  const confidence = reco.confidence_score ?? 85;
+  const actualVal = reco.actual_outcome?.actual_value ?? null;
+  const confidence = reco.confidence_score;
 
   const dateCreatedStr = new Date(reco.created_at).toLocaleDateString("en-GB", {
     day: "numeric",
@@ -225,20 +167,22 @@ function RealRecommendationCard({ reco }: { reco: StoredRecommendation }) {
 
           <div className="mt-3 grid grid-cols-3 gap-3">
             <div className="rounded-xl bg-secondary/60 px-3 py-2.5">
-              <div className="text-[10px] font-medium text-muted-foreground">Estimated Impact</div>
+              <div className="text-[10px] font-medium text-muted-foreground">Expected Impact</div>
               <div className="mt-0.5 text-[14px] font-bold text-foreground">
                 {reco.estimated_impact || (expectedVal > 0 ? `+£${expectedVal.toLocaleString()}` : "N/A")}
               </div>
             </div>
             <div className="rounded-xl bg-secondary/60 px-3 py-2.5">
-              <div className="text-[10px] font-medium text-muted-foreground">Actual Result</div>
-              <div className={`mt-0.5 text-[14px] font-bold ${isCompleted && outcomeStatus === "successful" ? "text-emerald-600" : "text-foreground"}`}>
-                {isCompleted ? `£${actualVal.toLocaleString()}` : "No outcome"}
+              <div className="text-[10px] font-medium text-muted-foreground">Actual Measured Result</div>
+              <div className={`mt-0.5 text-[14px] font-bold ${isCompleted && actualVal !== null ? "text-emerald-600" : "text-muted-foreground"}`}>
+                {isCompleted ? (actualVal !== null ? `£${actualVal.toLocaleString()}` : "Pending measurement") : "No outcome"}
               </div>
             </div>
             <div className="rounded-xl bg-secondary/60 px-3 py-2.5">
               <div className="text-[10px] font-medium text-muted-foreground">AI Confidence</div>
-              <div className="mt-0.5 text-[14px] font-bold text-foreground">{confidence}%</div>
+              <div className="mt-0.5 text-[14px] font-bold text-foreground">
+                {confidence !== null && confidence !== undefined ? `${confidence}%` : "Pending"}
+              </div>
             </div>
           </div>
         </div>
@@ -276,17 +220,19 @@ function RealRecommendationCard({ reco }: { reco: StoredRecommendation }) {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="rounded-xl border border-border bg-card p-4">
-              <div className="mb-2 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Expected Outcome</div>
-              <div className="text-[11.5px] text-muted-foreground">Target Recovery</div>
-              <div className="mt-1 text-[20px] font-bold text-foreground">£{expectedVal.toLocaleString()}</div>
+              <div className="mb-2 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Expected Target</div>
+              <div className="text-[11.5px] text-muted-foreground">Estimated Value</div>
+              <div className="mt-1 text-[20px] font-bold text-foreground">
+                {expectedVal > 0 ? `£${expectedVal.toLocaleString()}` : "N/A"}
+              </div>
             </div>
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
-              <div className="mb-2 text-[10.5px] font-semibold uppercase tracking-wider text-emerald-600">Actual Outcome</div>
-              <div className="text-[11.5px] text-emerald-700/70">
-                {isCompleted ? (outcomeStatus === "successful" ? "Successful" : `£${(expectedVal - actualVal).toLocaleString()} below expected`) : "Dismissed"}
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="mb-2 text-[10.5px] font-semibold uppercase tracking-wider text-emerald-600">Actual Measured Outcome</div>
+              <div className="text-[11.5px] text-muted-foreground">
+                {isCompleted ? (actualVal !== null ? (outcomeStatus === "successful" ? "Successful" : "Below expected") : "Pending real measurement") : "Dismissed"}
               </div>
               <div className="mt-1 text-[20px] font-bold text-emerald-700">
-                {isCompleted ? `£${actualVal.toLocaleString()}` : "N/A"}
+                {isCompleted ? (actualVal !== null ? `£${actualVal.toLocaleString()}` : "Pending") : "N/A"}
               </div>
             </div>
           </div>
@@ -368,13 +314,33 @@ function HistoricalRecommendationsSection() {
 // ─── Supporting Advisor Widgets ───────────────────────────────────────────────
 
 function AIPerformanceSummary() {
-  const stats = [
-    { label: "Recommendations Completed", value: 84, suffix: "", icon: CheckCircle2, color: "text-emerald-600", bg: "bg-emerald-50" },
-    { label: "AI Accuracy", value: 93, suffix: "%", icon: Target, color: "text-brand", bg: "bg-brand/10" },
-    { label: "Revenue Generated", value: 18450, prefix: "£", icon: PoundSterling, color: "text-emerald-600", bg: "bg-emerald-50" },
-    { label: "Hours Saved", value: 74, suffix: " hrs", icon: Clock, color: "text-blue-600", bg: "bg-blue-50" },
-    { label: "Score Improvement", value: 11, prefix: "+", icon: TrendingUp, color: "text-brand", bg: "bg-brand/10" },
-  ];
+  const { membership } = useAuthContext();
+  const businessId = membership?.business_id;
+
+  const [summary, setSummary] = useState<AIPerformanceSummaryMetrics | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    if (businessId) {
+      fetchAIPerformanceSummary(businessId).then((data) => {
+        if (mounted) {
+          setSummary(data);
+          setLoading(false);
+        }
+      });
+    } else {
+      setLoading(false);
+    }
+    return () => {
+      mounted = false;
+    };
+  }, [businessId]);
+
+  const completedCount = summary?.completedCount ?? 0;
+  const accuracyPct = summary?.accuracyPct;
+  const measuredRevenue = summary?.measuredRevenue;
+  const measuredHoursSaved = summary?.measuredHoursSaved;
 
   return (
     <div className="rounded-2xl border border-border bg-card p-6 shadow-card">
@@ -384,67 +350,184 @@ function AIPerformanceSummary() {
         </div>
         <div>
           <div className="text-[15px] font-bold tracking-tight text-foreground">AI Performance</div>
-          <div className="text-[11.5px] text-muted-foreground">Cumulative impact since you started using CrediEdgeOS</div>
+          <div className="text-[11.5px] text-muted-foreground">Cumulative measured impact from completed recommendations</div>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        {stats.map((s) => {
-          const Icon = s.icon;
-          return (
-            <div key={s.label} className="flex flex-col rounded-2xl border border-border bg-secondary/40 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
-              <div className={`grid h-8 w-8 place-items-center rounded-xl ${s.bg} ${s.color} mb-3`}>
-                <Icon className="h-[15px] w-[15px]" strokeWidth={2} />
-              </div>
-              <div className={`text-[22px] font-extrabold leading-none tracking-tight ${s.color}`}>
-                <AnimatedNumber target={s.value} prefix={s.prefix ?? ""} suffix={s.suffix ?? ""} />
-              </div>
-              <div className="mt-1.5 text-[10.5px] leading-tight text-muted-foreground">{s.label}</div>
-            </div>
-          );
-        })}
+        {/* Stat 1: Completed */}
+        <div className="flex flex-col rounded-2xl border border-border bg-secondary/40 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
+          <div className="grid h-8 w-8 place-items-center rounded-xl bg-emerald-50 text-emerald-600 mb-3">
+            <CheckCircle2 className="h-[15px] w-[15px]" strokeWidth={2} />
+          </div>
+          <div className="text-[22px] font-extrabold leading-none tracking-tight text-emerald-600">
+            {loading ? "..." : <AnimatedNumber target={completedCount} />}
+          </div>
+          <div className="mt-1.5 text-[10.5px] leading-tight text-muted-foreground">Recommendations Completed</div>
+        </div>
+
+        {/* Stat 2: Accuracy */}
+        <div className="flex flex-col rounded-2xl border border-border bg-secondary/40 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
+          <div className="grid h-8 w-8 place-items-center rounded-xl bg-brand/10 text-brand mb-3">
+            <Target className="h-[15px] w-[15px]" strokeWidth={2} />
+          </div>
+          <div className="text-[22px] font-extrabold leading-none tracking-tight text-brand">
+            {loading ? "..." : accuracyPct !== null && accuracyPct !== undefined ? `${accuracyPct}%` : "Pending"}
+          </div>
+          <div className="mt-1.5 text-[10.5px] leading-tight text-muted-foreground">
+            {accuracyPct !== null && accuracyPct !== undefined ? "Average AI Confidence" : "Confidence Pending"}
+          </div>
+        </div>
+
+        {/* Stat 3: Measured Revenue */}
+        <div className="flex flex-col rounded-2xl border border-border bg-secondary/40 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
+          <div className="grid h-8 w-8 place-items-center rounded-xl bg-emerald-50 text-emerald-600 mb-3">
+            <PoundSterling className="h-[15px] w-[15px]" strokeWidth={2} />
+          </div>
+          <div className="text-[22px] font-extrabold leading-none tracking-tight text-emerald-600">
+            {loading ? "..." : measuredRevenue !== null && measuredRevenue !== undefined ? <AnimatedNumber target={measuredRevenue} prefix="£" /> : "£0"}
+          </div>
+          <div className="mt-1.5 text-[10.5px] leading-tight text-muted-foreground">
+            {measuredRevenue !== null && measuredRevenue !== undefined ? "Measured Revenue Generated" : "No Measured Revenue Yet"}
+          </div>
+        </div>
+
+        {/* Stat 4: Hours Saved */}
+        <div className="flex flex-col rounded-2xl border border-border bg-secondary/40 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
+          <div className="grid h-8 w-8 place-items-center rounded-xl bg-blue-50 text-blue-600 mb-3">
+            <Clock className="h-[15px] w-[15px]" strokeWidth={2} />
+          </div>
+          <div className="text-[22px] font-extrabold leading-none tracking-tight text-blue-600">
+            {loading ? "..." : measuredHoursSaved !== null && measuredHoursSaved !== undefined ? `${measuredHoursSaved} hrs` : "0 hrs"}
+          </div>
+          <div className="mt-1.5 text-[10.5px] leading-tight text-muted-foreground">
+            {measuredHoursSaved !== null && measuredHoursSaved !== undefined ? "Measured Hours Saved" : "No Measured Time Saved Yet"}
+          </div>
+        </div>
+
+        {/* Stat 5: Score Improvement */}
+        <div className="flex flex-col rounded-2xl border border-border bg-secondary/40 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
+          <div className="grid h-8 w-8 place-items-center rounded-xl bg-brand/10 text-brand mb-3">
+            <TrendingUp className="h-[15px] w-[15px]" strokeWidth={2} />
+          </div>
+          <div className="text-[22px] font-extrabold leading-none tracking-tight text-foreground">
+            {loading ? "..." : "Pending"}
+          </div>
+          <div className="mt-1.5 text-[10.5px] leading-tight text-muted-foreground">Score Attribution Pending</div>
+        </div>
       </div>
     </div>
   );
 }
 
 function MonthlyImpact() {
-  const items = [
-    { label: "AI recommendations completed", value: "27", icon: CheckCircle2, color: "text-emerald-600" },
-    { label: "Additional revenue generated", value: "£12,420", icon: PoundSterling, color: "text-emerald-600" },
-    { label: "Response times improved by", value: "31%", icon: Clock, color: "text-blue-600" },
-    { label: "Review score increased by", value: "+0.3 ★", icon: Star, color: "text-brand" },
-    { label: "CrediEdge Score™ improved", value: "+9", icon: TrendingUp, color: "text-brand" },
-  ];
+  const { membership } = useAuthContext();
+  const businessId = membership?.business_id;
+
+  const [monthly, setMonthly] = useState<MonthlyImpactReport | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    if (businessId) {
+      fetchMonthlyImpactMetrics(businessId).then((data) => {
+        if (mounted) {
+          setMonthly(data);
+          setLoading(false);
+        }
+      });
+    } else {
+      setLoading(false);
+    }
+    return () => {
+      mounted = false;
+    };
+  }, [businessId]);
 
   return (
     <div className="rounded-2xl border border-border bg-foreground p-6 text-background shadow-card">
       <div className="mb-4">
         <div className="flex items-center gap-2">
           <Calendar className="h-4 w-4 text-background/60" strokeWidth={1.75} />
-          <span className="text-[11px] font-semibold uppercase tracking-widest text-background/50">This Month</span>
+          <span className="text-[11px] font-semibold uppercase tracking-widest text-background/50">This Calendar Month</span>
         </div>
         <div className="mt-2 text-[18px] font-bold leading-tight text-background">Monthly AI Impact Report</div>
-        <div className="mt-1 text-[12.5px] text-background/60">July 2026</div>
+        <div className="mt-1 text-[12.5px] text-background/60">{monthly?.monthLabel ?? "Current Month"}</div>
       </div>
 
       <div className="space-y-3">
-        {items.map((item) => {
-          const Icon = item.icon;
-          return (
-            <div key={item.label} className="flex items-center gap-3 rounded-xl bg-white/8 px-4 py-3">
-              <Icon className="h-4 w-4 shrink-0 text-background/50" strokeWidth={1.75} />
-              <div className="min-w-0 flex-1 text-[12.5px] text-background/70">{item.label}</div>
-              <div className="shrink-0 text-[15px] font-bold text-background">{item.value}</div>
-            </div>
-          );
-        })}
+        {/* Completed count */}
+        <div className="flex items-center gap-3 rounded-xl bg-white/8 px-4 py-3">
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-background/50" strokeWidth={1.75} />
+          <div className="min-w-0 flex-1 text-[12.5px] text-background/70">AI recommendations completed</div>
+          <div className="shrink-0 text-[15px] font-bold text-background">{loading ? "..." : monthly?.completedCount ?? 0}</div>
+        </div>
+
+        {/* Measured revenue */}
+        <div className="flex items-center gap-3 rounded-xl bg-white/8 px-4 py-3">
+          <PoundSterling className="h-4 w-4 shrink-0 text-background/50" strokeWidth={1.75} />
+          <div className="min-w-0 flex-1 text-[12.5px] text-background/70">Additional revenue generated</div>
+          <div className="shrink-0 text-[15px] font-bold text-background">
+            {loading ? "..." : monthly?.measuredRevenue !== null && monthly?.measuredRevenue !== undefined ? `£${monthly.measuredRevenue.toLocaleString()} (Measured)` : monthly?.expectedRevenue ? `£${monthly.expectedRevenue.toLocaleString()} (Expected)` : "No revenue yet"}
+          </div>
+        </div>
+
+        {/* Response times */}
+        <div className="flex items-center gap-3 rounded-xl bg-white/8 px-4 py-3">
+          <Clock className="h-4 w-4 shrink-0 text-background/50" strokeWidth={1.75} />
+          <div className="min-w-0 flex-1 text-[12.5px] text-background/70">Response times improved</div>
+          <div className="shrink-0 text-[12px] font-semibold text-background/60">Insufficient data to measure</div>
+        </div>
+
+        {/* Review score */}
+        <div className="flex items-center gap-3 rounded-xl bg-white/8 px-4 py-3">
+          <Star className="h-4 w-4 shrink-0 text-background/50" strokeWidth={1.75} />
+          <div className="min-w-0 flex-1 text-[12.5px] text-background/70">Review score change</div>
+          <div className="shrink-0 text-[12px] font-semibold text-background/60">Insufficient data to measure</div>
+        </div>
+
+        {/* Score improvement */}
+        <div className="flex items-center gap-3 rounded-xl bg-white/8 px-4 py-3">
+          <TrendingUp className="h-4 w-4 shrink-0 text-background/50" strokeWidth={1.75} />
+          <div className="min-w-0 flex-1 text-[12.5px] text-background/70">CrediEdge Score™ attribution</div>
+          <div className="shrink-0 text-[12px] font-semibold text-background/60">No historical baseline</div>
+        </div>
       </div>
     </div>
   );
 }
 
 function AILearningSystem() {
+  const { membership } = useAuthContext();
+  const businessId = membership?.business_id;
+
+  const [counts, setCounts] = useState<WorkspaceAnalysedCounts | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    if (businessId) {
+      fetchWorkspaceAnalysedCounts(businessId).then((data) => {
+        if (mounted) {
+          setCounts(data);
+          setLoading(false);
+        }
+      });
+    } else {
+      setLoading(false);
+    }
+    return () => {
+      mounted = false;
+    };
+  }, [businessId]);
+
+  const items = [
+    { icon: MessageSquare, label: "Enquiries analysed", value: counts?.enquiriesAnalysed ?? 0 },
+    { icon: ShoppingBag, label: "Bookings analysed", value: counts?.bookingsAnalysed ?? 0 },
+    { icon: Star, label: "Reviews analysed", value: counts?.reviewsAnalysed ?? 0 },
+    { icon: FileText, label: "Invoices processed", value: counts?.invoicesProcessed ?? 0 },
+  ];
+
   return (
     <div className="rounded-2xl border border-border bg-card p-6 shadow-card">
       <div className="mb-5 flex items-center gap-3">
@@ -453,12 +536,12 @@ function AILearningSystem() {
         </div>
         <div>
           <div className="text-[15px] font-bold tracking-tight text-foreground">AI Learning System</div>
-          <div className="text-[11.5px] text-muted-foreground">Your AI grows smarter with every piece of business data</div>
+          <div className="text-[11.5px] text-muted-foreground">Real-time workspace records backing your AI Executive Briefings</div>
         </div>
       </div>
 
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {dataPoints.map((d) => {
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {items.map((d) => {
           const Icon = d.icon;
           return (
             <div key={d.label} className="flex flex-col items-center rounded-2xl border border-border bg-secondary/50 py-4 px-3 text-center">
@@ -466,7 +549,7 @@ function AILearningSystem() {
                 <Icon className="h-[14px] w-[14px] text-foreground/60" strokeWidth={1.75} />
               </div>
               <div className="text-[20px] font-extrabold leading-none text-foreground">
-                <AnimatedNumber target={d.value} />
+                {loading ? "..." : <AnimatedNumber target={d.value} />}
               </div>
               <div className="mt-1 text-[10px] text-muted-foreground leading-tight">{d.label}</div>
             </div>
@@ -478,6 +561,72 @@ function AILearningSystem() {
 }
 
 function Achievements() {
+  const { membership } = useAuthContext();
+  const businessId = membership?.business_id;
+
+  const [summary, setSummary] = useState<AIPerformanceSummaryMetrics | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    if (businessId) {
+      fetchAIPerformanceSummary(businessId).then((data) => {
+        if (mounted) setSummary(data);
+      });
+    }
+    return () => {
+      mounted = false;
+    };
+  }, [businessId]);
+
+  const completed = summary?.completedCount ?? 0;
+  const revenue = summary?.measuredRevenue ?? 0;
+  const hours = summary?.measuredHoursSaved ?? 0;
+
+  const realAchievements: Achievement[] = [
+    {
+      id: "a1",
+      icon: CheckCircle2,
+      title: "First Recommendation Completed",
+      description: "You completed your very first AI recommendation.",
+      earned: completed >= 1,
+    },
+    {
+      id: "a2",
+      icon: Target,
+      title: "10 Recommendations Completed",
+      description: "Complete 10 AI recommendations across your business.",
+      earned: completed >= 10,
+    },
+    {
+      id: "a3",
+      icon: Trophy,
+      title: "£10,000 Revenue Generated",
+      description: "AI recommendations generated over £10,000 in measured revenue.",
+      earned: revenue >= 10000,
+    },
+    {
+      id: "a4",
+      icon: Clock,
+      title: "50 Hours Saved",
+      description: "AI saved your business over 50 hours of work.",
+      earned: hours >= 50,
+    },
+    {
+      id: "a5",
+      icon: TrendingUp,
+      title: "Score +10 Improvement",
+      description: "CrediEdge Score™ improved by 10 points through actions.",
+      earned: false,
+    },
+    {
+      id: "a6",
+      icon: Award,
+      title: "100 Recommendations Completed",
+      description: "Complete 100 AI recommendations to unlock master level.",
+      earned: completed >= 100,
+    },
+  ];
+
   return (
     <div className="rounded-2xl border border-border bg-card p-6 shadow-card">
       <div className="mb-4 flex items-center gap-2">
@@ -486,7 +635,7 @@ function Achievements() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {achievements.map((a) => {
+        {realAchievements.map((a) => {
           const Icon = a.icon;
           return (
             <div
@@ -511,26 +660,70 @@ function Achievements() {
 }
 
 function AIPersonalisation() {
+  const { membership } = useAuthContext();
+  const businessId = membership?.business_id;
+
+  const [metrics, setMetrics] = useState<AreaPerformanceMetric[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    if (businessId) {
+      fetchBusinessAreaMetrics(businessId).then((data) => {
+        if (mounted) {
+          setMetrics(data);
+          setLoading(false);
+        }
+      });
+    } else {
+      setLoading(false);
+    }
+    return () => {
+      mounted = false;
+    };
+  }, [businessId]);
+
   return (
     <div className="rounded-2xl border border-border bg-card p-6 shadow-card">
       <div className="mb-1 flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-brand" strokeWidth={2} />
-        <span className="text-[13px] font-semibold text-muted-foreground">AI Personalisation</span>
+        <span className="text-[13px] font-semibold text-muted-foreground">AI Performance by Area</span>
       </div>
       <div className="mb-5 text-[15px] font-bold tracking-tight text-foreground">
-        Your AI is becoming smarter every day.
+        Workspace data coverage across 8 key business areas
       </div>
 
-      <div className="space-y-2">
-        {confidenceSources.map((s) => (
-          <div key={s.label} className="flex items-center gap-3">
-            <div className="w-24 shrink-0 text-[11.5px] font-medium text-foreground/70">{s.label}</div>
-            <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
-              <div className="absolute inset-y-0 left-0 rounded-full bg-brand transition-all duration-700 ease-out" style={{ width: `${s.pct}%` }} />
+      <div className="space-y-3">
+        {loading ? (
+          <div className="py-4 text-center text-xs text-muted-foreground">Checking area coverage...</div>
+        ) : (
+          metrics.map((s) => (
+            <div key={s.area} className="flex items-center gap-3">
+              <div className="w-28 shrink-0 text-[11.5px] font-medium text-foreground">{s.area}</div>
+
+              <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-secondary">
+                {s.dataAvailable && s.accuracyPct !== null ? (
+                  <div
+                    className="absolute inset-y-0 left-0 rounded-full bg-brand transition-all duration-700 ease-out"
+                    style={{ width: `${Math.max(10, Math.min(100, s.accuracyPct))}%` }}
+                  />
+                ) : null}
+              </div>
+
+              <div className="w-36 shrink-0 text-right text-[11px]">
+                {s.dataAvailable ? (
+                  s.accuracyPct !== null ? (
+                    <span className="font-bold text-emerald-600">{s.accuracyPct}% accuracy ({s.analysedCount} records)</span>
+                  ) : (
+                    <span className="font-medium text-muted-foreground">No measurable impact ({s.analysedCount} records)</span>
+                  )
+                ) : (
+                  <span className="font-normal text-muted-foreground/60">Insufficient data</span>
+                )}
+              </div>
             </div>
-            <div className="w-8 shrink-0 text-right text-[11px] font-semibold text-foreground">{s.pct}%</div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );
@@ -548,7 +741,7 @@ export function AIImpactTracker() {
         <div>
           <h2 className="text-[18px] font-bold tracking-tight text-foreground">AI Impact Tracker</h2>
           <p className="text-[12.5px] text-muted-foreground">
-            See how previous AI recommendations have improved your business.
+            Measured accuracy and performance metrics backed strictly by workspace data.
           </p>
         </div>
       </div>
