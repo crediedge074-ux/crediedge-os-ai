@@ -12,6 +12,7 @@ import {
   type MonthlyImpactReport,
   type AIPerformanceSummaryMetrics,
   type WorkspaceAnalysedCounts,
+  MIN_ACCURACY_SAMPLE_SIZE,
 } from "@/services/advisor";
 import { useAuthContext } from "@/contexts/AuthContext";
 
@@ -341,6 +342,7 @@ function AIPerformanceSummary() {
   const accuracyPct = summary?.accuracyPct;
   const measuredRevenue = summary?.measuredRevenue;
   const measuredHoursSaved = summary?.measuredHoursSaved;
+  const hasMinSample = summary?.hasMinimumSampleSize;
 
   return (
     <div className="rounded-2xl border border-border bg-card p-6 shadow-card">
@@ -349,8 +351,8 @@ function AIPerformanceSummary() {
           <Brain className="h-[18px] w-[18px] text-brand" strokeWidth={2} />
         </div>
         <div>
-          <div className="text-[15px] font-bold tracking-tight text-foreground">AI Performance</div>
-          <div className="text-[11.5px] text-muted-foreground">Cumulative measured impact from completed recommendations</div>
+          <div className="text-[15px] font-bold tracking-tight text-foreground">AI Performance Summary</div>
+          <div className="text-[11.5px] text-muted-foreground">Transparent, measured cumulative impact from workspace recommendation data</div>
         </div>
       </div>
 
@@ -375,7 +377,7 @@ function AIPerformanceSummary() {
             {loading ? "..." : accuracyPct !== null && accuracyPct !== undefined ? `${accuracyPct}%` : "Pending"}
           </div>
           <div className="mt-1.5 text-[10.5px] leading-tight text-muted-foreground">
-            {accuracyPct !== null && accuracyPct !== undefined ? "Average AI Confidence" : "Confidence Pending"}
+            {hasMinSample ? "Average AI Confidence" : `Sample size too small (<${MIN_ACCURACY_SAMPLE_SIZE})`}
           </div>
         </div>
 
@@ -413,7 +415,7 @@ function AIPerformanceSummary() {
           <div className="text-[22px] font-extrabold leading-none tracking-tight text-foreground">
             {loading ? "..." : "Pending"}
           </div>
-          <div className="mt-1.5 text-[10.5px] leading-tight text-muted-foreground">Score Attribution Pending</div>
+          <div className="mt-1.5 text-[10.5px] leading-tight text-muted-foreground">No Historical Baseline</div>
         </div>
       </div>
     </div>
@@ -715,7 +717,7 @@ function AIPersonalisation() {
                   s.accuracyPct !== null ? (
                     <span className="font-bold text-emerald-600">{s.accuracyPct}% accuracy ({s.analysedCount} records)</span>
                   ) : (
-                    <span className="font-medium text-muted-foreground">No measurable impact ({s.analysedCount} records)</span>
+                    <span className="font-medium text-muted-foreground">{s.statusLabel} ({s.analysedCount} records)</span>
                   )
                 ) : (
                   <span className="font-normal text-muted-foreground/60">Insufficient data</span>

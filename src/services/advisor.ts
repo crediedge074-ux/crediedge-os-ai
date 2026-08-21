@@ -88,6 +88,7 @@ export interface AIPerformanceSummaryMetrics {
   measuredHoursSaved: number | null;
   expectedHoursSaved: number | null;
   scoreImprovement: number | null;
+  hasMinimumSampleSize: boolean;
 }
 
 export interface WorkspaceAnalysedCounts {
@@ -97,6 +98,9 @@ export interface WorkspaceAnalysedCounts {
   invoicesProcessed: number;
   totalDataPoints: number;
 }
+
+// Sensible sample size requirement to prevent misleading performance percentages from tiny datasets
+export const MIN_ACCURACY_SAMPLE_SIZE = 3;
 
 export async function generateAIExecutiveBriefing(
   businessId: string | undefined,
@@ -469,8 +473,8 @@ export async function fetchBusinessAreaMetrics(businessId: string | undefined): 
 
       if (!dataAvailable) {
         statusLabel = "Insufficient data";
-      } else if (areaRecsWithMeasuredOutcomes.length === 0) {
-        statusLabel = "No measurable impact yet";
+      } else if (areaRecsWithMeasuredOutcomes.length < MIN_ACCURACY_SAMPLE_SIZE) {
+        statusLabel = areaRecsWithMeasuredOutcomes.length > 0 ? "Sample size too small (<3)" : "No measurable impact yet";
       } else {
         const totalAccuracy = areaRecsWithMeasuredOutcomes.reduce((acc, r) => {
           const expected = r.expected_outcome?.expected_value ?? 0;
@@ -598,6 +602,7 @@ export async function fetchAIPerformanceSummary(businessId: string | undefined):
       measuredHoursSaved: null,
       expectedHoursSaved: null,
       scoreImprovement: null,
+      hasMinimumSampleSize: false,
     };
   }
 
@@ -619,6 +624,7 @@ export async function fetchAIPerformanceSummary(businessId: string | undefined):
         measuredHoursSaved: null,
         expectedHoursSaved: null,
         scoreImprovement: null,
+        hasMinimumSampleSize: false,
       };
     }
 
@@ -654,7 +660,8 @@ export async function fetchAIPerformanceSummary(businessId: string | undefined):
       }
     });
 
-    const accuracyPct = confidenceCount > 0 ? Math.round(totalConfidenceSum / confidenceCount) : null;
+    const hasMinimumSampleSize = confidenceCount >= MIN_ACCURACY_SAMPLE_SIZE;
+    const accuracyPct = hasMinimumSampleSize ? Math.round(totalConfidenceSum / confidenceCount) : null;
 
     return {
       completedCount: recs.length,
@@ -664,6 +671,7 @@ export async function fetchAIPerformanceSummary(businessId: string | undefined):
       measuredHoursSaved: timeMeasuredCount > 0 ? Math.round((measuredMinutesSavedSum / 60) * 10) / 10 : null,
       expectedHoursSaved: null,
       scoreImprovement: null, // Defensible null unless historical score before/after logged
+      hasMinimumSampleSize,
     };
   } catch (err) {
     console.error("[fetchAIPerformanceSummary] error:", err);
@@ -675,6 +683,7 @@ export async function fetchAIPerformanceSummary(businessId: string | undefined):
       measuredHoursSaved: null,
       expectedHoursSaved: null,
       scoreImprovement: null,
+      hasMinimumSampleSize: false,
     };
   }
 }
