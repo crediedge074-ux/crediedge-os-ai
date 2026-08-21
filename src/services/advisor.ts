@@ -99,6 +99,31 @@ export interface WorkspaceAnalysedCounts {
   totalDataPoints: number;
 }
 
+export interface LearningSourceVolume {
+  sourceName: string;
+  recordCount: number;
+  recommendationCount: number;
+  isAvailable: boolean;
+}
+
+export interface RecurringPattern {
+  id: string;
+  category: string;
+  occurrenceCount: number;
+  description: string;
+  suggestedFocus: string;
+}
+
+export interface AILearningSystemReport {
+  totalDataPoints: number;
+  completedRecommendationsCount: number;
+  learningActive: boolean;
+  learningStatusMessage: string;
+  sourcesVolume: LearningSourceVolume[];
+  recurringPatterns: RecurringPattern[];
+  historicalFeedbackCount: number;
+}
+
 // Sensible sample size requirement to prevent misleading performance percentages from tiny datasets
 export const MIN_ACCURACY_SAMPLE_SIZE = 3;
 
@@ -155,8 +180,25 @@ export async function generateAIExecutiveBriefing(
       return acc + mins;
     }, 0);
 
+    // Contextual feedback from historical outcomes for this business_id
+    const { data: rawHistoricalCompleted } = await supabase
+      .from("ai_recommendations")
+      .select("*")
+      .eq("business_id", businessId)
+      .eq("status", "completed");
+
+    const historicalCompleted = (rawHistoricalCompleted || []) as StoredRecommendation[];
+
+    let historicalBonus = 0;
+    if (historicalCompleted.length >= MIN_ACCURACY_SAMPLE_SIZE) {
+      const successfulCount = historicalCompleted.filter(
+        (r) => r.actual_outcome?.outcome_status === "successful"
+      ).length;
+      historicalBonus = Math.min(10, successfulCount * 2);
+    }
+
     // Grounded confidence score derived from workspace health & score completeness
-    const confidenceScore = scoreData.hasSufficientData ? Math.min(98, Math.max(70, scoreData.overallScore + 10)) : null;
+    const confidenceScore = scoreData.hasSufficientData ? Math.min(98, Math.max(70, scoreData.overallScore + 10 + historicalBonus)) : null;
 
     let summaryParagraph = "";
     if (actionCount > 0) {
@@ -729,6 +771,128 @@ export async function fetchWorkspaceAnalysedCounts(businessId: string | undefine
       reviewsAnalysed: 0,
       invoicesProcessed: 0,
       totalDataPoints: 0,
+    };
+  }
+}
+
+export async function fetchAILearningSystemData(businessId: string | undefined): Promise<AILearningSystemReport> {
+  if (!businessId) {
+    return {
+      totalDataPoints: 0,
+      completedRecommendationsCount: 0,
+      learningActive: false,
+      learningStatusMessage: "Learning inactive — no active business workspace connected.",
+      sourcesVolume: [],
+      recurringPatterns: [],
+      historicalFeedbackCount: 0,
+    };
+  }
+
+  try {
+    const [
+      analysedCounts,
+      allRecsRes,
+      outcomesRes,
+      tasksRes,
+      goalsRes,
+      customersRes,
+    ] = await Promise.all([
+      fetchWorkspaceAnalysedCounts(businessId),
+      supabase.from("ai_recommendations").select("*").eq("business_id", businessId),
+      supabase.from("ai_recommendation_outcomes").select("*").eq("business_id", businessId),
+      supabase.from("tasks").select("id", { count: "exact", head: true }).eq("business_id", businessId),
+      supabase.from("goals").select("id", { count: "exact", head: true }).eq("business_id", businessId),
+      supabase.from("customers").select("id", { count: "exact", head: true }).eq("business_id", businessId),
+    ]);
+
+    const allRecs = (allRecsRes.data || []) as StoredRecommendation[];
+    const outcomes = outcomesRes.data || [];
+    const completedRecs = allRecs.filter((r) => r.status === "completed");
+
+    // Volume breakdown by data source
+    const getSourceRecCount = (categoryKeys: string[]) =>
+      allRecs.filter((r) => categoryKeys.some((cat) => r.category.toLowerCase().includes(cat.toLowerCase()))).length;
+
+    const sourcesVolume: LearningSourceVolume[] = [
+      {
+        sourceName: "Invoices & Revenue",
+        recordCount: analysedCounts.invoicesProcessed,
+        recommendationCount: getSourceRecCount(["invoice", "revenue", "payment"]),
+        isAvailable: analysedCounts.invoicesProcessed > 0,
+      },
+      {
+        sourceName: "Enquiries & Comms",
+        recordCount: analysedCounts.enquiriesAnalysed,
+        recommendationCount: getSourceRecCount(["communication", "enquiry"]),
+        isAvailable: analysedCounts.enquiriesAnalysed > 0,
+      },
+      {
+        sourceName: "Bookings & Jobs",
+        recordCount: analysedCounts.bookingsAnalysed,
+        recommendationCount: getSourceRecCount(["job", "booking", "calendar"]),
+        isAvailable: analysedCounts.bookingsAnalysed > 0,
+      },
+      {
+        sourceName: "Tasks & Operations",
+        recordCount: tasksRes.count || 0,
+        recommendationCount: getSourceRecCount(["task"]),
+        isAvailable: (tasksRes.count || 0) > 0,
+      },
+      {
+        sourceName: "Customer Relationships",
+        recordCount: customersRes.count || 0,
+        recommendationCount: getSourceRecCount(["customer", "relationship"]),
+        isAvailable: (customersRes.count || 0) > 0,
+      },
+      {
+        sourceName: "Goals & Growth",
+        recordCount: goalsRes.count || 0,
+        recommendationCount: getSourceRecCount(["goal"]),
+        isAvailable: (goalsRes.count || 0) > 0,
+      },
+    ];
+
+    // Identify recurring patterns from recommendation history for this business_id
+    const categoryCounts: Record<string, number> = {};
+    allRecs.forEach((r) => {
+      const cat = r.category || "General";
+      categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+    });
+
+    const recurringPatterns: RecurringPattern[] = Object.entries(categoryCounts)
+      .filter(([_, count]) => count >= 2)
+      .map(([cat, count], idx) => ({
+        id: `pattern-${idx}`,
+        category: cat,
+        occurrenceCount: count,
+        description: `Identified ${count} recurring recommendations in ${cat}. The AI contextual feedback loop prioritises resolving underlying bottleneck signals in this area.`,
+        suggestedFocus: `Focus on streamlining ${cat.toLowerCase()} workflow triggers.`,
+      }));
+
+    const learningActive = completedRecs.length >= MIN_ACCURACY_SAMPLE_SIZE;
+    const learningStatusMessage = learningActive
+      ? `AI Learning engine is active with ${completedRecs.length} verified recommendation outcome logs calibrating workspace confidence.`
+      : `AI Learning engine requires ${MIN_ACCURACY_SAMPLE_SIZE - completedRecs.length} more completed recommendation outcome(s) to calibrate workspace confidence.`;
+
+    return {
+      totalDataPoints: analysedCounts.totalDataPoints,
+      completedRecommendationsCount: completedRecs.length,
+      learningActive,
+      learningStatusMessage,
+      sourcesVolume,
+      recurringPatterns,
+      historicalFeedbackCount: outcomes.length,
+    };
+  } catch (err) {
+    console.error("[fetchAILearningSystemData] error:", err);
+    return {
+      totalDataPoints: 0,
+      completedRecommendationsCount: 0,
+      learningActive: false,
+      learningStatusMessage: "Unable to load AI Learning System metrics.",
+      sourcesVolume: [],
+      recurringPatterns: [],
+      historicalFeedbackCount: 0,
     };
   }
 }

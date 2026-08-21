@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { TrendingUp, Clock, CircleCheck as CheckCircle2, ChevronDown, ChevronUp, Star, Target, Brain, Award, MessageSquare, Globe, PoundSterling, ChartBar as BarChart3, Sparkles, Calendar, Users, FileText, ShoppingBag, Trophy } from "lucide-react";
+import { TrendingUp, Clock, CircleCheck as CheckCircle2, ChevronDown, ChevronUp, Star, Target, Brain, Award, MessageSquare, Globe, PoundSterling, ChartBar as BarChart3, Sparkles, Calendar, Users, FileText, ShoppingBag, Trophy, Layers, Activity } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   getHistoricalRecommendations,
@@ -7,11 +7,13 @@ import {
   fetchMonthlyImpactMetrics,
   fetchAIPerformanceSummary,
   fetchWorkspaceAnalysedCounts,
+  fetchAILearningSystemData,
   type StoredRecommendation,
   type AreaPerformanceMetric,
   type MonthlyImpactReport,
   type AIPerformanceSummaryMetrics,
   type WorkspaceAnalysedCounts,
+  type AILearningSystemReport,
   MIN_ACCURACY_SAMPLE_SIZE,
 } from "@/services/advisor";
 import { useAuthContext } from "@/contexts/AuthContext";
@@ -503,15 +505,15 @@ function AILearningSystem() {
   const { membership } = useAuthContext();
   const businessId = membership?.business_id;
 
-  const [counts, setCounts] = useState<WorkspaceAnalysedCounts | null>(null);
+  const [learningReport, setLearningReport] = useState<AILearningSystemReport | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
     if (businessId) {
-      fetchWorkspaceAnalysedCounts(businessId).then((data) => {
+      fetchAILearningSystemData(businessId).then((data) => {
         if (mounted) {
-          setCounts(data);
+          setLearningReport(data);
           setLoading(false);
         }
       });
@@ -523,40 +525,61 @@ function AILearningSystem() {
     };
   }, [businessId]);
 
-  const items = [
-    { icon: MessageSquare, label: "Enquiries analysed", value: counts?.enquiriesAnalysed ?? 0 },
-    { icon: ShoppingBag, label: "Bookings analysed", value: counts?.bookingsAnalysed ?? 0 },
-    { icon: Star, label: "Reviews analysed", value: counts?.reviewsAnalysed ?? 0 },
-    { icon: FileText, label: "Invoices processed", value: counts?.invoicesProcessed ?? 0 },
-  ];
-
   return (
     <div className="rounded-2xl border border-border bg-card p-6 shadow-card">
-      <div className="mb-5 flex items-center gap-3">
+      <div className="mb-4 flex items-center gap-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand/10">
           <Brain className="h-[18px] w-[18px] text-brand" strokeWidth={2} />
         </div>
         <div>
           <div className="text-[15px] font-bold tracking-tight text-foreground">AI Learning System</div>
-          <div className="text-[11.5px] text-muted-foreground">Real-time workspace records backing your AI Executive Briefings</div>
+          <div className="text-[11.5px] text-muted-foreground">
+            {learningReport?.learningStatusMessage ?? "Connecting workspace learning engine..."}
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {items.map((d) => {
-          const Icon = d.icon;
-          return (
-            <div key={d.label} className="flex flex-col items-center rounded-2xl border border-border bg-secondary/50 py-4 px-3 text-center">
-              <div className="grid h-8 w-8 place-items-center rounded-xl bg-card shadow-soft mb-2">
-                <Icon className="h-[14px] w-[14px] text-foreground/60" strokeWidth={1.75} />
+      {/* Data Source Volume Grid */}
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {loading ? (
+          <div className="col-span-full py-4 text-center text-xs text-muted-foreground">Loading workspace signals...</div>
+        ) : (
+          learningReport?.sourcesVolume.map((src) => (
+            <div key={src.sourceName} className="rounded-xl border border-border bg-secondary/30 p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-foreground">{src.sourceName}</span>
+                <span className={`h-2 w-2 rounded-full ${src.isAvailable ? "bg-emerald-500" : "bg-muted-foreground/30"}`} />
               </div>
-              <div className="text-[20px] font-extrabold leading-none text-foreground">
-                {loading ? "..." : <AnimatedNumber target={d.value} />}
+              <div className="mt-2 flex items-baseline justify-between">
+                <span className="text-[16px] font-bold text-foreground">{src.recordCount}</span>
+                <span className="text-[10px] text-muted-foreground">{src.recommendationCount} recs</span>
               </div>
-              <div className="mt-1 text-[10px] text-muted-foreground leading-tight">{d.label}</div>
             </div>
-          );
-        })}
+          ))
+        )}
+      </div>
+
+      {/* Detected Patterns Section */}
+      <div className="rounded-xl border border-border bg-secondary/20 p-4">
+        <div className="mb-2 flex items-center gap-2">
+          <Activity className="h-4 w-4 text-brand" strokeWidth={2} />
+          <span className="text-[12px] font-bold text-foreground">Detected Recurring Recommendation Patterns</span>
+        </div>
+
+        {learningReport?.recurringPatterns && learningReport.recurringPatterns.length > 0 ? (
+          <div className="space-y-2">
+            {learningReport.recurringPatterns.map((pat) => (
+              <div key={pat.id} className="rounded-lg bg-card p-3 border border-border text-[12px]">
+                <div className="font-semibold text-foreground">{pat.category} ({pat.occurrenceCount} occurrences)</div>
+                <div className="mt-1 text-muted-foreground">{pat.description}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-[11.5px] text-muted-foreground">
+            No recurring bottleneck patterns detected yet. As you use your workspace and resolve recommendations, recurring signals will automatically surface here.
+          </div>
+        )}
       </div>
     </div>
   );
