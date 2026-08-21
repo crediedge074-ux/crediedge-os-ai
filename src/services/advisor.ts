@@ -2,6 +2,7 @@ import { supabase } from "@/lib/supabase";
 import { fetchCrediEdgeScore } from "./score";
 import { fetchCalculatedPriorities, type DashboardPriorityItem } from "./priorities";
 import { fetchMorningBriefingMetrics } from "./briefing";
+import { logActivity } from "./activity";
 
 export interface AIExecutiveBriefingData {
   greetingName: string;
@@ -13,6 +14,24 @@ export interface AIExecutiveBriefingData {
   recommendations: DashboardPriorityItem[];
   hasSufficientData: boolean;
   lastAnalyzedTime?: string;
+}
+
+export interface StoredRecommendation {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  business_id: string;
+  customer_id: string | null;
+  job_id: string | null;
+  category: string;
+  title: string;
+  description: string;
+  action_type: string | null;
+  action_payload: any;
+  estimated_impact: string | null;
+  impact_score: number | null;
+  confidence_score: number | null;
+  status: "active" | "started" | "dismissed" | "completed";
 }
 
 export async function generateAIExecutiveBriefing(
@@ -78,22 +97,30 @@ export async function generateAIExecutiveBriefing(
       summaryParagraph = `Your business health index stands at ${scoreData.overallScore} (${scoreData.ratingLabel}). All tasks, invoices, and communications are fully up to date! Maintain this momentum by engaging active customers.`;
     }
 
-    // Persist top recommendation to `ai_recommendations` table if available in schema
-    if (priorities.length > 0) {
-      const topPrio = priorities[0];
+    // Persist active recommendations to `ai_recommendations` table if not already present
+    for (const prio of priorities) {
       try {
-        await supabase
+        const { data: existing } = await supabase
           .from("ai_recommendations")
-          .insert({
+          .select("id")
+          .eq("business_id", businessId)
+          .eq("title", prio.title)
+          .in("status", ["active", "started"])
+          .maybeSingle();
+
+        if (!existing) {
+          await supabase.from("ai_recommendations").insert({
             business_id: businessId,
-            category: topPrio.sourceType,
-            title: topPrio.title,
-            description: topPrio.reason,
-            action_type: topPrio.cta,
-            estimated_impact: topPrio.impact,
+            category: prio.sourceType,
+            title: prio.title,
+            description: prio.reason,
+            action_type: prio.cta,
+            action_payload: { to: prio.to, timeEstimate: prio.timeEstimate },
+            estimated_impact: prio.impact,
             confidence_score: confidenceScore,
             status: "active",
           });
+        }
       } catch (err) {
         console.warn("[generateAIExecutiveBriefing] Non-blocking AI recommendation persist notice:", err);
       }
@@ -123,4 +150,90 @@ export async function generateAIExecutiveBriefing(
       hasSufficientData: false,
     };
   }
+}
+
+// ─── RECOMMENDATIONS LIFECYCLE API ──────────────────────────────────────────
+
+export async function getActiveRecommendations(businessId: string): Promise<StoredRecommendation[]> {
+  const { data, error } = await supabase
+    .from("ai_recommendations")
+    .select("*")
+    .eq("business_id", businessId)
+    .in("status", ["active", "started"])
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching active recommendations:", error);
+    return [];
+  }
+  return (data || []).map((r) => ({ ...r, status: r.status as StoredRecommendation["status"] }));
+}
+
+export async function startRecommendation(id: string, businessId: string, title: string): Promise<boolean> {
+  const { error } = await supabase
+    .from("ai_recommendations")
+    .update({ status: "started", updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("business_id", businessId);
+
+  if (error) {
+    console.error("Error starting recommendation:", error);
+    return false;
+  }
+
+  await logActivity({
+    business_id: businessId,
+    entity_type: "recommendation",
+    entity_id: id,
+    action: "started",
+    description: `Started recommendation: ${title}`,
+  });
+
+  return true;
+}
+
+export async function dismissRecommendation(id: string, businessId: string, title: string): Promise<boolean> {
+  const { error } = await supabase
+    .from("ai_recommendations")
+    .update({ status: "dismissed", updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("business_id", businessId);
+
+  if (error) {
+    console.error("Error dismissing recommendation:", error);
+    return false;
+  }
+
+  await logActivity({
+    business_id: businessId,
+    entity_type: "recommendation",
+    entity_id: id,
+    action: "dismissed",
+    description: `Dismissed recommendation: ${title}`,
+  });
+
+  return true;
+}
+
+export async function completeRecommendation(id: string, businessId: string, title: string): Promise<boolean> {
+  const { error } = await supabase
+    .from("ai_recommendations")
+    .update({ status: "completed", updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("business_id", businessId);
+
+  if (error) {
+    console.error("Error completing recommendation:", error);
+    return false;
+  }
+
+  await logActivity({
+    business_id: businessId,
+    entity_type: "recommendation",
+    entity_id: id,
+    action: "completed",
+    description: `Completed recommendation: ${title}`,
+  });
+
+  return true;
 }
