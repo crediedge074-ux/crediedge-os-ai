@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Sparkles, Brain, RefreshCw, Loader2 } from "lucide-react";
+import { Sparkles, Brain, RefreshCw, Loader2, Info } from "lucide-react";
 import { AppLayout } from "@/components/ui/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { AIRecommendations } from "@/components/advisor/AIRecommendations";
@@ -15,12 +15,13 @@ export const Route = createFileRoute("/advisor")({
 function DailyBriefingBanner({
   data,
   loading,
-  onRefresh,
+  onRefreshData,
 }: {
   data: AIExecutiveBriefingData | null;
   loading: boolean;
-  onRefresh: () => void;
+  onRefreshData: () => void;
 }) {
+  const [showRefreshTooltip, setShowRefreshTooltip] = useState(false);
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
@@ -31,13 +32,18 @@ function DailyBriefingBanner({
 
       <div className="relative flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2.5 mb-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10">
               <Brain className="h-3.5 w-3.5 text-background/80" strokeWidth={2} />
             </div>
             <span className="text-[11px] font-semibold uppercase tracking-widest text-background/50">
               AI Executive Briefing
             </span>
+            {data?.lastAnalyzedTime && (
+              <span className="text-[11px] text-background/40">
+                · Last analysed: {data.lastAnalyzedTime}
+              </span>
+            )}
           </div>
 
           <h2 className="text-[17px] font-bold leading-snug text-background">
@@ -72,18 +78,31 @@ function DailyBriefingBanner({
           </p>
         </div>
 
-        <button
-          onClick={onRefresh}
-          disabled={loading}
-          className="flex shrink-0 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-[12.5px] font-semibold text-background transition-all duration-200 hover:bg-white/15 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {loading ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} />
+        {/* Refresh Data Action */}
+        <div className="relative" onMouseEnter={() => setShowRefreshTooltip(true)} onMouseLeave={() => setShowRefreshTooltip(false)}>
+          <button
+            onClick={onRefreshData}
+            disabled={loading}
+            className="flex shrink-0 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-[12.5px] font-semibold text-background transition-all duration-200 hover:bg-white/15 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} />
+            )}
+            {loading ? "Checking..." : "Refresh Data"}
+            <Info className="h-3 w-3 text-background/50 hover:text-background" />
+          </button>
+
+          {showRefreshTooltip && (
+            <div className="pointer-events-none absolute right-0 top-11 z-30 w-64 rounded-xl border border-border bg-card p-3 shadow-xl text-left">
+              <div className="text-[11px] font-bold text-foreground mb-1">Refresh Data</div>
+              <div className="text-[10.5px] leading-relaxed text-muted-foreground">
+                Checks your latest business activity for meaningful changes since your briefing was generated.
+              </div>
+            </div>
           )}
-          {loading ? "Analyzing..." : "Analyse Changes"}
-        </button>
+        </div>
       </div>
 
       {/* Confidence bar if supported */}
@@ -136,10 +155,10 @@ function AdvisorPage() {
         description="AI-powered recommendations, impact tracking, and strategic guidance — personalised to your business."
         crumbs={[{ label: "Business Advisor" }]}
         badge="AI"
-        action={{ label: "Analyse Changes", icon: Sparkles, onClick: loadBriefing }}
+        action={{ label: "Generate Briefing", icon: Sparkles, onClick: loadBriefing }}
       />
 
-      <DailyBriefingBanner data={briefingData} loading={loading} onRefresh={loadBriefing} />
+      <DailyBriefingBanner data={briefingData} loading={loading} onRefreshData={loadBriefing} />
 
       <AIRecommendations />
 

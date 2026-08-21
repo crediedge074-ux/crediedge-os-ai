@@ -12,6 +12,7 @@ export interface AIExecutiveBriefingData {
   summaryParagraph: string;
   recommendations: DashboardPriorityItem[];
   hasSufficientData: boolean;
+  lastAnalyzedTime?: string;
 }
 
 export async function generateAIExecutiveBriefing(
@@ -19,6 +20,8 @@ export async function generateAIExecutiveBriefing(
   firstName?: string | null
 ): Promise<AIExecutiveBriefingData> {
   const greetingName = firstName?.trim() || "there";
+  const now = new Date();
+  const formattedTime = `Today, ${now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
 
   if (!businessId) {
     return {
@@ -52,6 +55,7 @@ export async function generateAIExecutiveBriefing(
         summaryParagraph: "Welcome to Business Advisor! Your AI is ready. As you record invoices, tasks, and customer enquiries, your AI Executive Briefing will automatically analyze opportunities, calculate recoverable revenue, and recommend strategic priorities.",
         recommendations: [],
         hasSufficientData: false,
+        lastAnalyzedTime: formattedTime,
       };
     }
 
@@ -104,6 +108,7 @@ export async function generateAIExecutiveBriefing(
       summaryParagraph,
       recommendations: priorities,
       hasSufficientData: true,
+      lastAnalyzedTime: formattedTime,
     };
   } catch (err) {
     console.error("[generateAIExecutiveBriefing] error:", err);
