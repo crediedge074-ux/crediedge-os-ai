@@ -3,6 +3,7 @@ import { fetchCrediEdgeScore } from "./score";
 import { fetchCalculatedPriorities, type DashboardPriorityItem } from "./priorities";
 import { fetchMorningBriefingMetrics } from "./briefing";
 import { logActivity } from "./activity";
+import { authorizeAndLogAIRequest, type AIAllowanceStatus, getAIAllowance } from "./aiUsage";
 
 export interface AIExecutiveBriefingData {
   greetingName: string;
@@ -14,6 +15,8 @@ export interface AIExecutiveBriefingData {
   recommendations: DashboardPriorityItem[];
   hasSufficientData: boolean;
   lastAnalyzedTime?: string;
+  allowanceStatus?: AIAllowanceStatus;
+  creditExhausted?: boolean;
 }
 
 export interface RecommendationSourceSignals {
@@ -129,7 +132,8 @@ export const MIN_ACCURACY_SAMPLE_SIZE = 3;
 
 export async function generateAIExecutiveBriefing(
   businessId: string | undefined,
-  firstName?: string | null
+  firstName?: string | null,
+  userId?: string | null
 ): Promise<AIExecutiveBriefingData> {
   const greetingName = firstName?.trim() || "there";
   const now = new Date();
@@ -145,6 +149,32 @@ export async function generateAIExecutiveBriefing(
       summaryParagraph: "No workspace connected. Please log in or select an active business workspace to generate your AI Executive Briefing.",
       recommendations: [],
       hasSufficientData: false,
+    };
+  }
+
+  // Authorize credit usage for briefing generation (standard tier = 2 credits)
+  const authRes = await authorizeAndLogAIRequest({
+    businessId,
+    userId,
+    actionType: "executive_briefing_generation",
+    complexityTier: "standard",
+  });
+
+  const allowanceStatus = await getAIAllowance(businessId, userId);
+
+  if (!authRes.authorized && authRes.status === "exhausted") {
+    return {
+      greetingName,
+      actionCount: 0,
+      totalOpportunityAmount: 0,
+      timeRequiredMinutes: 0,
+      confidenceScore: null,
+      summaryParagraph: `AI Credit Limit Reached (${allowanceStatus.usedCredits}/${allowanceStatus.monthlyAllowance} credits used). Please upgrade your workspace allowance or wait until your reset period to generate additional briefings.`,
+      recommendations: [],
+      hasSufficientData: false,
+      lastAnalyzedTime: formattedTime,
+      allowanceStatus,
+      creditExhausted: true,
     };
   }
 
@@ -168,6 +198,8 @@ export async function generateAIExecutiveBriefing(
         recommendations: [],
         hasSufficientData: false,
         lastAnalyzedTime: formattedTime,
+        allowanceStatus,
+        creditExhausted: false,
       };
     }
 
@@ -249,6 +281,8 @@ export async function generateAIExecutiveBriefing(
       recommendations: priorities,
       hasSufficientData: true,
       lastAnalyzedTime: formattedTime,
+      allowanceStatus,
+      creditExhausted: false,
     };
   } catch (err) {
     console.error("[generateAIExecutiveBriefing] error:", err);
@@ -261,6 +295,8 @@ export async function generateAIExecutiveBriefing(
       summaryParagraph: "Unable to generate briefing at this time. Please verify your connection or try again.",
       recommendations: [],
       hasSufficientData: false,
+      allowanceStatus,
+      creditExhausted: false,
     };
   }
 }

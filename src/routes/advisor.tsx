@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Sparkles, Brain, RefreshCw, Loader2, Info } from "lucide-react";
+import { Sparkles, Brain, RefreshCw, Loader2, Info, Zap } from "lucide-react";
 import { AppLayout } from "@/components/ui/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { AIRecommendations } from "@/components/advisor/AIRecommendations";
@@ -25,6 +25,9 @@ function DailyBriefingBanner({
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
+  const remaining = data?.allowanceStatus?.remainingCredits ?? 100;
+  const totalAllowance = data?.allowanceStatus?.monthlyAllowance ?? 100;
+
   return (
     <div className="relative mb-8 overflow-hidden rounded-2xl bg-foreground p-6 text-background shadow-card">
       <div className="pointer-events-none absolute right-0 top-0 h-48 w-48 rounded-full bg-white/5 blur-3xl" />
@@ -32,7 +35,7 @@ function DailyBriefingBanner({
 
       <div className="relative flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2.5 mb-2">
+          <div className="flex flex-wrap items-center gap-2.5 mb-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10">
               <Brain className="h-3.5 w-3.5 text-background/80" strokeWidth={2} />
             </div>
@@ -44,6 +47,10 @@ function DailyBriefingBanner({
                 · Last analysed: {data.lastAnalyzedTime}
               </span>
             )}
+            <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-0.5 text-[10.5px] font-bold text-background/80">
+              <Zap className="h-3 w-3 text-brand" strokeWidth={2} />
+              {remaining} / {totalAllowance} AI credits remaining
+            </span>
           </div>
 
           <h2 className="text-[17px] font-bold leading-snug text-background">
@@ -82,7 +89,7 @@ function DailyBriefingBanner({
         <div className="relative" onMouseEnter={() => setShowRefreshTooltip(true)} onMouseLeave={() => setShowRefreshTooltip(false)}>
           <button
             onClick={onRefreshData}
-            disabled={loading}
+            disabled={loading || Boolean(data?.creditExhausted)}
             className="flex shrink-0 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-[12.5px] font-semibold text-background transition-all duration-200 hover:bg-white/15 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? (
@@ -90,15 +97,15 @@ function DailyBriefingBanner({
             ) : (
               <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} />
             )}
-            {loading ? "Checking..." : "Refresh Data"}
+            {loading ? "Checking..." : data?.creditExhausted ? "Credit Limit Reached" : "Refresh Data"}
             <Info className="h-3 w-3 text-background/50 hover:text-background" />
           </button>
 
           {showRefreshTooltip && (
             <div className="pointer-events-none absolute right-0 top-11 z-30 w-64 rounded-xl border border-border bg-card p-3 shadow-xl text-left">
-              <div className="text-[11px] font-bold text-foreground mb-1">Refresh Data</div>
+              <div className="text-[11px] font-bold text-foreground mb-1">Refresh Data & AI Credits</div>
               <div className="text-[10.5px] leading-relaxed text-muted-foreground">
-                Checks your latest business activity for meaningful changes since your briefing was generated.
+                Re-analyzes your latest workspace records. Each AI briefing generation consumes 2 credits from your workspace allowance ({remaining} remaining).
               </div>
             </div>
           )}
@@ -123,8 +130,9 @@ function DailyBriefingBanner({
 }
 
 function AdvisorPage() {
-  const { membership, profile } = useAuthContext();
+  const { membership, profile, user } = useAuthContext();
   const businessId = membership?.business_id;
+  const userId = user?.id;
   const firstName = profile?.first_name || profile?.full_name?.split(" ")[0];
 
   const [briefingData, setBriefingData] = useState<AIExecutiveBriefingData | null>(null);
@@ -132,7 +140,7 @@ function AdvisorPage() {
 
   const loadBriefing = () => {
     setLoading(true);
-    generateAIExecutiveBriefing(businessId, firstName)
+    generateAIExecutiveBriefing(businessId, firstName, userId)
       .then((res) => {
         setBriefingData(res);
       })
@@ -146,7 +154,7 @@ function AdvisorPage() {
 
   useEffect(() => {
     loadBriefing();
-  }, [businessId, firstName]);
+  }, [businessId, firstName, userId]);
 
   return (
     <AppLayout>
