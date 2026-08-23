@@ -4,6 +4,12 @@ import { fetchCalculatedPriorities, type DashboardPriorityItem } from "./priorit
 import { fetchMorningBriefingMetrics } from "./briefing";
 import { logActivity } from "./activity";
 import { authorizeAndLogAIRequest, type AIAllowanceStatus, getAIAllowance } from "./aiUsage";
+import {
+  calculateStandardConfidenceScore,
+  logAIEvent,
+  type StandardRecommendationOutcome,
+  type AISourceStatus,
+} from "./aiDataContract";
 
 export interface AIExecutiveBriefingData {
   greetingName: string;
@@ -22,6 +28,7 @@ export interface AIExecutiveBriefingData {
 export interface RecommendationSourceSignals {
   evidence_reason?: string;
   priority_score?: number;
+  data_status?: AISourceStatus;
   [key: string]: any;
 }
 
@@ -30,15 +37,17 @@ export interface RecommendationExpectedOutcome {
   expected_score_boost?: number;
   metric_key?: string;
   time_saved_minutes?: number;
+  data_status?: AISourceStatus;
   [key: string]: any;
 }
 
-export interface RecommendationActualOutcome {
+export interface RecommendationActualOutcome extends Partial<StandardRecommendationOutcome> {
   actual_value?: number | null;
   variance?: number | null;
   outcome_status?: "successful" | "below_expected" | "pending";
   recorded_at?: string;
   time_saved_minutes?: number | null;
+  data_status?: AISourceStatus;
   [key: string]: any;
 }
 
@@ -107,6 +116,7 @@ export interface LearningSourceVolume {
   recordCount: number;
   recommendationCount: number;
   isAvailable: boolean;
+  provenance: AISourceStatus;
 }
 
 export interface RecurringPattern {
@@ -221,16 +231,19 @@ export async function generateAIExecutiveBriefing(
 
     const historicalCompleted = (rawHistoricalCompleted || []) as StoredRecommendation[];
 
-    let historicalBonus = 0;
-    if (historicalCompleted.length >= MIN_ACCURACY_SAMPLE_SIZE) {
-      const successfulCount = historicalCompleted.filter(
-        (r) => r.actual_outcome?.outcome_status === "successful"
-      ).length;
-      historicalBonus = Math.min(10, successfulCount * 2);
-    }
+    const successfulOutcomeCount = historicalCompleted.filter(
+      (r) => r.actual_outcome?.outcome_status === "successful"
+    ).length;
 
-    // Grounded confidence score derived from workspace health & score completeness
-    const confidenceScore = scoreData.hasSufficientData ? Math.min(98, Math.max(70, scoreData.overallScore + 10 + historicalBonus)) : null;
+    // Standardized confidence calculation engine
+    const standardConfidence = calculateStandardConfidenceScore({
+      hasSufficientData: scoreData.hasSufficientData,
+      overallScore: scoreData.overallScore,
+      historicalCompletedCount: historicalCompleted.length,
+      successfulOutcomeCount,
+    });
+
+    const confidenceScore = standardConfidence.isGrounded ? standardConfidence.score : null;
 
     let summaryParagraph = "";
     if (actionCount > 0) {
@@ -262,14 +275,23 @@ export async function generateAIExecutiveBriefing(
             estimated_impact: prio.impact,
             confidence_score: confidenceScore,
             status: "active",
-            source_signals: { evidence_reason: prio.reason, priority_score: prio.score },
-            expected_outcome: { expected_value: estimatedVal, expected_score_boost: prio.score > 80 ? 5 : 2 },
+            source_signals: { evidence_reason: prio.reason, priority_score: prio.score, data_status: "connected" },
+            expected_outcome: { expected_value: estimatedVal, expected_score_boost: prio.score > 80 ? 5 : 2, data_status: "estimated" },
           } as any);
         }
       } catch (err) {
         console.warn("[generateAIExecutiveBriefing] Non-blocking AI recommendation persist notice:", err);
       }
     }
+
+    // Log AI briefing generation event
+    await logAIEvent({
+      businessId,
+      userId,
+      eventType: "briefing_generated",
+      source: "advisor_engine",
+      metadata: { actionCount, totalOpportunityAmount, confidenceScore },
+    });
 
     return {
       greetingName,
@@ -400,11 +422,17 @@ export async function completeRecommendation(id: string, businessId: string, tit
   const outcomeStatus = actualVal !== null ? (variance! >= 0 ? "successful" : "below_expected") : "pending";
 
   const actualOutcomeObj: RecommendationActualOutcome = {
-    actual_value: actualVal,
+    expectedValue: expectedVal,
+    actualValue: actualVal,
+    unit: "currency_gbp",
+    measurementType: actualVal !== null ? "verified" : "pending",
+    measurementPeriod: "post_action",
     variance: variance,
-    outcome_status: outcomeStatus,
+    outcomeStatus,
+    evidenceSource: recTyped?.category || "system",
     recorded_at: now,
     time_saved_minutes: recTyped?.actual_outcome?.time_saved_minutes ?? null,
+    data_status: actualVal !== null ? "connected" : "estimated",
   };
 
   // 2. Update recommendation status in Supabase
@@ -436,13 +464,21 @@ export async function completeRecommendation(id: string, businessId: string, tit
     console.warn("Non-blocking recommendation outcome record notice:", err);
   }
 
-  // 4. Log activity
+  // 4. Log activity and AI event
   await logActivity({
     business_id: businessId,
     entity_type: "recommendation",
     entity_id: id,
     action: "completed",
     description: `Completed recommendation: ${title}`,
+  });
+
+  await logAIEvent({
+    businessId,
+    eventType: "recommendation_completed",
+    source: "advisor_engine",
+    recommendationId: id,
+    metadata: { title, outcomeStatus },
   });
 
   return true;
@@ -855,36 +891,42 @@ export async function fetchAILearningSystemData(businessId: string | undefined):
         recordCount: analysedCounts.invoicesProcessed,
         recommendationCount: getSourceRecCount(["invoice", "revenue", "payment"]),
         isAvailable: analysedCounts.invoicesProcessed > 0,
+        provenance: "connected",
       },
       {
         sourceName: "Enquiries & Comms",
         recordCount: analysedCounts.enquiriesAnalysed,
         recommendationCount: getSourceRecCount(["communication", "enquiry"]),
         isAvailable: analysedCounts.enquiriesAnalysed > 0,
+        provenance: "connected",
       },
       {
         sourceName: "Bookings & Jobs",
         recordCount: analysedCounts.bookingsAnalysed,
         recommendationCount: getSourceRecCount(["job", "booking", "calendar"]),
         isAvailable: analysedCounts.bookingsAnalysed > 0,
+        provenance: "connected",
       },
       {
         sourceName: "Tasks & Operations",
         recordCount: tasksRes.count || 0,
         recommendationCount: getSourceRecCount(["task"]),
         isAvailable: (tasksRes.count || 0) > 0,
+        provenance: "connected",
       },
       {
         sourceName: "Customer Relationships",
         recordCount: customersRes.count || 0,
         recommendationCount: getSourceRecCount(["customer", "relationship"]),
         isAvailable: (customersRes.count || 0) > 0,
+        provenance: "connected",
       },
       {
         sourceName: "Goals & Growth",
         recordCount: goalsRes.count || 0,
         recommendationCount: getSourceRecCount(["goal"]),
         isAvailable: (goalsRes.count || 0) > 0,
+        provenance: "connected",
       },
     ];
 
