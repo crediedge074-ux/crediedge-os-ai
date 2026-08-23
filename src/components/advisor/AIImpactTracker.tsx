@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { TrendingUp, Clock, CircleCheck as CheckCircle2, ChevronDown, ChevronUp, Star, Target, Brain, Award, MessageSquare, Globe, PoundSterling, ChartBar as BarChart3, Sparkles, Calendar, Users, FileText, ShoppingBag, Trophy, Layers, Activity } from "lucide-react";
+import { TrendingUp, Clock, CircleCheck as CheckCircle2, ChevronDown, ChevronUp, Star, Target, Brain, Award, MessageSquare, Globe, PoundSterling, ChartBar as BarChart3, Sparkles, Calendar, Users, FileText, ShoppingBag, Trophy, Activity } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   getHistoricalRecommendations,
@@ -16,17 +16,14 @@ import {
   type AILearningSystemReport,
   MIN_ACCURACY_SAMPLE_SIZE,
 } from "@/services/advisor";
+import {
+  fetchBusinessMilestones,
+  type BusinessMilestonesOverview,
+  type BusinessMilestone,
+} from "@/services/achievements";
 import { useAuthContext } from "@/contexts/AuthContext";
 
 type RecoStatus = "successful" | "below_expected" | "pending";
-
-interface Achievement {
-  id: string;
-  icon: LucideIcon;
-  title: string;
-  description: string;
-  earned: boolean;
-}
 
 function AnimatedNumber({
   target,
@@ -101,9 +98,12 @@ const statusConfig: Record<
 function getCategoryIcon(category: string): LucideIcon {
   if (category === "invoice" || category === "Revenue") return PoundSterling;
   if (category === "communication" || category === "enquiry") return MessageSquare;
-  if (category === "review") return Star;
+  if (category === "review" || category === "Reviews") return Star;
   if (category === "website") return Globe;
-  if (category === "customer") return Users;
+  if (category === "customer" || category === "Customers") return Users;
+  if (category === "Time Saved") return Clock;
+  if (category === "Score") return TrendingUp;
+  if (category === "Recommendations") return CheckCircle2;
   return BarChart3;
 }
 
@@ -589,96 +589,95 @@ function Achievements() {
   const { membership } = useAuthContext();
   const businessId = membership?.business_id;
 
-  const [summary, setSummary] = useState<AIPerformanceSummaryMetrics | null>(null);
+  const [milestonesOverview, setMilestonesOverview] = useState<BusinessMilestonesOverview | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
     if (businessId) {
-      fetchAIPerformanceSummary(businessId).then((data) => {
-        if (mounted) setSummary(data);
+      fetchBusinessMilestones(businessId).then((data) => {
+        if (mounted) {
+          setMilestonesOverview(data);
+          setLoading(false);
+        }
       });
+    } else {
+      setLoading(false);
     }
     return () => {
       mounted = false;
     };
   }, [businessId]);
 
-  const completed = summary?.completedCount ?? 0;
-  const revenue = summary?.measuredRevenue ?? 0;
-  const hours = summary?.measuredHoursSaved ?? 0;
-
-  const realAchievements: Achievement[] = [
-    {
-      id: "a1",
-      icon: CheckCircle2,
-      title: "First Recommendation Completed",
-      description: "You completed your very first AI recommendation.",
-      earned: completed >= 1,
-    },
-    {
-      id: "a2",
-      icon: Target,
-      title: "10 Recommendations Completed",
-      description: "Complete 10 AI recommendations across your business.",
-      earned: completed >= 10,
-    },
-    {
-      id: "a3",
-      icon: Trophy,
-      title: "£10,000 Revenue Generated",
-      description: "AI recommendations generated over £10,000 in measured revenue.",
-      earned: revenue >= 10000,
-    },
-    {
-      id: "a4",
-      icon: Clock,
-      title: "50 Hours Saved",
-      description: "AI saved your business over 50 hours of work.",
-      earned: hours >= 50,
-    },
-    {
-      id: "a5",
-      icon: TrendingUp,
-      title: "Score +10 Improvement",
-      description: "CrediEdge Score™ improved by 10 points through actions.",
-      earned: false,
-    },
-    {
-      id: "a6",
-      icon: Award,
-      title: "100 Recommendations Completed",
-      description: "Complete 100 AI recommendations to unlock master level.",
-      earned: completed >= 100,
-    },
-  ];
+  const next = milestonesOverview?.nextMilestone;
+  const milestones = milestonesOverview?.milestones ?? [];
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-6 shadow-card">
-      <div className="mb-4 flex items-center gap-2">
-        <Trophy className="h-4.5 w-4.5 text-amber-500" strokeWidth={2} />
-        <div className="text-[15px] font-bold tracking-tight text-foreground">Achievements</div>
+    <div className="rounded-2xl border border-border bg-card p-6 shadow-card space-y-5">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Trophy className="h-4.5 w-4.5 text-amber-500" strokeWidth={2} />
+          <div className="text-[15px] font-bold tracking-tight text-foreground">Achievements & Milestones</div>
+        </div>
+        <span className="text-[11px] font-semibold text-muted-foreground">
+          {milestonesOverview?.unlockedCount ?? 0} / {milestonesOverview?.totalCount ?? 0} Unlocked
+        </span>
       </div>
 
+      {/* Next Milestone Banner */}
+      {next && (
+        <div className="rounded-xl border border-amber-200/50 bg-amber-50/40 p-4">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10.5px] font-semibold uppercase tracking-wider text-amber-700">Next Target Milestone</span>
+            <span className="text-[11px] font-bold text-amber-800">
+              {next.unitPrefix ?? ""}{next.currentValue.toLocaleString()}{next.unitSuffix ?? ""} / {next.unitPrefix ?? ""}{next.targetValue.toLocaleString()}{next.unitSuffix ?? ""} ({next.progressPct}%)
+            </span>
+          </div>
+          <div className="text-[13px] font-bold text-foreground">{next.title}</div>
+          <div className="mt-1 text-[11.5px] text-muted-foreground">{next.description}</div>
+          <div className="relative mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-amber-100">
+            <div className="absolute inset-y-0 left-0 rounded-full bg-amber-500 transition-all duration-700" style={{ width: `${next.progressPct}%` }} />
+          </div>
+        </div>
+      )}
+
+      {/* Milestone Catalogue Grid */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {realAchievements.map((a) => {
-          const Icon = a.icon;
-          return (
-            <div
-              key={a.id}
-              className={`relative flex flex-col items-center rounded-2xl border p-4 text-center transition-all duration-200 hover:-translate-y-0.5 ${
-                a.earned ? "border-amber-200 bg-amber-50/60 hover:shadow-card" : "border-border bg-secondary/30 opacity-50"
-              }`}
-            >
-              <div className={`grid h-10 w-10 place-items-center rounded-xl mb-3 ${a.earned ? "bg-amber-100 text-amber-600" : "bg-secondary text-muted-foreground"}`}>
-                <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
+        {loading ? (
+          <div className="col-span-full py-4 text-center text-xs text-muted-foreground">Loading workspace milestones...</div>
+        ) : (
+          milestones.map((m) => {
+            const Icon = getCategoryIcon(m.category);
+            return (
+              <div
+                key={m.id}
+                className={`relative flex flex-col items-center rounded-2xl border p-4 text-center transition-all duration-200 hover:-translate-y-0.5 ${
+                  m.isUnlocked
+                    ? "border-amber-200 bg-amber-50/60 hover:shadow-card"
+                    : "border-border bg-secondary/30 opacity-70"
+                }`}
+              >
+                <div className={`grid h-10 w-10 place-items-center rounded-xl mb-2.5 ${m.isUnlocked ? "bg-amber-100 text-amber-600" : "bg-secondary text-muted-foreground"}`}>
+                  <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
+                </div>
+                <div className={`text-[12px] font-bold leading-tight ${m.isUnlocked ? "text-foreground" : "text-foreground/80"}`}>
+                  {m.title}
+                </div>
+                <div className="mt-1 text-[10.5px] text-muted-foreground leading-tight">{m.description}</div>
+
+                <div className="mt-3 w-full border-t border-border/50 pt-2.5 text-[11px] font-semibold">
+                  {m.isUnlocked ? (
+                    <span className="text-amber-700 font-bold">Unlocked</span>
+                  ) : (
+                    <span className="text-muted-foreground">
+                      {m.unitPrefix ?? ""}{m.currentValue.toLocaleString()}{m.unitSuffix ?? ""} / {m.unitPrefix ?? ""}{m.targetValue.toLocaleString()}{m.unitSuffix ?? ""} ({m.progressPct}%)
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className={`text-[12px] font-semibold leading-tight ${a.earned ? "text-foreground" : "text-muted-foreground"}`}>
-                {a.title}
-              </div>
-              <div className="mt-1 text-[10.5px] text-muted-foreground leading-tight">{a.description}</div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
     </div>
   );
