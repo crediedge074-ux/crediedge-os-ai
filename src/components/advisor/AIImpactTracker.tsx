@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { TrendingUp, Clock, CircleCheck as CheckCircle2, ChevronDown, ChevronUp, Star, Target, Brain, Award, MessageSquare, Globe, PoundSterling, ChartBar as BarChart3, Sparkles, Calendar, Users, FileText, ShoppingBag, Trophy, Activity } from "lucide-react";
+import { TrendingUp, Clock, CircleCheck as CheckCircle2, ChevronDown, ChevronUp, Star, Target, Brain, Award, MessageSquare, Globe, PoundSterling, ChartBar as BarChart3, Sparkles, Calendar, Users, FileText, ShoppingBag, Trophy, Activity, ShieldCheck } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   getHistoricalRecommendations,
@@ -76,19 +76,19 @@ const statusConfig: Record<
   { label: string; bg: string; text: string; dot: string }
 > = {
   successful: {
-    label: "Successful",
+    label: "Successful Outcome",
     bg: "bg-emerald-50",
     text: "text-emerald-700",
     dot: "bg-emerald-500",
   },
   below_expected: {
-    label: "Below Expected",
+    label: "Below Expected Target",
     bg: "bg-amber-50",
     text: "text-amber-700",
     dot: "bg-amber-500",
   },
   pending: {
-    label: "Outcome Pending",
+    label: "Pending Real Measurement",
     bg: "bg-secondary",
     text: "text-muted-foreground",
     dot: "bg-muted-foreground/40",
@@ -123,6 +123,7 @@ function RealRecommendationCard({ reco }: { reco: StoredRecommendation }) {
   const expectedVal = reco.expected_outcome?.expected_value ?? 0;
   const actualVal = reco.actual_outcome?.actual_value ?? null;
   const confidence = reco.confidence_score;
+  const provenance = reco.source_signals?.data_status ?? "connected";
 
   const dateCreatedStr = new Date(reco.created_at).toLocaleDateString("en-GB", {
     day: "numeric",
@@ -170,15 +171,15 @@ function RealRecommendationCard({ reco }: { reco: StoredRecommendation }) {
 
           <div className="mt-3 grid grid-cols-3 gap-3">
             <div className="rounded-xl bg-secondary/60 px-3 py-2.5">
-              <div className="text-[10px] font-medium text-muted-foreground">Expected Impact</div>
+              <div className="text-[10px] font-medium text-muted-foreground">Expected Target (Estimated)</div>
               <div className="mt-0.5 text-[14px] font-bold text-foreground">
                 {reco.estimated_impact || (expectedVal > 0 ? `+£${expectedVal.toLocaleString()}` : "N/A")}
               </div>
             </div>
             <div className="rounded-xl bg-secondary/60 px-3 py-2.5">
-              <div className="text-[10px] font-medium text-muted-foreground">Actual Measured Result</div>
+              <div className="text-[10px] font-medium text-muted-foreground">Actual Result (Measured)</div>
               <div className={`mt-0.5 text-[14px] font-bold ${isCompleted && actualVal !== null ? "text-emerald-600" : "text-muted-foreground"}`}>
-                {isCompleted ? (actualVal !== null ? `£${actualVal.toLocaleString()}` : "Pending measurement") : "No outcome"}
+                {isCompleted ? (actualVal !== null ? `£${actualVal.toLocaleString()}` : "Pending real measurement") : "No outcome"}
               </div>
             </div>
             <div className="rounded-xl bg-secondary/60 px-3 py-2.5">
@@ -195,7 +196,7 @@ function RealRecommendationCard({ reco }: { reco: StoredRecommendation }) {
         onClick={() => setExpanded((v) => !v)}
         className="flex w-full items-center justify-between border-t border-border px-5 py-2.5 text-[11.5px] font-semibold text-brand transition-colors duration-150 hover:bg-secondary/40"
       >
-        <span>View Outcome</span>
+        <span>View Outcome & Provenance</span>
         {expanded ? <ChevronUp className="h-3.5 w-3.5" strokeWidth={2} /> : <ChevronDown className="h-3.5 w-3.5" strokeWidth={2} />}
       </button>
 
@@ -212,27 +213,30 @@ function RealRecommendationCard({ reco }: { reco: StoredRecommendation }) {
 
             <div className="rounded-xl bg-card border border-border p-4">
               <div className="mb-2 flex items-center gap-2">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" strokeWidth={2} />
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Source Signals</span>
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" strokeWidth={2} />
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Source Signals & Data Provenance</span>
               </div>
-              <p className="text-[12.5px] leading-relaxed text-foreground/80">
+              <p className="text-[12.5px] leading-relaxed text-foreground/80 mb-2">
                 {reco.source_signals?.evidence_reason || `Signal priority score: ${reco.source_signals?.priority_score ?? "N/A"}`}
               </p>
+              <div className="text-[11px] text-muted-foreground">
+                Data Provenance: <span className="font-bold text-foreground uppercase">{provenance}</span>
+              </div>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="rounded-xl border border-border bg-card p-4">
-              <div className="mb-2 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Expected Target</div>
-              <div className="text-[11.5px] text-muted-foreground">Estimated Value</div>
+              <div className="mb-2 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Expected Target (Estimated)</div>
+              <div className="text-[11.5px] text-muted-foreground">Target Recovery</div>
               <div className="mt-1 text-[20px] font-bold text-foreground">
                 {expectedVal > 0 ? `£${expectedVal.toLocaleString()}` : "N/A"}
               </div>
             </div>
             <div className="rounded-xl border border-border bg-card p-4">
-              <div className="mb-2 text-[10.5px] font-semibold uppercase tracking-wider text-emerald-600">Actual Measured Outcome</div>
+              <div className="mb-2 text-[10.5px] font-semibold uppercase tracking-wider text-emerald-600">Actual Outcome (Verified)</div>
               <div className="text-[11.5px] text-muted-foreground">
-                {isCompleted ? (actualVal !== null ? (outcomeStatus === "successful" ? "Successful" : "Below expected") : "Pending real measurement") : "Dismissed"}
+                {isCompleted ? (actualVal !== null ? (outcomeStatus === "successful" ? "Verified Successful" : "Below expected target") : "Pending real payment/activity measurement") : "Dismissed"}
               </div>
               <div className="mt-1 text-[20px] font-bold text-emerald-700">
                 {isCompleted ? (actualVal !== null ? `£${actualVal.toLocaleString()}` : "Pending") : "N/A"}
