@@ -375,9 +375,11 @@ import { fetchCampaigns, type CalculatedCampaign } from "@/services/campaigns";
 function MissionsSection({
   businessId,
   onMissionClick,
+  onOpenMissionModal,
 }: {
   businessId: string | undefined;
   onMissionClick?: (missionId: string) => void;
+  onOpenMissionModal?: (mission: CalculatedMission) => void;
 }) {
   const [missions, setMissions] = useState<CalculatedMission[]>([]);
   const [campaigns, setCampaigns] = useState<CalculatedCampaign[]>([]);
@@ -502,7 +504,13 @@ function MissionsSection({
         <ul className="divide-y divide-border">
           {activeMissions.map((m) => (
             <li key={m.id} className="flex items-center justify-between gap-4 px-5 py-3.5 transition-colors duration-150 hover:bg-secondary/40">
-              <div className="min-w-0 flex-1 cursor-pointer" onClick={() => onMissionClick && onMissionClick(m.id)}>
+              <div
+                className="min-w-0 flex-1 cursor-pointer"
+                onClick={() => {
+                  if (onOpenMissionModal) onOpenMissionModal(m);
+                  else if (onMissionClick) onMissionClick(m.id);
+                }}
+              >
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
                   <div className="flex items-center gap-2">
                     <span className="text-[12.5px] font-bold text-foreground">{m.title}</span>
@@ -677,6 +685,7 @@ function TaskModal({
   taskToEdit,
   members,
   missions = [],
+  defaultMissionId = "",
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -684,6 +693,7 @@ function TaskModal({
   taskToEdit?: Task | null;
   members: WorkspaceMemberInfo[];
   missions?: CalculatedMission[];
+  defaultMissionId?: string;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -708,10 +718,10 @@ function TaskModal({
       setPriority("medium");
       setDueDate("");
       setAssignedTo("");
-      setMissionId("");
+      setMissionId(defaultMissionId || "");
     }
     setTaskError(null);
-  }, [taskToEdit, isOpen]);
+  }, [taskToEdit, isOpen, defaultMissionId]);
 
   if (!isOpen) return null;
 
@@ -885,6 +895,7 @@ function TasksPage() {
   const [selectedCampaign, setSelectedCampaign] = useState<CalculatedCampaign | null>(null);
   const [selectedMission, setSelectedMission] = useState<CalculatedMission | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [createTaskForMissionId, setCreateTaskForMissionId] = useState<string>("");
 
   const loadData = () => {
     if (!businessId) {
@@ -996,6 +1007,11 @@ function TasksPage() {
         </div>
         <MissionsSection
           businessId={businessId}
+          onOpenMissionModal={(m) => {
+            setSelectedMission(m);
+            setSelectedCampaign(null);
+            setSelectedTask(null);
+          }}
           onMissionClick={(mId) => setSelectedMissionFilter(selectedMissionFilter === mId ? null : mId)}
         />
       </div>
@@ -1174,11 +1190,15 @@ function TasksPage() {
 
       <TaskModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          setCreateTaskForMissionId("");
+        }}
         onSave={handleSaveTask}
         taskToEdit={editingTask}
         members={members}
         missions={missions}
+        defaultMissionId={createTaskForMissionId}
       />
 
       {/* Drill-Down Hierarchy Modal */}
@@ -1211,6 +1231,7 @@ function TasksPage() {
             setSelectedTask(t);
           }}
           onCreateTaskInMission={(missionId) => {
+            setCreateTaskForMissionId(missionId);
             setEditingTask(null);
             setIsModalOpen(true);
           }}
