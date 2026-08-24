@@ -98,11 +98,13 @@ function TaskCommentsSection({
   const [replyText, setReplyText] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
+  const [commentError, setCommentError] = useState<string | null>(null);
 
   const loadComments = () => {
     setLoading(true);
     fetchTaskComments(taskId, businessId)
       .then((data) => setComments(data))
+      .catch((err) => console.error("Error loading task comments:", err))
       .finally(() => setLoading(false));
   };
 
@@ -113,42 +115,66 @@ function TaskCommentsSection({
   const handleAddComment = async (parentCommentId?: string | null) => {
     const text = parentCommentId ? replyText : newCommentText;
     if (!text.trim()) return;
+    setCommentError(null);
 
-    await createTaskComment({
-      businessId,
-      taskId,
-      userId: currentUserId,
-      commentText: text,
-      parentCommentId,
-    });
+    try {
+      await createTaskComment({
+        businessId,
+        taskId,
+        userId: currentUserId,
+        commentText: text,
+        parentCommentId,
+      });
 
-    if (parentCommentId) {
-      setReplyText("");
-      setReplyingToId(null);
-    } else {
-      setNewCommentText("");
+      if (parentCommentId) {
+        setReplyText("");
+        setReplyingToId(null);
+      } else {
+        setNewCommentText("");
+      }
+      loadComments();
+    } catch (err: any) {
+      console.error("Failed to post comment:", err);
+      setCommentError(`Failed to post comment: ${err?.message || String(err)}`);
     }
-    loadComments();
   };
 
   const handleEdit = async (commentId: string) => {
     if (!editText.trim() || !currentUserId) return;
-    await updateTaskComment(commentId, businessId, currentUserId, editText);
-    setEditingId(null);
-    setEditText("");
-    loadComments();
+    setCommentError(null);
+    try {
+      await updateTaskComment(commentId, businessId, currentUserId, editText);
+      setEditingId(null);
+      setEditText("");
+      loadComments();
+    } catch (err: any) {
+      console.error("Failed to edit comment:", err);
+      setCommentError(`Failed to edit comment: ${err?.message || String(err)}`);
+    }
   };
 
   const handleDelete = async (commentId: string) => {
     if (!currentUserId || !confirm("Delete this comment?")) return;
-    await deleteTaskComment(commentId, businessId, currentUserId);
-    loadComments();
+    setCommentError(null);
+    try {
+      await deleteTaskComment(commentId, businessId, currentUserId);
+      loadComments();
+    } catch (err: any) {
+      console.error("Failed to delete comment:", err);
+      setCommentError(`Failed to delete comment: ${err?.message || String(err)}`);
+    }
   };
 
   const handleReaction = async (commentId: string, emoji: string) => {
     if (!currentUserId) return;
-    await toggleCommentReaction({ commentId, businessId, userId: currentUserId, emoji });
-    loadComments();
+    setCommentError(null);
+    try {
+      await toggleCommentReaction({ commentId, businessId, userId: currentUserId, emoji });
+      loadComments();
+    } catch (err: any) {
+      console.error("Failed to toggle reaction:", err);
+      setCommentError(`Failed to toggle reaction: ${err?.message || String(err)}`);
+    }
   };
 
   const renderComment = (comment: TaskComment, isReply = false) => {
@@ -296,6 +322,12 @@ function TaskCommentsSection({
         <MessageSquare className="h-3.5 w-3.5 text-brand" />
         Task Discussion & Activity Comments
       </div>
+
+      {commentError && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-[12px] font-semibold text-destructive">
+          {commentError}
+        </div>
+      )}
 
       {loading ? (
         <div className="text-xs text-muted-foreground">Loading comments...</div>

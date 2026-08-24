@@ -118,36 +118,46 @@ export async function createTaskComment(params: {
   userId?: string | null;
   commentText: string;
   parentCommentId?: string | null;
-}): Promise<boolean> {
+}): Promise<TaskComment> {
   const { businessId, taskId, userId, commentText, parentCommentId } = params;
 
-  try {
-    const { data: created, error } = await (supabase.from as any)("task_comments")
-      .insert({
-        business_id: businessId,
-        task_id: taskId,
-        user_id: userId || null,
-        comment_text: commentText.trim(),
-        parent_comment_id: parentCommentId || null,
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    await logActivity({
+  const { data: created, error } = await (supabase.from as any)("task_comments")
+    .insert({
       business_id: businessId,
-      entity_type: "task",
-      entity_id: taskId,
-      action: "comment_added",
-      description: `Added comment on task #${taskId.slice(0, 8)}`,
-    });
+      task_id: taskId,
+      user_id: userId || null,
+      comment_text: commentText.trim(),
+      parent_comment_id: parentCommentId || null,
+    })
+    .select()
+    .single();
 
-    return true;
-  } catch (err) {
-    console.error("Error creating task comment:", err);
-    return false;
+  if (error) {
+    console.error("[createTaskComment] error:", error);
+    throw new Error(error.message || JSON.stringify(error));
   }
+
+  await logActivity({
+    business_id: businessId,
+    entity_type: "task",
+    entity_id: taskId,
+    action: "comment_added",
+    description: `Added comment on task #${taskId.slice(0, 8)}`,
+  }).catch((err) => console.warn("[createTaskComment] logActivity failed:", err));
+
+  return {
+    id: created.id,
+    businessId: created.business_id,
+    taskId: created.task_id,
+    parentCommentId: created.parent_comment_id,
+    userId: created.user_id,
+    commenterName: "You",
+    commentText: created.comment_text,
+    createdAt: created.created_at,
+    updatedAt: created.updated_at,
+    reactions: [],
+    replies: [],
+  };
 }
 
 export async function updateTaskComment(
@@ -156,22 +166,20 @@ export async function updateTaskComment(
   userId: string,
   commentText: string
 ): Promise<boolean> {
-  try {
-    const { error } = await (supabase.from as any)("task_comments")
-      .update({
-        comment_text: commentText.trim(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", commentId)
-      .eq("business_id", businessId)
-      .eq("user_id", userId);
+  const { error } = await (supabase.from as any)("task_comments")
+    .update({
+      comment_text: commentText.trim(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", commentId)
+    .eq("business_id", businessId)
+    .eq("user_id", userId);
 
-    if (error) throw error;
-    return true;
-  } catch (err) {
-    console.error("Error updating task comment:", err);
-    return false;
+  if (error) {
+    console.error("[updateTaskComment] error:", error);
+    throw new Error(error.message || JSON.stringify(error));
   }
+  return true;
 }
 
 export async function deleteTaskComment(
@@ -179,19 +187,17 @@ export async function deleteTaskComment(
   businessId: string,
   userId: string
 ): Promise<boolean> {
-  try {
-    const { error } = await (supabase.from as any)("task_comments")
-      .delete()
-      .eq("id", commentId)
-      .eq("business_id", businessId)
-      .eq("user_id", userId);
+  const { error } = await (supabase.from as any)("task_comments")
+    .delete()
+    .eq("id", commentId)
+    .eq("business_id", businessId)
+    .eq("user_id", userId);
 
-    if (error) throw error;
-    return true;
-  } catch (err) {
-    console.error("Error deleting task comment:", err);
-    return false;
+  if (error) {
+    console.error("[deleteTaskComment] error:", error);
+    throw new Error(error.message || JSON.stringify(error));
   }
+  return true;
 }
 
 export async function toggleCommentReaction(params: {
@@ -202,31 +208,39 @@ export async function toggleCommentReaction(params: {
 }): Promise<boolean> {
   const { commentId, businessId, userId, emoji } = params;
 
-  try {
-    // Check if reaction exists
-    const { data: existing } = await (supabase.from as any)("task_comment_reactions")
-      .select("id")
-      .eq("comment_id", commentId)
-      .eq("user_id", userId)
-      .eq("emoji", emoji)
-      .maybeSingle();
+  // Check if reaction exists
+  const { data: existing, error: selectErr } = await (supabase.from as any)("task_comment_reactions")
+    .select("id")
+    .eq("comment_id", commentId)
+    .eq("user_id", userId)
+    .eq("emoji", emoji)
+    .maybeSingle();
 
-    if (existing) {
-      await (supabase.from as any)("task_comment_reactions")
-        .delete()
-        .eq("id", existing.id);
-    } else {
-      await (supabase.from as any)("task_comment_reactions").insert({
-        comment_id: commentId,
-        business_id: businessId,
-        user_id: userId,
-        emoji,
-      });
-    }
-
-    return true;
-  } catch (err) {
-    console.error("Error toggling reaction:", err);
-    return false;
+  if (selectErr) {
+    console.error("[toggleCommentReaction] select error:", selectErr);
+    throw new Error(selectErr.message || JSON.stringify(selectErr));
   }
+
+  if (existing) {
+    const { error: delErr } = await (supabase.from as any)("task_comment_reactions")
+      .delete()
+      .eq("id", existing.id);
+    if (delErr) {
+      console.error("[toggleCommentReaction] delete error:", delErr);
+      throw new Error(delErr.message || JSON.stringify(delErr));
+    }
+  } else {
+    const { error: insErr } = await (supabase.from as any)("task_comment_reactions").insert({
+      comment_id: commentId,
+      business_id: businessId,
+      user_id: userId,
+      emoji,
+    });
+    if (insErr) {
+      console.error("[toggleCommentReaction] insert error:", insErr);
+      throw new Error(insErr.message || JSON.stringify(insErr));
+    }
+  }
+
+  return true;
 }

@@ -247,6 +247,7 @@ function CampaignModal({
   const [businessValue, setBusinessValue] = useState("");
   const [deadline, setDeadline] = useState("");
   const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (campaignToEdit) {
@@ -266,6 +267,7 @@ function CampaignModal({
       setBusinessValue("");
       setDeadline("");
     }
+    setErrorMsg(null);
   }, [campaignToEdit, isOpen]);
 
   if (!isOpen) return null;
@@ -274,6 +276,7 @@ function CampaignModal({
     e.preventDefault();
     if (!name.trim()) return;
     setSaving(true);
+    setErrorMsg(null);
     try {
       await onSave({
         name: name.trim(),
@@ -285,8 +288,10 @@ function CampaignModal({
         deadline: deadline || null,
       });
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to save campaign:", err);
+      const msg = err?.message || err?.details || String(err);
+      setErrorMsg(`Database Error: ${msg}`);
     } finally {
       setSaving(false);
     }
@@ -305,6 +310,11 @@ function CampaignModal({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {errorMsg && (
+            <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-[12px] font-semibold text-destructive">
+              {errorMsg}
+            </div>
+          )}
           <div>
             <label className="mb-1 block text-[12px] font-semibold text-foreground">Campaign Name *</label>
             <input
@@ -449,8 +459,12 @@ export function Campaigns() {
   const handleArchiveCampaign = async (c: CalculatedCampaign) => {
     if (!businessId) return;
     if (!confirm(`Mark campaign "${c.name}" as completed?`)) return;
-    await archiveCampaign(c.id, businessId, "completed");
-    loadData();
+    try {
+      await archiveCampaign(c.id, businessId, "completed");
+      loadData();
+    } catch (err: any) {
+      alert(`Failed to complete campaign: ${err.message || String(err)}`);
+    }
   };
 
   const active = overview?.activeCampaigns ?? [];

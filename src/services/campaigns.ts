@@ -166,7 +166,10 @@ export async function createCampaign(
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    console.error("[createCampaign] Supabase insert error:", error);
+    throw new Error(error.message || JSON.stringify(error));
+  }
 
   await logActivity({
     business_id: businessId,
@@ -174,7 +177,7 @@ export async function createCampaign(
     entity_id: created.id,
     action: "created",
     description: `Created campaign: ${created.name}`,
-  });
+  }).catch((err) => console.warn("[createCampaign] logActivity failed:", err));
 
   return created;
 }
@@ -194,7 +197,10 @@ export async function updateCampaign(
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    console.error("[updateCampaign] Supabase update error:", error);
+    throw new Error(error.message || JSON.stringify(error));
+  }
 
   await logActivity({
     business_id: businessId,
@@ -202,7 +208,7 @@ export async function updateCampaign(
     entity_id: campaignId,
     action: "updated",
     description: `Updated campaign: ${updated.name}`,
-  });
+  }).catch((err) => console.warn("[updateCampaign] logActivity failed:", err));
 
   return updated;
 }
@@ -224,7 +230,7 @@ export async function archiveCampaign(
 
   if (error) {
     console.error("Error archiving campaign:", error);
-    return false;
+    throw new Error(error.message || JSON.stringify(error));
   }
 
   await logActivity({
@@ -233,7 +239,7 @@ export async function archiveCampaign(
     entity_id: campaignId,
     action: status === "completed" ? "completed" : "archived",
     description: `${status === "completed" ? "Completed" : "Archived"} campaign #${campaignId.slice(0, 8)}`,
-  });
+  }).catch((err) => console.warn("[archiveCampaign] logActivity failed:", err));
 
   return true;
 }
