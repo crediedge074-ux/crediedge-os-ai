@@ -4,6 +4,7 @@ import { Plus, Sparkles, Clock, CircleCheck as CheckCircle2, Circle, ListFilter 
 import { AppLayout } from "@/components/ui/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Campaigns } from "@/components/tasks/Campaigns";
+import { HierarchicalDetailModal } from "@/components/tasks/HierarchicalDrillDown";
 import { useAuthContext } from "@/contexts/AuthContext";
 import {
   getTasks,
@@ -871,6 +872,7 @@ function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [members, setMembers] = useState<WorkspaceMemberInfo[]>([]);
   const [missions, setMissions] = useState<CalculatedMission[]>([]);
+  const [campaigns, setCampaigns] = useState<CalculatedCampaign[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -878,6 +880,11 @@ function TasksPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [expandedCommentTaskId, setExpandedCommentTaskId] = useState<string | null>(null);
+
+  // Drill-Down Modal State
+  const [selectedCampaign, setSelectedCampaign] = useState<CalculatedCampaign | null>(null);
+  const [selectedMission, setSelectedMission] = useState<CalculatedMission | null>(null);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   const loadData = () => {
     if (!businessId) {
@@ -889,11 +896,13 @@ function TasksPage() {
       getTasks(businessId),
       fetchWorkspaceMembers(businessId),
       fetchMissions(businessId),
+      fetchCampaigns(businessId),
     ])
-      .then(([taskList, memberList, missionList]) => {
+      .then(([taskList, memberList, missionList, cOverview]) => {
         setTasks(taskList);
         setMembers(memberList);
         setMissions(missionList);
+        setCampaigns(cOverview.activeCampaigns);
       })
       .catch((err) => {
         console.error("Failed to load tasks data:", err);
@@ -1171,6 +1180,45 @@ function TasksPage() {
         members={members}
         missions={missions}
       />
+
+      {/* Drill-Down Hierarchy Modal */}
+      {businessId && (selectedCampaign || selectedMission || selectedTask) && (
+        <HierarchicalDetailModal
+          businessId={businessId}
+          campaign={selectedCampaign}
+          mission={selectedMission}
+          task={selectedTask}
+          allCampaigns={campaigns}
+          allMissions={missions}
+          allTasks={tasks}
+          members={members}
+          onClose={() => {
+            setSelectedCampaign(null);
+            setSelectedMission(null);
+            setSelectedTask(null);
+          }}
+          onRefresh={loadData}
+          onSelectCampaign={(c) => {
+            setSelectedCampaign(c);
+            setSelectedMission(null);
+            setSelectedTask(null);
+          }}
+          onSelectMission={(m) => {
+            setSelectedMission(m);
+            setSelectedTask(null);
+          }}
+          onSelectTask={(t) => {
+            setSelectedTask(t);
+          }}
+          onCreateTaskInMission={(missionId) => {
+            setEditingTask(null);
+            setIsModalOpen(true);
+          }}
+          onCreateMissionInCampaign={(campaignId) => {
+            // Handled via Missions Section or direct modal
+          }}
+        />
+      )}
 
       <div className="h-8" />
     </AppLayout>

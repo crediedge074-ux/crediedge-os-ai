@@ -23,6 +23,37 @@ export async function getTasks(businessId: string): Promise<Task[]> {
   return data ?? [];
 }
 
+export async function moveTaskMission(
+  taskId: string,
+  businessId: string,
+  newMissionId: string | null
+): Promise<Task> {
+  const { data, error } = await (supabase.from("tasks") as any)
+    .update({
+      mission_id: newMissionId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", taskId)
+    .eq("business_id", businessId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("[moveTaskMission] error:", error);
+    throw new Error(error.message || JSON.stringify(error));
+  }
+
+  await logActivity({
+    business_id: businessId,
+    entity_type: "task",
+    entity_id: taskId,
+    action: "updated",
+    description: newMissionId ? `Assigned task to mission` : `Removed task from mission`,
+  }).catch((err) => console.warn("[moveTaskMission] logActivity failed:", err));
+
+  return data;
+}
+
 export async function createTask(insert: TaskInsert): Promise<Task> {
   const { data, error } = await supabase
     .from("tasks")

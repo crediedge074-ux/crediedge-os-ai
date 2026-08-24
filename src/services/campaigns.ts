@@ -22,6 +22,10 @@ export interface StoredCampaign {
   target_description: string | null;
   target_value: number;
   business_value: number;
+  actual_result?: number;
+  owner_id?: string | null;
+  priority?: string;
+  start_date?: string | null;
   deadline: string | null;
   status: CampaignStatus;
   health: CampaignHealth;

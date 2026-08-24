@@ -10,6 +10,10 @@ export interface StoredMission {
   title: string;
   description: string | null;
   status: MissionStatus;
+  owner_id?: string | null;
+  priority?: string;
+  target_date?: string | null;
+  actual_result?: number;
   start_date: string | null;
   completion_date: string | null;
   created_at: string;
