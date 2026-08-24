@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { logActivity } from "./activity";
+import { createWorkspaceNotification } from "./notifications";
 
 export interface CommentReaction {
   id: string;
@@ -145,6 +146,43 @@ export async function createTaskComment(params: {
     description: `Added comment on task #${taskId.slice(0, 8)}`,
   }).catch((err) => console.warn("[createTaskComment] logActivity failed:", err));
 
+  // Trigger workspace notification for task owner or parent commenter
+  if (parentCommentId) {
+    const { data: parent } = await (supabase.from as any)("task_comments")
+      .select("user_id")
+      .eq("id", parentCommentId)
+      .maybeSingle();
+
+    if (parent?.user_id && parent.user_id !== userId) {
+      await createWorkspaceNotification({
+        businessId,
+        userId: parent.user_id,
+        type: "comment_reply",
+        title: "New Comment Reply",
+        message: `Someone replied to your comment on task`,
+        actionUrl: `/tasks?taskId=${taskId}`,
+      });
+    }
+  } else {
+    const { data: taskData } = await supabase
+      .from("tasks")
+      .select("assigned_to, created_by")
+      .eq("id", taskId)
+      .maybeSingle();
+
+    const notifyUserId = taskData?.assigned_to || taskData?.created_by;
+    if (notifyUserId && notifyUserId !== userId) {
+      await createWorkspaceNotification({
+        businessId,
+        userId: notifyUserId,
+        type: "task_comment",
+        title: "New Task Comment",
+        message: `New comment posted on task`,
+        actionUrl: `/tasks?taskId=${taskId}`,
+      });
+    }
+  }
+
   return {
     id: created.id,
     businessId: created.business_id,
@@ -239,6 +277,23 @@ export async function toggleCommentReaction(params: {
     if (insErr) {
       console.error("[toggleCommentReaction] insert error:", insErr);
       throw new Error(insErr.message || JSON.stringify(insErr));
+    }
+
+    // Trigger notification on reaction
+    const { data: targetComment } = await (supabase.from as any)("task_comments")
+      .select("user_id, task_id")
+      .eq("id", commentId)
+      .maybeSingle();
+
+    if (targetComment?.user_id && targetComment.user_id !== userId) {
+      await createWorkspaceNotification({
+        businessId,
+        userId: targetComment.user_id,
+        type: "comment_reaction",
+        title: "New Comment Reaction",
+        message: `Someone reacted ${emoji} to your comment`,
+        actionUrl: `/tasks?taskId=${targetComment.task_id}`,
+      });
     }
   }
 

@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import type { Task, TaskInsert, TaskUpdate } from "@/lib/database.types";
 import { logActivity } from "./activity";
+import { createWorkspaceNotification } from "./notifications";
 
 export interface WorkspaceMemberInfo {
   userId: string;
@@ -45,6 +46,17 @@ export async function createTask(insert: TaskInsert): Promise<Task> {
     description: `Created task: ${data.title}`,
   });
 
+  if (data.assigned_to) {
+    await createWorkspaceNotification({
+      businessId: data.business_id,
+      userId: data.assigned_to,
+      type: "task_assigned",
+      title: "New Task Assigned",
+      message: `You were assigned task: "${data.title}"`,
+      actionUrl: `/tasks?taskId=${data.id}`,
+    });
+  }
+
   return data;
 }
 
@@ -66,6 +78,17 @@ export async function updateTask(id: string, businessId: string, updates: TaskUp
     action: "updated",
     description: `Updated task: ${data.title}`,
   });
+
+  if (updates.assigned_to) {
+    await createWorkspaceNotification({
+      businessId,
+      userId: updates.assigned_to,
+      type: "task_assigned",
+      title: "Task Reassigned",
+      message: `You were assigned task: "${data.title}"`,
+      actionUrl: `/tasks?taskId=${data.id}`,
+    });
+  }
 
   return data;
 }
@@ -119,6 +142,17 @@ export async function toggleTaskCompletion(id: string, businessId: string, curre
     action: newStatus === "completed" ? "completed" : "reopened",
     description: `${newStatus === "completed" ? "Completed" : "Reopened"} task: ${title}`,
   });
+
+  if (newStatus === "completed") {
+    await createWorkspaceNotification({
+      businessId,
+      userId: data.assigned_to || data.created_by,
+      type: "task_completed",
+      title: "Task Completed",
+      message: `Task completed: "${title}"`,
+      actionUrl: `/tasks?taskId=${data.id}`,
+    });
+  }
 
   return data;
 }

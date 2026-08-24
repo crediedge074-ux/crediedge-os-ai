@@ -362,38 +362,273 @@ function TaskCommentsSection({
 
 // ─── Restored Task Page Sections ─────────────────────────────────────────────
 
-function MissionsSection() {
-  const missions = [
-    { id: "m1", title: "Reach 250 Google Reviews", campaign: "Become Bromley's Highest Rated Garage", progress: 82, tasks: 12, completed: 10 },
-    { id: "m2", title: "Reduce Response Time to < 1hr", campaign: "Become Bromley's Highest Rated Garage", progress: 65, tasks: 8, completed: 5 },
-    { id: "m3", title: "Optimise Service Pricing", campaign: "£30k Monthly Revenue Target", progress: 90, tasks: 5, completed: 4 },
-    { id: "m4", title: "Automate Invoice Sending", campaign: "Automate 80% of Admin", progress: 70, tasks: 4, completed: 3 },
-  ];
+import {
+  fetchMissions,
+  createMission,
+  updateMission,
+  archiveMission,
+  type CalculatedMission,
+} from "@/services/missions";
+import { fetchCampaigns, type CalculatedCampaign } from "@/services/campaigns";
+
+function MissionsSection({
+  businessId,
+  onMissionClick,
+}: {
+  businessId: string | undefined;
+  onMissionClick?: (missionId: string) => void;
+}) {
+  const [missions, setMissions] = useState<CalculatedMission[]>([]);
+  const [campaigns, setCampaigns] = useState<CalculatedCampaign[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingMission, setEditingMission] = useState<CalculatedMission | null>(null);
+
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [campaignId, setCampaignId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const loadData = () => {
+    if (!businessId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    Promise.all([
+      fetchMissions(businessId),
+      fetchCampaigns(businessId),
+    ])
+      .then(([mList, cOverview]) => {
+        setMissions(mList);
+        setCampaigns(cOverview.activeCampaigns);
+      })
+      .catch((err) => console.error("[MissionsSection] load error:", err))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [businessId]);
+
+  const handleOpenModal = (m?: CalculatedMission) => {
+    if (m) {
+      setEditingMission(m);
+      setTitle(m.title);
+      setDescription(m.description || "");
+      setCampaignId(m.campaign_id || "");
+    } else {
+      setEditingMission(null);
+      setTitle("");
+      setDescription("");
+      setCampaignId("");
+    }
+    setErrorMsg(null);
+    setIsModalOpen(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || !businessId) return;
+    setSaving(true);
+    setErrorMsg(null);
+
+    try {
+      if (editingMission) {
+        await updateMission(editingMission.id, businessId, {
+          title: title.trim(),
+          description: description.trim() || null,
+          campaign_id: campaignId || null,
+        });
+      } else {
+        await createMission(businessId, {
+          title: title.trim(),
+          description: description.trim() || null,
+          campaign_id: campaignId || null,
+        });
+      }
+      setIsModalOpen(false);
+      loadData();
+    } catch (err: any) {
+      setErrorMsg(`Failed to save mission: ${err?.message || String(err)}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleArchive = async (m: CalculatedMission) => {
+    if (!businessId) return;
+    if (!confirm(`Mark mission "${m.title}" as completed?`)) return;
+    try {
+      await archiveMission(m.id, businessId, "completed");
+      loadData();
+    } catch (err: any) {
+      alert(`Failed to complete mission: ${err.message || String(err)}`);
+    }
+  };
+
+  const activeMissions = missions.filter((m) => m.status === "active");
 
   return (
-    <div className="rounded-2xl border border-border bg-card shadow-soft">
-      <div className="flex items-center gap-2.5 border-b border-border px-5 py-3.5">
-        <Target className="h-4 w-4 text-foreground/60" strokeWidth={1.75} />
-        <span className="text-[13.5px] font-semibold text-foreground">Active Missions</span>
-        <span className="grid h-5 min-w-5 place-items-center rounded-full bg-secondary px-1 text-[10px] font-bold text-foreground/70">
-          {missions.length}
-        </span>
+    <div className="rounded-2xl border border-border bg-card shadow-soft overflow-hidden">
+      <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
+        <div className="flex items-center gap-2.5">
+          <Target className="h-4 w-4 text-foreground/60" strokeWidth={1.75} />
+          <span className="text-[13.5px] font-semibold text-foreground">Active Workspace Missions</span>
+          <span className="grid h-5 min-w-5 place-items-center rounded-full bg-secondary px-1 text-[10px] font-bold text-foreground/70">
+            {activeMissions.length}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => handleOpenModal()}
+          className="inline-flex items-center gap-1 rounded-lg border border-border bg-secondary/50 px-2.5 py-1 text-[11.5px] font-semibold text-foreground hover:bg-secondary"
+        >
+          <Plus className="h-3 w-3" /> New Mission
+        </button>
       </div>
-      <ul className="divide-y divide-border">
-        {missions.map((m) => (
-          <li key={m.id} className="flex items-center gap-4 px-5 py-3.5 transition-colors duration-150 hover:bg-secondary/40">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <span className="text-[12.5px] font-medium text-foreground truncate">{m.title}</span>
-                <span className="shrink-0 text-[11px] font-bold text-foreground">{m.progress}%</span>
+
+      {loading ? (
+        <div className="p-6 text-center text-xs text-muted-foreground">Loading missions...</div>
+      ) : activeMissions.length === 0 ? (
+        <div className="p-6 text-center text-xs text-muted-foreground">
+          No active missions. Click "New Mission" to link tasks under strategic campaign milestones.
+        </div>
+      ) : (
+        <ul className="divide-y divide-border">
+          {activeMissions.map((m) => (
+            <li key={m.id} className="flex items-center justify-between gap-4 px-5 py-3.5 transition-colors duration-150 hover:bg-secondary/40">
+              <div className="min-w-0 flex-1 cursor-pointer" onClick={() => onMissionClick && onMissionClick(m.id)}>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[12.5px] font-bold text-foreground">{m.title}</span>
+                    {m.campaignName && (
+                      <span className="rounded-md bg-brand/10 px-2 py-0.5 text-[10px] font-semibold text-brand">
+                        {m.campaignName}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[11px] font-extrabold text-foreground">{m.progressPct}%</span>
+                </div>
+
+                <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+                  <div
+                    className="absolute inset-y-0 left-0 rounded-full bg-brand transition-all duration-500"
+                    style={{ width: `${m.progressPct}%` }}
+                  />
+                </div>
+
+                <div className="mt-1 flex items-center gap-3 text-[10.5px] text-muted-foreground">
+                  <span>{m.completedTasks} / {m.totalTasks} tasks finished</span>
+                  {m.description && <span className="truncate">• {m.description}</span>}
+                </div>
               </div>
-              <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-secondary">
-                <div className="absolute inset-y-0 left-0 rounded-full bg-brand transition-all duration-700" style={{ width: `${m.progress}%` }} />
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleOpenModal(m)}
+                  title="Edit mission"
+                  className="rounded-lg p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                >
+                  <Edit3 className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleArchive(m)}
+                  title="Complete mission"
+                  className="rounded-lg p-1 text-emerald-600 hover:bg-emerald-50"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                </button>
               </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Create / Edit Mission Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border px-6 py-4">
+              <h3 className="text-[15px] font-bold text-foreground">
+                {editingMission ? "Edit Mission" : "Create New Mission"}
+              </h3>
+              <button type="button" onClick={() => setIsModalOpen(false)} className="rounded-lg p-1 text-muted-foreground hover:bg-secondary">
+                <X className="h-4 w-4" />
+              </button>
             </div>
-          </li>
-        ))}
-      </ul>
+
+            <form onSubmit={handleSave} className="p-6 space-y-4">
+              {errorMsg && (
+                <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-[12px] font-semibold text-destructive">
+                  {errorMsg}
+                </div>
+              )}
+
+              <div>
+                <label className="mb-1 block text-[12px] font-semibold text-foreground">Mission Title *</label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g. Reach 250 Google Reviews"
+                  required
+                  className="h-10 w-full rounded-xl border border-border bg-secondary/30 px-3.5 text-[13px] text-foreground focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[12px] font-semibold text-foreground">Linked Campaign</label>
+                <select
+                  value={campaignId}
+                  onChange={(e) => setCampaignId(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-border bg-secondary/30 px-3 text-[13px] text-foreground focus:outline-none"
+                >
+                  <option value="">No Campaign (Standalone Mission)</option>
+                  {campaigns.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[12px] font-semibold text-foreground">Description</label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Key deliverables and milestone objectives..."
+                  rows={2}
+                  className="w-full rounded-xl border border-border bg-secondary/30 p-3 text-[13px] text-foreground focus:outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="rounded-xl border border-border px-4 py-2 text-[12.5px] font-semibold text-foreground hover:bg-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="rounded-xl bg-brand px-4 py-2 text-[12.5px] font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                >
+                  {saving ? "Saving..." : editingMission ? "Update Mission" : "Create Mission"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -440,19 +675,23 @@ function TaskModal({
   onSave,
   taskToEdit,
   members,
+  missions = [],
 }: {
   isOpen: boolean;
   onClose: () => void;
   onSave: (taskData: TaskInsert) => Promise<void>;
   taskToEdit?: Task | null;
   members: WorkspaceMemberInfo[];
+  missions?: CalculatedMission[];
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("medium");
   const [dueDate, setDueDate] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
+  const [missionId, setMissionId] = useState("");
   const [saving, setSaving] = useState(false);
+  const [taskError, setTaskError] = useState<string | null>(null);
 
   useEffect(() => {
     if (taskToEdit) {
@@ -461,13 +700,16 @@ function TaskModal({
       setPriority((taskToEdit.priority as Priority) || "medium");
       setDueDate(taskToEdit.due_date || "");
       setAssignedTo(taskToEdit.assigned_to || "");
+      setMissionId((taskToEdit as any).mission_id || "");
     } else {
       setTitle("");
       setDescription("");
       setPriority("medium");
       setDueDate("");
       setAssignedTo("");
+      setMissionId("");
     }
+    setTaskError(null);
   }, [taskToEdit, isOpen]);
 
   if (!isOpen) return null;
@@ -476,6 +718,7 @@ function TaskModal({
     e.preventDefault();
     if (!title.trim()) return;
     setSaving(true);
+    setTaskError(null);
     try {
       await onSave({
         title: title.trim(),
@@ -484,10 +727,12 @@ function TaskModal({
         due_date: dueDate || null,
         assigned_to: assignedTo || null,
         status: taskToEdit ? taskToEdit.status : "todo",
-      } as TaskInsert);
+        mission_id: missionId || null,
+      } as any);
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to save task:", err);
+      setTaskError(`Failed to save task: ${err?.message || String(err)}`);
     } finally {
       setSaving(false);
     }
@@ -506,6 +751,11 @@ function TaskModal({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {taskError && (
+            <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-[12px] font-semibold text-destructive">
+              {taskError}
+            </div>
+          )}
           <div>
             <label className="mb-1 block text-[12px] font-semibold text-foreground">Task Title *</label>
             <input
@@ -555,20 +805,38 @@ function TaskModal({
             </div>
           </div>
 
-          <div>
-            <label className="mb-1 block text-[12px] font-semibold text-foreground">Assignee</label>
-            <select
-              value={assignedTo}
-              onChange={(e) => setAssignedTo(e.target.value)}
-              className="h-10 w-full rounded-xl border border-border bg-secondary/30 px-3 text-[13px] text-foreground focus:outline-none"
-            >
-              <option value="">Unassigned</option>
-              {members.map((m) => (
-                <option key={m.userId} value={m.userId}>
-                  {m.fullName} ({m.role})
-                </option>
-              ))}
-            </select>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1 block text-[12px] font-semibold text-foreground">Assignee</label>
+              <select
+                value={assignedTo}
+                onChange={(e) => setAssignedTo(e.target.value)}
+                className="h-10 w-full rounded-xl border border-border bg-secondary/30 px-3 text-[13px] text-foreground focus:outline-none"
+              >
+                <option value="">Unassigned</option>
+                {members.map((m) => (
+                  <option key={m.userId} value={m.userId}>
+                    {m.fullName} ({m.role})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-[12px] font-semibold text-foreground">Linked Mission</label>
+              <select
+                value={missionId}
+                onChange={(e) => setMissionId(e.target.value)}
+                className="h-10 w-full rounded-xl border border-border bg-secondary/30 px-3 text-[13px] text-foreground focus:outline-none"
+              >
+                <option value="">No Mission Link</option>
+                {missions.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.title}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
@@ -602,9 +870,11 @@ function TasksPage() {
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [members, setMembers] = useState<WorkspaceMemberInfo[]>([]);
+  const [missions, setMissions] = useState<CalculatedMission[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [selectedMissionFilter, setSelectedMissionFilter] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [expandedCommentTaskId, setExpandedCommentTaskId] = useState<string | null>(null);
@@ -618,10 +888,12 @@ function TasksPage() {
     Promise.all([
       getTasks(businessId),
       fetchWorkspaceMembers(businessId),
+      fetchMissions(businessId),
     ])
-      .then(([taskList, memberList]) => {
+      .then(([taskList, memberList, missionList]) => {
         setTasks(taskList);
         setMembers(memberList);
+        setMissions(missionList);
       })
       .catch((err) => {
         console.error("Failed to load tasks data:", err);
@@ -713,7 +985,10 @@ function TasksPage() {
           <h2 className="text-[13px] font-semibold tracking-tight text-foreground">Missions</h2>
           <div className="h-px flex-1 bg-border" />
         </div>
-        <MissionsSection />
+        <MissionsSection
+          businessId={businessId}
+          onMissionClick={(mId) => setSelectedMissionFilter(selectedMissionFilter === mId ? null : mId)}
+        />
       </div>
 
       {/* AI Priority Queue */}
@@ -894,6 +1169,7 @@ function TasksPage() {
         onSave={handleSaveTask}
         taskToEdit={editingTask}
         members={members}
+        missions={missions}
       />
 
       <div className="h-8" />

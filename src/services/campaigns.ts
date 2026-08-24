@@ -56,24 +56,35 @@ export async function fetchCampaigns(businessId: string | undefined): Promise<Ca
   }
 
   try {
-    const [campaignsRes, tasksRes] = await Promise.all([
+    const [campaignsRes, missionsRes, tasksRes] = await Promise.all([
       (supabase.from as any)("campaigns").select("*").eq("business_id", businessId).order("created_at", { ascending: false }),
-      supabase.from("tasks").select("id, campaign_id, status").eq("business_id", businessId),
+      (supabase.from as any)("missions").select("id, campaign_id").eq("business_id", businessId),
+      supabase.from("tasks").select("id, campaign_id, mission_id, status").eq("business_id", businessId),
     ]);
 
     const rawCampaigns = ((campaignsRes.data || []) as StoredCampaign[]);
+    const missions = missionsRes.data || [];
     const tasks = tasksRes.data || [];
+
+    // Map mission_id to campaign_id
+    const missionToCampaignMap: Record<string, string> = {};
+    missions.forEach((m: any) => {
+      if (m.campaign_id) {
+        missionToCampaignMap[m.id] = m.campaign_id;
+      }
+    });
 
     // Group task counts per campaign
     const taskCountMap: Record<string, { total: number; completed: number }> = {};
     tasks.forEach((t: any) => {
-      if (t.campaign_id) {
-        if (!taskCountMap[t.campaign_id]) {
-          taskCountMap[t.campaign_id] = { total: 0, completed: 0 };
+      const targetCampaignId = t.campaign_id || (t.mission_id ? missionToCampaignMap[t.mission_id] : null);
+      if (targetCampaignId) {
+        if (!taskCountMap[targetCampaignId]) {
+          taskCountMap[targetCampaignId] = { total: 0, completed: 0 };
         }
-        taskCountMap[t.campaign_id].total++;
+        taskCountMap[targetCampaignId].total++;
         if (t.status === "completed") {
-          taskCountMap[t.campaign_id].completed++;
+          taskCountMap[targetCampaignId].completed++;
         }
       }
     });

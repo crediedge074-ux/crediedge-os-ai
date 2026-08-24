@@ -69,3 +69,33 @@ export async function markNotificationRead(id: string, userId?: string): Promise
     console.error("Error marking notification read:", error);
   }
 }
+
+export async function createWorkspaceNotification(params: {
+  businessId: string;
+  userId?: string | null;
+  type: string;
+  title: string;
+  message: string;
+  actionUrl?: string | null;
+}): Promise<void> {
+  const { businessId, userId, type, title, message, actionUrl } = params;
+  if (!businessId) return;
+
+  try {
+    const { error } = await supabase.from("notifications").insert({
+      business_id: businessId,
+      user_id: userId || null,
+      type,
+      title,
+      message,
+      action_url: actionUrl || null,
+      is_read: false,
+    });
+
+    if (error) {
+      console.error("[createWorkspaceNotification] error:", error);
+    }
+  } catch (err) {
+    console.error("[createWorkspaceNotification] failed:", err);
+  }
+}
