@@ -29,6 +29,9 @@ export interface StoredCampaign {
   deadline: string | null;
   status: CampaignStatus;
   health: CampaignHealth;
+  customer_id?: string | null;
+  job_id?: string | null;
+  invoice_id?: string | null;
   created_at: string;
   updated_at: string;
   completed_at: string | null;

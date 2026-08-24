@@ -16,6 +16,9 @@ export interface StoredMission {
   actual_result?: number;
   start_date: string | null;
   completion_date: string | null;
+  customer_id?: string | null;
+  job_id?: string | null;
+  invoice_id?: string | null;
   created_at: string;
   updated_at: string;
 }

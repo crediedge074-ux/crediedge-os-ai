@@ -4,7 +4,7 @@ import { Plus, Sparkles, Clock, CircleCheck as CheckCircle2, Circle, ListFilter 
 import { AppLayout } from "@/components/ui/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Campaigns } from "@/components/tasks/Campaigns";
-import { HierarchicalDetailModal } from "@/components/tasks/HierarchicalDrillDown";
+import { ExecutionSystemWorkspace } from "@/components/tasks/ExecutionSystemWorkspace";
 import { useAuthContext } from "@/contexts/AuthContext";
 import {
   getTasks,
@@ -1201,9 +1201,9 @@ function TasksPage() {
         defaultMissionId={createTaskForMissionId}
       />
 
-      {/* Drill-Down Hierarchy Modal */}
+      {/* Execution System Workspace Modal */}
       {businessId && (selectedCampaign || selectedMission || selectedTask) && (
-        <HierarchicalDetailModal
+        <ExecutionSystemWorkspace
           businessId={businessId}
           campaign={selectedCampaign}
           mission={selectedMission}
@@ -1234,9 +1234,6 @@ function TasksPage() {
             setCreateTaskForMissionId(missionId);
             setEditingTask(null);
             setIsModalOpen(true);
-          }}
-          onCreateMissionInCampaign={(campaignId) => {
-            // Handled via Missions Section or direct modal
           }}
         />
       )}
