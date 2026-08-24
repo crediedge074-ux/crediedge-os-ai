@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Target, TrendingUp, Globe, Zap, Users, Settings2, ChevronDown, ChevronUp, ArrowRight, CircleCheck as CheckCircle2, Clock, PoundSterling, ChartBar as BarChart3, Trophy, Flame, CalendarDays, Plus, X, Edit3, Archive } from "lucide-react";
+import { Target, TrendingUp, Globe, Zap, Users, Settings2, ChevronDown, ChevronUp, ArrowRight, CircleCheck as CheckCircle2, Clock, PoundSterling, ChartBar as BarChart3, Trophy, Flame, Plus, X, Edit3, Archive } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuthContext } from "@/contexts/AuthContext";
 import {
@@ -172,6 +172,7 @@ function CampaignCard({
 
       <div className="flex items-center justify-between border-t border-border px-5 py-2.5 bg-secondary/20">
         <button
+          type="button"
           onClick={() => setExpanded((v) => !v)}
           className="flex items-center gap-1 text-[11.5px] font-semibold text-brand hover:underline"
         >
@@ -181,6 +182,7 @@ function CampaignCard({
 
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={() => onEdit(campaign)}
             title="Edit Campaign"
             className="flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-foreground hover:bg-secondary"
@@ -188,6 +190,7 @@ function CampaignCard({
             <Edit3 className="h-3 w-3" /> Edit
           </button>
           <button
+            type="button"
             onClick={() => onArchive(campaign)}
             title="Complete / Archive Campaign"
             className="flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50"
@@ -296,7 +299,7 @@ function CampaignModal({
           <h3 className="text-[15px] font-bold text-foreground">
             {campaignToEdit ? "Edit Campaign" : "Create New Campaign"}
           </h3>
-          <button onClick={onClose} className="rounded-lg p-1 text-muted-foreground hover:bg-secondary hover:text-foreground">
+          <button type="button" onClick={onClose} className="rounded-lg p-1 text-muted-foreground hover:bg-secondary hover:text-foreground">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -480,6 +483,7 @@ export function Campaigns() {
           </div>
 
           <button
+            type="button"
             onClick={() => {
               setEditingCampaign(null);
               setIsModalOpen(true);
@@ -501,6 +505,7 @@ export function Campaigns() {
             No campaigns currently active for your business workspace. Click "New Campaign" to set your first strategic objective.
           </p>
           <button
+            type="button"
             onClick={() => {
               setEditingCampaign(null);
               setIsModalOpen(true);

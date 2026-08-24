@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { Plus, Sparkles, Clock, CircleCheck as CheckCircle2, Circle, ListFilter as Filter, ChevronRight, Zap, Trash2, Edit3, User, AlertCircle, X, Check } from "lucide-react";
+import { Plus, Sparkles, Clock, CircleCheck as CheckCircle2, Circle, ListFilter as Filter, ChevronRight, Zap, Trash2, Edit3, User, X, Check, MessageSquare, Heart, ThumbsUp, Send, Target, PoundSterling, History, Trophy, Flame } from "lucide-react";
 import { AppLayout } from "@/components/ui/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Campaigns } from "@/components/tasks/Campaigns";
@@ -14,6 +14,14 @@ import {
   fetchWorkspaceMembers,
   type WorkspaceMemberInfo,
 } from "@/services/tasks";
+import {
+  fetchTaskComments,
+  createTaskComment,
+  updateTaskComment,
+  deleteTaskComment,
+  toggleCommentReaction,
+  type TaskComment,
+} from "@/services/comments";
 import type { Task, TaskInsert } from "@/lib/database.types";
 
 export const Route = createFileRoute("/tasks")({
@@ -72,7 +80,327 @@ function TodaysFocus({ pendingCount }: { pendingCount: number }) {
   );
 }
 
-// ─── Task Modal (Create & Edit) ────────────────────────────────────────────────
+// ─── Task Comments Component ──────────────────────────────────────────────────
+
+function TaskCommentsSection({
+  taskId,
+  businessId,
+  currentUserId,
+}: {
+  taskId: string;
+  businessId: string;
+  currentUserId?: string | null;
+}) {
+  const [comments, setComments] = useState<TaskComment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newCommentText, setNewCommentText] = useState("");
+  const [replyingToId, setReplyingToId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+
+  const loadComments = () => {
+    setLoading(true);
+    fetchTaskComments(taskId, businessId)
+      .then((data) => setComments(data))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadComments();
+  }, [taskId, businessId]);
+
+  const handleAddComment = async (parentCommentId?: string | null) => {
+    const text = parentCommentId ? replyText : newCommentText;
+    if (!text.trim()) return;
+
+    await createTaskComment({
+      businessId,
+      taskId,
+      userId: currentUserId,
+      commentText: text,
+      parentCommentId,
+    });
+
+    if (parentCommentId) {
+      setReplyText("");
+      setReplyingToId(null);
+    } else {
+      setNewCommentText("");
+    }
+    loadComments();
+  };
+
+  const handleEdit = async (commentId: string) => {
+    if (!editText.trim() || !currentUserId) return;
+    await updateTaskComment(commentId, businessId, currentUserId, editText);
+    setEditingId(null);
+    setEditText("");
+    loadComments();
+  };
+
+  const handleDelete = async (commentId: string) => {
+    if (!currentUserId || !confirm("Delete this comment?")) return;
+    await deleteTaskComment(commentId, businessId, currentUserId);
+    loadComments();
+  };
+
+  const handleReaction = async (commentId: string, emoji: string) => {
+    if (!currentUserId) return;
+    await toggleCommentReaction({ commentId, businessId, userId: currentUserId, emoji });
+    loadComments();
+  };
+
+  const renderComment = (comment: TaskComment, isReply = false) => {
+    const isOwner = comment.userId === currentUserId;
+    const dateStr = new Date(comment.createdAt).toLocaleString("en-GB", {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    return (
+      <div key={comment.id} className={`group space-y-2 ${isReply ? "ml-8 pt-2 border-l-2 border-border pl-3" : "py-3 border-b border-border/60"}`}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="grid h-6 w-6 place-items-center rounded-full bg-brand/10 text-[10px] font-bold text-brand">
+              {comment.commenterName.charAt(0).toUpperCase()}
+            </div>
+            <span className="text-[12px] font-bold text-foreground">{comment.commenterName}</span>
+            <span className="text-[10px] text-muted-foreground">{dateStr}</span>
+          </div>
+
+          {isOwner && (
+            <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingId(comment.id);
+                  setEditText(comment.commentText);
+                }}
+                className="text-[10.5px] font-semibold text-muted-foreground hover:text-foreground"
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDelete(comment.id)}
+                className="text-[10.5px] font-semibold text-destructive hover:underline"
+              >
+                Delete
+              </button>
+            </div>
+          )}
+        </div>
+
+        {editingId === comment.id ? (
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              className="h-8 flex-1 rounded-lg border border-border bg-secondary/30 px-3 text-[12px] text-foreground"
+            />
+            <button
+              type="button"
+              onClick={() => handleEdit(comment.id)}
+              className="rounded-lg bg-brand px-3 py-1 text-[11px] font-semibold text-white"
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditingId(null)}
+              className="rounded-lg border border-border px-3 py-1 text-[11px] font-semibold text-muted-foreground"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <p className="text-[12.5px] text-foreground/90 leading-relaxed">{comment.commentText}</p>
+        )}
+
+        {/* Reaction Bar & Reply Link */}
+        <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-muted-foreground">
+          <button
+            type="button"
+            onClick={() => handleReaction(comment.id, "👍")}
+            className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 border ${
+              comment.reactions.some((r) => r.emoji === "👍" && r.userId === currentUserId)
+                ? "border-brand bg-brand/10 text-brand"
+                : "border-border bg-secondary/40 hover:bg-secondary"
+            }`}
+          >
+            <ThumbsUp className="h-3 w-3" />
+            {comment.reactions.filter((r) => r.emoji === "👍").length || ""}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleReaction(comment.id, "❤️")}
+            className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 border ${
+              comment.reactions.some((r) => r.emoji === "❤️" && r.userId === currentUserId)
+                ? "border-destructive bg-destructive/10 text-destructive"
+                : "border-border bg-secondary/40 hover:bg-secondary"
+            }`}
+          >
+            <Heart className="h-3 w-3" />
+            {comment.reactions.filter((r) => r.emoji === "❤️").length || ""}
+          </button>
+
+          {!isReply && (
+            <button
+              type="button"
+              onClick={() => setReplyingToId(replyingToId === comment.id ? null : comment.id)}
+              className="font-semibold text-brand hover:underline ml-2"
+            >
+              Reply
+            </button>
+          )}
+        </div>
+
+        {/* Threaded Reply Form */}
+        {replyingToId === comment.id && (
+          <div className="ml-4 mt-2 flex items-center gap-2">
+            <input
+              type="text"
+              value={replyText}
+              onChange={(e) => setReplyText(e.target.value)}
+              placeholder="Write a reply..."
+              className="h-8 flex-1 rounded-lg border border-border bg-secondary/30 px-3 text-[12px] text-foreground"
+            />
+            <button
+              type="button"
+              onClick={() => handleAddComment(comment.id)}
+              className="inline-flex items-center gap-1 rounded-lg bg-brand px-3 py-1 text-[11px] font-semibold text-white"
+            >
+              <Send className="h-3 w-3" /> Reply
+            </button>
+          </div>
+        )}
+
+        {/* Threaded Replies List */}
+        {comment.replies && comment.replies.length > 0 && (
+          <div className="space-y-2 mt-2">
+            {comment.replies.map((reply) => renderComment(reply, true))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="border-t border-border bg-secondary/20 p-4 space-y-3">
+      <div className="flex items-center gap-2 text-[12.5px] font-bold text-foreground">
+        <MessageSquare className="h-3.5 w-3.5 text-brand" />
+        Task Discussion & Activity Comments
+      </div>
+
+      {loading ? (
+        <div className="text-xs text-muted-foreground">Loading comments...</div>
+      ) : comments.length === 0 ? (
+        <div className="text-xs text-muted-foreground italic">No comments yet. Start the conversation below.</div>
+      ) : (
+        <div className="divide-y divide-border/40">
+          {comments.map((c) => renderComment(c))}
+        </div>
+      )}
+
+      {/* Add New Top-Level Comment Form */}
+      <div className="flex items-center gap-2 pt-2">
+        <input
+          type="text"
+          value={newCommentText}
+          onChange={(e) => setNewCommentText(e.target.value)}
+          placeholder="Add a comment or update note..."
+          className="h-9 flex-1 rounded-xl border border-border bg-card px-3.5 text-[12.5px] text-foreground focus:border-foreground/20 focus:outline-none"
+        />
+        <button
+          type="button"
+          onClick={() => handleAddComment(null)}
+          className="inline-flex items-center gap-1.5 rounded-xl bg-foreground px-3.5 py-2 text-[12px] font-semibold text-background hover:bg-foreground/85"
+        >
+          <Send className="h-3.5 w-3.5" /> Post
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Restored Task Page Sections ─────────────────────────────────────────────
+
+function MissionsSection() {
+  const missions = [
+    { id: "m1", title: "Reach 250 Google Reviews", campaign: "Become Bromley's Highest Rated Garage", progress: 82, tasks: 12, completed: 10 },
+    { id: "m2", title: "Reduce Response Time to < 1hr", campaign: "Become Bromley's Highest Rated Garage", progress: 65, tasks: 8, completed: 5 },
+    { id: "m3", title: "Optimise Service Pricing", campaign: "£30k Monthly Revenue Target", progress: 90, tasks: 5, completed: 4 },
+    { id: "m4", title: "Automate Invoice Sending", campaign: "Automate 80% of Admin", progress: 70, tasks: 4, completed: 3 },
+  ];
+
+  return (
+    <div className="rounded-2xl border border-border bg-card shadow-soft">
+      <div className="flex items-center gap-2.5 border-b border-border px-5 py-3.5">
+        <Target className="h-4 w-4 text-foreground/60" strokeWidth={1.75} />
+        <span className="text-[13.5px] font-semibold text-foreground">Active Missions</span>
+        <span className="grid h-5 min-w-5 place-items-center rounded-full bg-secondary px-1 text-[10px] font-bold text-foreground/70">
+          {missions.length}
+        </span>
+      </div>
+      <ul className="divide-y divide-border">
+        {missions.map((m) => (
+          <li key={m.id} className="flex items-center gap-4 px-5 py-3.5 transition-colors duration-150 hover:bg-secondary/40">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <span className="text-[12.5px] font-medium text-foreground truncate">{m.title}</span>
+                <span className="shrink-0 text-[11px] font-bold text-foreground">{m.progress}%</span>
+              </div>
+              <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+                <div className="absolute inset-y-0 left-0 rounded-full bg-brand transition-all duration-700" style={{ width: `${m.progress}%` }} />
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function AIPriorityQueue({ tasks }: { tasks: Task[] }) {
+  const top3 = tasks.filter((t) => t.status !== "completed").slice(0, 3);
+
+  return (
+    <div className="rounded-2xl border border-border bg-card shadow-soft">
+      <div className="flex items-center gap-2.5 border-b border-border px-5 py-3.5">
+        <Sparkles className="h-3.5 w-3.5 text-brand" strokeWidth={2} />
+        <span className="text-[13.5px] font-semibold text-foreground">AI Priority Queue</span>
+        <span className="ml-auto rounded-md bg-brand/10 px-2 py-0.5 text-[10px] font-semibold text-brand">
+          AI
+        </span>
+      </div>
+      <div className="p-4 space-y-2">
+        <p className="text-[12px] text-muted-foreground mb-3">
+          Complete these priority tasks first for maximum business impact today.
+        </p>
+        {top3.length === 0 ? (
+          <div className="text-[12px] text-muted-foreground italic">No pending tasks in AI queue.</div>
+        ) : (
+          top3.map((t, idx) => (
+            <div key={t.id} className="flex items-center gap-3 rounded-xl bg-secondary/50 px-3.5 py-2.5">
+              <div className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand text-[11px] font-extrabold text-white">
+                {idx + 1}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[12px] font-medium text-foreground truncate">{t.title}</div>
+                <div className="text-[10.5px] text-muted-foreground">Priority: {t.priority}</div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
 
 function TaskModal({
   isOpen,
@@ -140,7 +468,7 @@ function TaskModal({
           <h3 className="text-[15px] font-bold text-foreground">
             {taskToEdit ? "Edit Task" : "Create New Task"}
           </h3>
-          <button onClick={onClose} className="rounded-lg p-1 text-muted-foreground hover:bg-secondary hover:text-foreground">
+          <button type="button" onClick={onClose} className="rounded-lg p-1 text-muted-foreground hover:bg-secondary hover:text-foreground">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -236,8 +564,9 @@ function TaskModal({
 // ─── Main Tasks Page Component ────────────────────────────────────────────────
 
 function TasksPage() {
-  const { membership } = useAuthContext();
+  const { membership, user } = useAuthContext();
   const businessId = membership?.business_id;
+  const currentUserId = user?.id;
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [members, setMembers] = useState<WorkspaceMemberInfo[]>([]);
@@ -246,6 +575,7 @@ function TasksPage() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [expandedCommentTaskId, setExpandedCommentTaskId] = useState<string | null>(null);
 
   const loadData = () => {
     if (!businessId) {
@@ -276,7 +606,6 @@ function TasksPage() {
   const handleToggleCompletion = async (task: Task) => {
     if (!businessId) return;
 
-    // Optimistic toggle
     const isCompleted = task.status === "completed";
     const newStatus = isCompleted ? "todo" : "completed";
     setTasks((prev) =>
@@ -327,7 +656,7 @@ function TasksPage() {
     <AppLayout>
       <PageHeader
         title="Tasks"
-        description="Workspace-scoped task management with real-time assignment, priority levels, and activity audit history."
+        description="Workspace-scoped task management with real-time assignment, priority levels, task comments, and activity audit history."
         crumbs={[{ label: "Tasks" }]}
         action={{
           label: "Add Task",
@@ -346,7 +675,25 @@ function TasksPage() {
         <Campaigns />
       </div>
 
-      {/* Task List Header + Filter Bar */}
+      {/* Missions */}
+      <div className="mb-5">
+        <div className="mb-3 flex items-center gap-2">
+          <h2 className="text-[13px] font-semibold tracking-tight text-foreground">Missions</h2>
+          <div className="h-px flex-1 bg-border" />
+        </div>
+        <MissionsSection />
+      </div>
+
+      {/* AI Priority Queue */}
+      <div className="mb-5">
+        <div className="mb-3 flex items-center gap-2">
+          <h2 className="text-[13px] font-semibold tracking-tight text-foreground">AI Priority Queue</h2>
+          <div className="h-px flex-1 bg-border" />
+        </div>
+        <AIPriorityQueue tasks={tasks} />
+      </div>
+
+      {/* Task Directory Header */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="text-[15px] font-bold text-foreground">Workspace Task Directory</span>
@@ -359,18 +706,21 @@ function TasksPage() {
           <Filter className="h-3.5 w-3.5 text-muted-foreground" />
           <div className="flex rounded-xl border border-border bg-card p-1 text-[11.5px] font-semibold">
             <button
+              type="button"
               onClick={() => setFilterStatus("all")}
               className={`rounded-lg px-3 py-1 transition-colors ${filterStatus === "all" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
             >
               All
             </button>
             <button
+              type="button"
               onClick={() => setFilterStatus("pending")}
               className={`rounded-lg px-3 py-1 transition-colors ${filterStatus === "pending" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
             >
               Pending ({pendingTasks.length})
             </button>
             <button
+              type="button"
               onClick={() => setFilterStatus("completed")}
               className={`rounded-lg px-3 py-1 transition-colors ${filterStatus === "completed" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
             >
@@ -380,7 +730,7 @@ function TasksPage() {
         </div>
       </div>
 
-      {/* Task List Grid */}
+      {/* Task List */}
       {loading ? (
         <div className="p-12 text-center text-xs text-muted-foreground">Loading workspace tasks...</div>
       ) : filteredTasks.length === 0 ? (
@@ -392,6 +742,7 @@ function TasksPage() {
               : "No tasks recorded for your workspace yet. Click 'Add Task' to create your first task."}
           </p>
           <button
+            type="button"
             onClick={() => {
               setEditingTask(null);
               setIsModalOpen(true);
@@ -407,14 +758,16 @@ function TasksPage() {
             const isDone = t.status === "completed";
             const cfg = priorityConfig[t.priority] || priorityConfig.medium;
             const assigneeName = t.assigned_to ? memberMap[t.assigned_to] || "Team Member" : null;
+            const isCommentsExpanded = expandedCommentTaskId === t.id;
 
             return (
               <div
                 key={t.id}
-                className={`group rounded-2xl border border-border bg-card p-4 shadow-soft border-l-4 transition-all duration-200 hover:shadow-card ${cfg.border} ${isDone ? "opacity-60" : ""}`}
+                className={`group rounded-2xl border border-border bg-card shadow-soft border-l-4 transition-all duration-200 hover:shadow-card overflow-hidden ${cfg.border} ${isDone ? "opacity-75" : ""}`}
               >
-                <div className="flex items-start gap-3.5">
+                <div className="p-4 flex items-start gap-3.5">
                   <button
+                    type="button"
                     onClick={() => handleToggleCompletion(t)}
                     title={isDone ? "Reopen task" : "Complete task"}
                     className={`mt-0.5 grid h-[20px] w-[20px] shrink-0 place-items-center rounded-md border transition-all ${
@@ -456,11 +809,19 @@ function TasksPage() {
                           <User className="h-3 w-3" /> {assigneeName}
                         </span>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => setExpandedCommentTaskId(isCommentsExpanded ? null : t.id)}
+                        className="flex items-center gap-1 font-semibold text-brand hover:underline"
+                      >
+                        <MessageSquare className="h-3 w-3" /> Comments & Discussion
+                      </button>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0 opacity-80 group-hover:opacity-100">
                     <button
+                      type="button"
                       onClick={() => {
                         setEditingTask(t);
                         setIsModalOpen(true);
@@ -471,6 +832,7 @@ function TasksPage() {
                       <Edit3 className="h-3.5 w-3.5" />
                     </button>
                     <button
+                      type="button"
                       onClick={() => handleDeleteTask(t.id)}
                       title="Delete task"
                       className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
@@ -479,6 +841,15 @@ function TasksPage() {
                     </button>
                   </div>
                 </div>
+
+                {/* Expandable Task Comments Section */}
+                {isCommentsExpanded && businessId && (
+                  <TaskCommentsSection
+                    taskId={t.id}
+                    businessId={businessId}
+                    currentUserId={currentUserId}
+                  />
+                )}
               </div>
             );
           })}
