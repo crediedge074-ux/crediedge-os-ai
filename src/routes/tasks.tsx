@@ -1,147 +1,35 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { Plus, Sparkles, Clock, PoundSterling, Target, CircleCheck as CheckCircle2, Circle, ListFilter as Filter, LayoutList, ChartBar as BarChart3, History, ChevronRight, TrendingUp, Zap, ArrowRight } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plus, Sparkles, Clock, CircleCheck as CheckCircle2, Circle, ListFilter as Filter, ChevronRight, Zap, Trash2, Edit3, User, AlertCircle, X, Check } from "lucide-react";
 import { AppLayout } from "@/components/ui/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Campaigns } from "@/components/tasks/Campaigns";
-import { Link } from "@tanstack/react-router";
-import type { LucideIcon } from "lucide-react";
+import { useAuthContext } from "@/contexts/AuthContext";
+import {
+  getTasks,
+  createTask,
+  updateTask,
+  deleteTask,
+  toggleTaskCompletion,
+  fetchWorkspaceMembers,
+  type WorkspaceMemberInfo,
+} from "@/services/tasks";
+import type { Task, TaskInsert } from "@/lib/database.types";
 
 export const Route = createFileRoute("/tasks")({
   component: TasksPage,
 });
 
-// ─── Data ───────────────────────────────────────────────────────────────────
+type Priority = "urgent" | "high" | "medium" | "low";
 
-type Priority = "High" | "Medium" | "Low";
-
-interface Task {
-  id: number;
-  title: string;
-  priority: Priority;
-  time: string;
-  impact: string;
-  impactType: "currency" | "text";
-  done: boolean;
-  campaign: string;
-  mission: string;
-  cta: string;
-  to: string;
-}
-
-const initialTasks: Task[] = [
-  {
-    id: 1,
-    title: "Reply to 4 new enquiries",
-    priority: "High",
-    time: "15 min",
-    impact: "£1,800",
-    impactType: "currency",
-    done: false,
-    campaign: "Become Bromley's Highest Rated Garage",
-    mission: "Reduce Response Time to < 1hr",
-    cta: "Reply Now",
-    to: "/communications",
-  },
-  {
-    id: 2,
-    title: "Chase 2 overdue invoices",
-    priority: "High",
-    time: "5 min",
-    impact: "£950",
-    impactType: "currency",
-    done: false,
-    campaign: "£30k Monthly Revenue Target",
-    mission: "Optimise Service Pricing",
-    cta: "Open CRM",
-    to: "/relationships",
-  },
-  {
-    id: 3,
-    title: "Send 6 review requests",
-    priority: "Medium",
-    time: "8 min",
-    impact: "£340",
-    impactType: "currency",
-    done: false,
-    campaign: "Become Bromley's Highest Rated Garage",
-    mission: "Reach 250 Google Reviews",
-    cta: "Send Reviews",
-    to: "/reviews",
-  },
-  {
-    id: 4,
-    title: "Review ad campaign performance",
-    priority: "Medium",
-    time: "15 min",
-    impact: "£200",
-    impactType: "currency",
-    done: false,
-    campaign: "£30k Monthly Revenue Target",
-    mission: "Launch Premium Package",
-    cta: "View Insights",
-    to: "/insights",
-  },
-  {
-    id: 5,
-    title: "Fix homepage speed issue",
-    priority: "Low",
-    time: "45 min",
-    impact: "SEO risk",
-    impactType: "text",
-    done: true,
-    campaign: "Become Bromley's Highest Rated Garage",
-    mission: "Improve Website Speed Score",
-    cta: "View Website",
-    to: "/website",
-  },
-  {
-    id: 6,
-    title: "Set up invoice automation",
-    priority: "Medium",
-    time: "30 min",
-    impact: "4 hrs/wk",
-    impactType: "text",
-    done: false,
-    campaign: "Automate 80% of Admin",
-    mission: "Automate Invoice Sending",
-    cta: "View Integrations",
-    to: "/integrations",
-  },
-];
-
-const priorityConfig: Record<Priority, { dot: string; badge: string; border: string }> = {
-  High: { dot: "bg-brand", badge: "bg-brand/10 text-brand", border: "border-l-brand" },
-  Medium: { dot: "bg-warning", badge: "bg-warning/10 text-warning", border: "border-l-warning" },
-  Low: { dot: "bg-muted-foreground/40", badge: "bg-secondary text-muted-foreground", border: "border-l-border" },
+const priorityConfig: Record<string, { label: string; dot: string; badge: string; border: string }> = {
+  urgent: { label: "Urgent", dot: "bg-destructive animate-pulse", badge: "bg-destructive/10 text-destructive", border: "border-l-destructive" },
+  high: { label: "High", dot: "bg-brand", badge: "bg-brand/10 text-brand", border: "border-l-brand" },
+  medium: { label: "Medium", dot: "bg-amber-500", badge: "bg-amber-50 text-amber-700", border: "border-l-amber-500" },
+  low: { label: "Low", dot: "bg-muted-foreground/40", badge: "bg-secondary text-muted-foreground", border: "border-l-border" },
 };
 
-const analyticsData = [
-  { label: "Completed Today", value: "1", icon: CheckCircle2, color: "text-emerald-600", bg: "bg-emerald-50" },
-  { label: "Pending", value: "5", icon: Circle, color: "text-brand", bg: "bg-brand/10" },
-  { label: "Est. Impact Today", value: "£3,290", icon: PoundSterling, color: "text-emerald-600", bg: "bg-emerald-50" },
-  { label: "Time Required", value: "1h 48m", icon: Clock, color: "text-blue-600", bg: "bg-blue-50" },
-];
-
-const historyItems = [
-  { title: "Check website speed", completedAt: "Yesterday, 3:42pm", campaign: "Become Bromley's Highest Rated Garage", impact: "Speed improved" },
-  { title: "Send review requests to 8 customers", completedAt: "Yesterday, 11:20am", campaign: "Become Bromley's Highest Rated Garage", impact: "+£420" },
-  { title: "Update pricing page", completedAt: "2 days ago", campaign: "£30k Monthly Revenue Target", impact: "Conversion +8%" },
-  { title: "Set up Google Calendar sync", completedAt: "2 days ago", campaign: "Automate 80% of Admin", impact: "2 hrs/wk saved" },
-];
-
-// ─── Today's Focus ──────────────────────────────────────────────────────────
-
-function TodaysFocus({ tasks }: { tasks: Task[] }) {
-  const pending = tasks.filter((t) => !t.done);
-  const totalImpact = pending
-    .filter((t) => t.impactType === "currency")
-    .reduce((sum, t) => sum + parseFloat(t.impact.replace(/[£,]/g, "")), 0);
-  const totalTime = pending.reduce((sum, t) => {
-    const mins = parseInt(t.time);
-    return sum + (isNaN(mins) ? 0 : mins);
-  }, 0);
-
+function TodaysFocus({ pendingCount }: { pendingCount: number }) {
   return (
     <div className="relative mb-6 overflow-hidden rounded-2xl bg-foreground p-5 text-background shadow-card">
       <div className="pointer-events-none absolute right-0 top-0 h-40 w-40 rounded-full bg-white/5 blur-3xl" />
@@ -156,381 +44,454 @@ function TodaysFocus({ tasks }: { tasks: Task[] }) {
             </span>
           </div>
           <h2 className="text-[16px] font-bold leading-snug text-background">
-            You have {pending.length} tasks to complete today.
+            {pendingCount > 0
+              ? `You have ${pendingCount} active task${pendingCount !== 1 ? "s" : ""} in your workspace.`
+              : "All workspace tasks are complete — excellent momentum!"}
           </h2>
           <p className="mt-1.5 text-[12.5px] text-background/60">
-            Completing all pending tasks will generate an estimated{" "}
-            <span className="font-semibold text-background">
-              £{totalImpact.toLocaleString()}
-            </span>{" "}
-            and requires approximately{" "}
-            <span className="font-semibold text-background">{totalTime} minutes</span>.
-            Tasks are sorted by business impact.
+            Tasks are synchronized across your team with member assignments and priority status tracking.
           </p>
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
           <div className="rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-center">
-            <div className="text-[10px] font-medium text-background/50">Est. Impact</div>
-            <div className="text-[16px] font-extrabold text-background">
-              £{totalImpact.toLocaleString()}
-            </div>
-          </div>
-          <div className="rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-center">
-            <div className="text-[10px] font-medium text-background/50">Time needed</div>
-            <div className="text-[16px] font-extrabold text-background">{totalTime}m</div>
+            <div className="text-[10px] font-medium text-background/50">Active Tasks</div>
+            <div className="text-[16px] font-extrabold text-background">{pendingCount}</div>
           </div>
         </div>
       </div>
 
-      {/* AI priority note */}
       <div className="relative mt-4 flex items-center gap-2.5 rounded-xl bg-white/8 px-4 py-2.5">
         <Zap className="h-3.5 w-3.5 shrink-0 text-brand" strokeWidth={2} />
         <span className="text-[12px] text-background/80">
-          <span className="font-semibold text-background">AI Priority Queue active.</span>{" "}
-          Tasks ordered by maximum business impact. Complete in order for best results.
+          <span className="font-semibold text-background">AI Priority Alignment.</span>{" "}
+          Tasks marked high or urgent priority feed directly into your Command Centre Executive Priorities.
         </span>
       </div>
     </div>
   );
 }
 
-// ─── Missions Section ────────────────────────────────────────────────────────
+// ─── Task Modal (Create & Edit) ────────────────────────────────────────────────
 
-function MissionsSection() {
-  const missions = [
-    { id: "m1", title: "Reach 250 Google Reviews", campaign: "Become Bromley's Highest Rated Garage", progress: 82, tasks: 12, completed: 10 },
-    { id: "m2", title: "Reduce Response Time to < 1hr", campaign: "Become Bromley's Highest Rated Garage", progress: 65, tasks: 8, completed: 5 },
-    { id: "m3", title: "Optimise Service Pricing", campaign: "£30k Monthly Revenue Target", progress: 90, tasks: 5, completed: 4 },
-    { id: "m4", title: "Automate Invoice Sending", campaign: "Automate 80% of Admin", progress: 70, tasks: 4, completed: 3 },
-    { id: "m5", title: "Launch Premium Package", campaign: "£30k Monthly Revenue Target", progress: 45, tasks: 9, completed: 4 },
-  ];
-
-  return (
-    <div className="rounded-2xl border border-border bg-card shadow-soft">
-      <div className="flex items-center gap-2.5 border-b border-border px-5 py-3.5">
-        <Target className="h-4 w-4 text-foreground/60" strokeWidth={1.75} />
-        <span className="text-[13.5px] font-semibold text-foreground">Active Missions</span>
-        <span className="grid h-5 min-w-5 place-items-center rounded-full bg-secondary px-1 text-[10px] font-bold text-foreground/70">
-          {missions.length}
-        </span>
-      </div>
-      <ul className="divide-y divide-border">
-        {missions.map((m) => (
-          <li key={m.id} className="group flex items-center gap-4 px-5 py-3.5 transition-colors duration-150 hover:bg-secondary/40">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <span className="text-[12.5px] font-medium text-foreground truncate">{m.title}</span>
-                <span className="shrink-0 text-[11px] font-bold text-foreground">{m.progress}%</span>
-              </div>
-              <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-secondary">
-                <div
-                  className="absolute inset-y-0 left-0 rounded-full bg-brand"
-                  style={{ width: `${m.progress}%`, transition: "width 0.7s ease-out" }}
-                />
-              </div>
-              <div className="mt-1.5 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1 text-[10.5px] text-muted-foreground">
-                  <ChevronRight className="h-2.5 w-2.5" strokeWidth={2} />
-                  <span className="truncate">{m.campaign}</span>
-                </div>
-                <span className="shrink-0 text-[10.5px] text-muted-foreground">
-                  {m.completed}/{m.tasks} tasks
-                </span>
-              </div>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-// ─── Task List ───────────────────────────────────────────────────────────────
-
-function TaskList({
-  tasks,
-  onToggle,
+function TaskModal({
+  isOpen,
+  onClose,
+  onSave,
+  taskToEdit,
+  members,
 }: {
-  tasks: Task[];
-  onToggle: (id: number) => void;
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (taskData: TaskInsert) => Promise<void>;
+  taskToEdit?: Task | null;
+  members: WorkspaceMemberInfo[];
 }) {
-  const pending = tasks.filter((t) => !t.done);
-  const done = tasks.filter((t) => t.done);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState<Priority>("medium");
+  const [dueDate, setDueDate] = useState("");
+  const [assignedTo, setAssignedTo] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (taskToEdit) {
+      setTitle(taskToEdit.title);
+      setDescription(taskToEdit.description || "");
+      setPriority((taskToEdit.priority as Priority) || "medium");
+      setDueDate(taskToEdit.due_date || "");
+      setAssignedTo(taskToEdit.assigned_to || "");
+    } else {
+      setTitle("");
+      setDescription("");
+      setPriority("medium");
+      setDueDate("");
+      setAssignedTo("");
+    }
+  }, [taskToEdit, isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+    setSaving(true);
+    try {
+      await onSave({
+        title: title.trim(),
+        description: description.trim() || null,
+        priority,
+        due_date: dueDate || null,
+        assigned_to: assignedTo || null,
+        status: taskToEdit ? taskToEdit.status : "todo",
+      } as TaskInsert);
+      onClose();
+    } catch (err) {
+      console.error("Failed to save task:", err);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
-    <div className="space-y-4">
-      {/* Pending */}
-      <div className="rounded-2xl border border-border bg-card shadow-soft overflow-hidden">
-        <div className="flex items-center gap-2.5 border-b border-border px-5 py-3.5">
-          <span className="text-[13.5px] font-semibold text-foreground">Task List</span>
-          <span className="grid h-5 min-w-5 place-items-center rounded-full bg-brand px-1 text-[10px] font-bold text-white">
-            {pending.length}
-          </span>
-          <button className="ml-auto flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-secondary">
-            <Filter className="h-3 w-3" strokeWidth={1.75} />
-            Filter
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+      <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+        <div className="flex items-center justify-between border-b border-border px-6 py-4">
+          <h3 className="text-[15px] font-bold text-foreground">
+            {taskToEdit ? "Edit Task" : "Create New Task"}
+          </h3>
+          <button onClick={onClose} className="rounded-lg p-1 text-muted-foreground hover:bg-secondary hover:text-foreground">
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        {pending.length === 0 ? (
-          <div className="px-5 py-10 text-center text-[13px] text-muted-foreground">
-            All tasks complete — great work!
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="mb-1 block text-[12px] font-semibold text-foreground">Task Title *</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Follow up on bromley garage quote"
+              required
+              className="h-10 w-full rounded-xl border border-border bg-secondary/30 px-3.5 text-[13px] text-foreground focus:border-foreground/20 focus:outline-none"
+            />
           </div>
-        ) : (
-          <ul className="divide-y divide-border">
-            {pending.map((t) => {
-              const cfg = priorityConfig[t.priority];
-              return (
-                <li
-                  key={t.id}
-                  className={`group flex items-start gap-3.5 border-l-2 px-5 py-4 transition-colors duration-150 hover:bg-secondary/30 ${cfg.border}`}
-                >
-                  <button
-                    onClick={() => onToggle(t.id)}
-                    className="mt-0.5 grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px] border-[1.5px] border-border bg-card transition-all duration-200 hover:border-brand/50"
-                  />
 
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[13px] font-medium text-foreground">{t.title}</span>
-                      <span className={`rounded-md px-1.5 py-0.5 text-[9.5px] font-bold ${cfg.badge}`}>
-                        {t.priority}
-                      </span>
-                    </div>
-
-                    {/* Breadcrumb */}
-                    <div className="mt-1 flex items-center gap-1 text-[10.5px] text-muted-foreground">
-                      <span className="truncate max-w-[160px]">{t.campaign}</span>
-                      <ChevronRight className="h-2.5 w-2.5 shrink-0" strokeWidth={2} />
-                      <span className="truncate max-w-[140px]">{t.mission}</span>
-                    </div>
-
-                    <div className="mt-1.5 flex items-center gap-3">
-                      <span className="flex items-center gap-0.5 text-[10.5px] text-muted-foreground">
-                        <Clock className="h-2.5 w-2.5" strokeWidth={1.75} />
-                        {t.time}
-                      </span>
-                      <span
-                        className={`text-[10.5px] font-bold ${
-                          t.impactType === "currency" ? "text-brand" : "text-warning"
-                        }`}
-                      >
-                        {t.impact}
-                      </span>
-                    </div>
-                  </div>
-
-                  <Link
-                    to={t.to}
-                    className="shrink-0 rounded-lg border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-foreground opacity-0 transition-all duration-200 group-hover:opacity-100 hover:border-foreground/20 hover:bg-foreground hover:text-background"
-                  >
-                    {t.cta}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-
-      {/* Completed */}
-      {done.length > 0 && (
-        <div className="rounded-2xl border border-border bg-card shadow-soft overflow-hidden">
-          <div className="flex items-center gap-2.5 border-b border-border px-5 py-3.5">
-            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" strokeWidth={2} />
-            <span className="text-[13.5px] font-semibold text-foreground">Completed</span>
-            <span className="grid h-5 min-w-5 place-items-center rounded-full bg-emerald-100 px-1 text-[10px] font-bold text-emerald-700">
-              {done.length}
-            </span>
+          <div>
+            <label className="mb-1 block text-[12px] font-semibold text-foreground">Description / Notes</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Add task context or instructions..."
+              rows={3}
+              className="w-full rounded-xl border border-border bg-secondary/30 p-3 text-[13px] text-foreground focus:border-foreground/20 focus:outline-none"
+            />
           </div>
-          <ul className="divide-y divide-border">
-            {done.map((t) => (
-              <li
-                key={t.id}
-                className="flex items-center gap-3.5 px-5 py-3.5 opacity-50"
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1 block text-[12px] font-semibold text-foreground">Priority</label>
+              <select
+                value={priority}
+                onChange={(e) => setPriority(e.target.value as Priority)}
+                className="h-10 w-full rounded-xl border border-border bg-secondary/30 px-3 text-[13px] text-foreground focus:outline-none"
               >
-                <button
-                  onClick={() => onToggle(t.id)}
-                  className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px] border-[1.5px] border-brand bg-brand text-white"
-                >
-                  <svg viewBox="0 0 12 12" className="h-2.5 w-2.5" fill="none">
-                    <path d="M2 6l3 3 5-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
-                <div className="min-w-0 flex-1">
-                  <div className="text-[13px] font-medium text-foreground line-through">{t.title}</div>
-                  <div className="mt-0.5 flex items-center gap-1 text-[10.5px] text-muted-foreground">
-                    <span className="truncate">{t.campaign}</span>
-                    <ChevronRight className="h-2.5 w-2.5 shrink-0" strokeWidth={2} />
-                    <span className="truncate">{t.mission}</span>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Task Analytics ──────────────────────────────────────────────────────────
-
-function TaskAnalytics() {
-  return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      {analyticsData.map((s) => {
-        const Icon = s.icon;
-        return (
-          <div key={s.label} className="rounded-2xl border border-border bg-card p-4 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
-            <div className={`mb-3 grid h-8 w-8 place-items-center rounded-xl ${s.bg} ${s.color}`}>
-              <Icon className="h-[14px] w-[14px]" strokeWidth={2} />
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </select>
             </div>
-            <div className={`text-[22px] font-extrabold leading-none ${s.color}`}>{s.value}</div>
-            <div className="mt-1 text-[10.5px] text-muted-foreground leading-tight">{s.label}</div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
-// ─── Task History ─────────────────────────────────────────────────────────────
-
-function TaskHistory() {
-  return (
-    <div className="rounded-2xl border border-border bg-card shadow-soft">
-      <div className="flex items-center gap-2.5 border-b border-border px-5 py-3.5">
-        <History className="h-4 w-4 text-foreground/60" strokeWidth={1.75} />
-        <span className="text-[13.5px] font-semibold text-foreground">Task History</span>
-      </div>
-      <ul className="divide-y divide-border">
-        {historyItems.map((item, idx) => (
-          <li key={idx} className="flex items-start gap-3.5 px-5 py-3.5 transition-colors hover:bg-secondary/30">
-            <div className="mt-1 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-emerald-50">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" strokeWidth={2} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-[12.5px] font-medium text-foreground">{item.title}</div>
-              <div className="mt-0.5 flex items-center gap-1 text-[10.5px] text-muted-foreground">
-                <span>{item.completedAt}</span>
-                <span className="text-muted-foreground/30">·</span>
-                <span className="truncate">{item.campaign}</span>
-              </div>
-            </div>
-            <span className="shrink-0 rounded-lg bg-brand/10 px-2 py-0.5 text-[10.5px] font-bold text-brand">
-              {item.impact}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-// ─── AI Priority Queue ────────────────────────────────────────────────────────
-
-function AIPriorityQueue({ tasks }: { tasks: Task[] }) {
-  const top3 = tasks.filter((t) => !t.done).slice(0, 3);
-
-  return (
-    <div className="rounded-2xl border border-border bg-card shadow-soft">
-      <div className="flex items-center gap-2.5 border-b border-border px-5 py-3.5">
-        <Sparkles className="h-3.5 w-3.5 text-brand" strokeWidth={2} />
-        <span className="text-[13.5px] font-semibold text-foreground">AI Priority Queue</span>
-        <span className="ml-auto rounded-md bg-brand/10 px-2 py-0.5 text-[10px] font-semibold text-brand">
-          AI
-        </span>
-      </div>
-      <div className="p-4 space-y-2">
-        <p className="text-[12px] text-muted-foreground mb-3">
-          Complete these 3 tasks first for maximum business impact today.
-        </p>
-        {top3.map((t, idx) => (
-          <div key={t.id} className="flex items-center gap-3 rounded-xl bg-secondary/50 px-3.5 py-2.5">
-            <div className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand text-[11px] font-extrabold text-white">
-              {idx + 1}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-[12px] font-medium text-foreground truncate">{t.title}</div>
-              <div className="text-[10.5px] text-muted-foreground">{t.time} · {t.impact}</div>
+            <div>
+              <label className="mb-1 block text-[12px] font-semibold text-foreground">Due Date</label>
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="h-10 w-full rounded-xl border border-border bg-secondary/30 px-3 text-[13px] text-foreground focus:outline-none"
+              />
             </div>
           </div>
-        ))}
+
+          <div>
+            <label className="mb-1 block text-[12px] font-semibold text-foreground">Assignee</label>
+            <select
+              value={assignedTo}
+              onChange={(e) => setAssignedTo(e.target.value)}
+              className="h-10 w-full rounded-xl border border-border bg-secondary/30 px-3 text-[13px] text-foreground focus:outline-none"
+            >
+              <option value="">Unassigned</option>
+              {members.map((m) => (
+                <option key={m.userId} value={m.userId}>
+                  {m.fullName} ({m.role})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border border-border px-4 py-2 text-[12.5px] font-semibold text-foreground hover:bg-secondary"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-xl bg-brand px-4 py-2 text-[12.5px] font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {saving ? "Saving..." : taskToEdit ? "Update Task" : "Create Task"}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// ─── Main Tasks Page Component ────────────────────────────────────────────────
 
 function TasksPage() {
-  const [tasks, setTasks] = useState(initialTasks);
+  const { membership } = useAuthContext();
+  const businessId = membership?.business_id;
 
-  const toggle = (id: number) =>
-    setTasks((t) => t.map((x) => (x.id === id ? { ...x, done: !x.done } : x)));
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [members, setMembers] = useState<WorkspaceMemberInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+
+  const loadData = () => {
+    if (!businessId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    Promise.all([
+      getTasks(businessId),
+      fetchWorkspaceMembers(businessId),
+    ])
+      .then(([taskList, memberList]) => {
+        setTasks(taskList);
+        setMembers(memberList);
+      })
+      .catch((err) => {
+        console.error("Failed to load tasks data:", err);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [businessId]);
+
+  const handleToggleCompletion = async (task: Task) => {
+    if (!businessId) return;
+
+    // Optimistic toggle
+    const isCompleted = task.status === "completed";
+    const newStatus = isCompleted ? "todo" : "completed";
+    setTasks((prev) =>
+      prev.map((t) => (t.id === task.id ? { ...t, status: newStatus, completed_at: newStatus === "completed" ? new Date().toISOString() : null } : t))
+    );
+
+    try {
+      await toggleTaskCompletion(task.id, businessId, task.status, task.title);
+    } catch (err) {
+      console.error("Failed to toggle completion:", err);
+      loadData();
+    }
+  };
+
+  const handleSaveTask = async (taskData: TaskInsert) => {
+    if (!businessId) return;
+    if (editingTask) {
+      await updateTask(editingTask.id, businessId, taskData);
+    } else {
+      await createTask({ ...taskData, business_id: businessId });
+    }
+    loadData();
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (!businessId) return;
+    if (!confirm("Are you sure you want to delete this task?")) return;
+
+    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    await deleteTask(taskId, businessId);
+  };
+
+  const memberMap = members.reduce<Record<string, string>>((acc, m) => {
+    acc[m.userId] = m.fullName;
+    return acc;
+  }, {});
+
+  const pendingTasks = tasks.filter((t) => t.status !== "completed");
+  const completedTasks = tasks.filter((t) => t.status === "completed");
+
+  const filteredTasks = tasks.filter((t) => {
+    if (filterStatus === "pending") return t.status !== "completed";
+    if (filterStatus === "completed") return t.status === "completed";
+    return true;
+  });
 
   return (
     <AppLayout>
       <PageHeader
         title="Tasks"
-        description="Campaigns drive Missions. Missions drive Tasks. Everything connects."
+        description="Workspace-scoped task management with real-time assignment, priority levels, and activity audit history."
         crumbs={[{ label: "Tasks" }]}
-        action={{ label: "Add Task", icon: Plus }}
+        action={{
+          label: "Add Task",
+          icon: Plus,
+          onClick: () => {
+            setEditingTask(null);
+            setIsModalOpen(true);
+          },
+        }}
       />
 
-      {/* 1. Today's Focus */}
-      <TodaysFocus tasks={tasks} />
+      <TodaysFocus pendingCount={pendingTasks.length} />
 
-      {/* 2. Campaigns */}
+      {/* Campaigns */}
       <div className="mb-5">
         <Campaigns />
       </div>
 
-      {/* 3. Missions */}
-      <div className="mb-5">
-        <div className="mb-3 flex items-center gap-2">
-          <h2 className="text-[13px] font-semibold tracking-tight text-foreground">Missions</h2>
-          <div className="h-px flex-1 bg-border" />
+      {/* Task List Header + Filter Bar */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-[15px] font-bold text-foreground">Workspace Task Directory</span>
+          <span className="rounded-full bg-secondary px-2.5 py-0.5 text-[11px] font-semibold text-foreground">
+            {tasks.length} total
+          </span>
         </div>
-        <MissionsSection />
+
+        <div className="flex items-center gap-2">
+          <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+          <div className="flex rounded-xl border border-border bg-card p-1 text-[11.5px] font-semibold">
+            <button
+              onClick={() => setFilterStatus("all")}
+              className={`rounded-lg px-3 py-1 transition-colors ${filterStatus === "all" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              All
+            </button>
+            <button
+              onClick={() => setFilterStatus("pending")}
+              className={`rounded-lg px-3 py-1 transition-colors ${filterStatus === "pending" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Pending ({pendingTasks.length})
+            </button>
+            <button
+              onClick={() => setFilterStatus("completed")}
+              className={`rounded-lg px-3 py-1 transition-colors ${filterStatus === "completed" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Completed ({completedTasks.length})
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* 4. AI Priority Queue */}
-      <div className="mb-5">
-        <div className="mb-3 flex items-center gap-2">
-          <h2 className="text-[13px] font-semibold tracking-tight text-foreground">AI Priority Queue</h2>
-          <div className="h-px flex-1 bg-border" />
+      {/* Task List Grid */}
+      {loading ? (
+        <div className="p-12 text-center text-xs text-muted-foreground">Loading workspace tasks...</div>
+      ) : filteredTasks.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border bg-card p-10 text-center">
+          <div className="text-[14px] font-semibold text-foreground mb-1">No tasks found</div>
+          <p className="text-[12px] text-muted-foreground max-w-sm mx-auto mb-4">
+            {filterStatus !== "all"
+              ? "No tasks match the selected filter criteria."
+              : "No tasks recorded for your workspace yet. Click 'Add Task' to create your first task."}
+          </p>
+          <button
+            onClick={() => {
+              setEditingTask(null);
+              setIsModalOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-[12px] font-semibold text-white"
+          >
+            <Plus className="h-3.5 w-3.5" /> Create Task
+          </button>
         </div>
-        <AIPriorityQueue tasks={tasks} />
-      </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredTasks.map((t) => {
+            const isDone = t.status === "completed";
+            const cfg = priorityConfig[t.priority] || priorityConfig.medium;
+            const assigneeName = t.assigned_to ? memberMap[t.assigned_to] || "Team Member" : null;
 
-      {/* 5–6. Task Analytics + Task List */}
-      <div className="mb-5">
-        <div className="mb-3 flex items-center gap-2">
-          <h2 className="text-[13px] font-semibold tracking-tight text-foreground">Task Analytics</h2>
-          <div className="h-px flex-1 bg-border" />
-        </div>
-        <TaskAnalytics />
-      </div>
+            return (
+              <div
+                key={t.id}
+                className={`group rounded-2xl border border-border bg-card p-4 shadow-soft border-l-4 transition-all duration-200 hover:shadow-card ${cfg.border} ${isDone ? "opacity-60" : ""}`}
+              >
+                <div className="flex items-start gap-3.5">
+                  <button
+                    onClick={() => handleToggleCompletion(t)}
+                    title={isDone ? "Reopen task" : "Complete task"}
+                    className={`mt-0.5 grid h-[20px] w-[20px] shrink-0 place-items-center rounded-md border transition-all ${
+                      isDone ? "border-emerald-600 bg-emerald-600 text-white" : "border-border bg-secondary/50 hover:border-brand"
+                    }`}
+                  >
+                    {isDone && <Check className="h-3 w-3" strokeWidth={3} />}
+                  </button>
 
-      <div className="mb-5">
-        <div className="mb-3 flex items-center gap-2">
-          <h2 className="text-[13px] font-semibold tracking-tight text-foreground">Task List</h2>
-          <div className="h-px flex-1 bg-border" />
-        </div>
-        <TaskList tasks={tasks} onToggle={toggle} />
-      </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`text-[13.5px] font-semibold ${isDone ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                        {t.title}
+                      </span>
+                      <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${cfg.badge}`}>
+                        {cfg.label}
+                      </span>
+                      {isDone && (
+                        <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                          Completed
+                        </span>
+                      )}
+                    </div>
 
-      {/* 7. Task History */}
-      <div className="mb-5">
-        <div className="mb-3 flex items-center gap-2">
-          <h2 className="text-[13px] font-semibold tracking-tight text-foreground">Task History</h2>
-          <div className="h-px flex-1 bg-border" />
+                    {t.description && (
+                      <p className="mt-1 text-[12px] text-muted-foreground line-clamp-2">
+                        {t.description}
+                      </p>
+                    )}
+
+                    <div className="mt-2.5 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+                      {t.due_date && (
+                        <span className="flex items-center gap-1 font-medium">
+                          <Clock className="h-3 w-3" /> Due {t.due_date}
+                        </span>
+                      )}
+                      {assigneeName && (
+                        <span className="flex items-center gap-1 font-medium text-foreground/80">
+                          <User className="h-3 w-3" /> {assigneeName}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0 opacity-80 group-hover:opacity-100">
+                    <button
+                      onClick={() => {
+                        setEditingTask(t);
+                        setIsModalOpen(true);
+                      }}
+                      title="Edit task"
+                      className="rounded-lg p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    >
+                      <Edit3 className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteTask(t.id)}
+                      title="Delete task"
+                      className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
-        <TaskHistory />
-      </div>
+      )}
+
+      <TaskModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSave={handleSaveTask}
+        taskToEdit={editingTask}
+        members={members}
+      />
 
       <div className="h-8" />
     </AppLayout>

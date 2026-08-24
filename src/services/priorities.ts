@@ -138,7 +138,7 @@ export async function completePriorityItem(
 ): Promise<boolean> {
   try {
     if (item.sourceType === "task") {
-      await updateTask(item.sourceId, {
+      await updateTask(item.sourceId, businessId, {
         status: "completed",
         completed_at: new Date().toISOString(),
       });
