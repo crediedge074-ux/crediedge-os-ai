@@ -361,6 +361,8 @@ export interface Database {
           risk_level?: string;
           ai_context_notes?: string | null;
           target_metric?: string;
+          scheduled_start?: string | null;
+          scheduled_end?: string | null;
         };
         Insert: {
           business_id: string;
@@ -379,6 +381,8 @@ export interface Database {
           risk_level?: string;
           ai_context_notes?: string | null;
           target_metric?: string;
+          scheduled_start?: string | null;
+          scheduled_end?: string | null;
         };
         Update: {
           customer_id?: string | null;
@@ -395,6 +399,8 @@ export interface Database {
           risk_level?: string;
           ai_context_notes?: string | null;
           target_metric?: string;
+          scheduled_start?: string | null;
+          scheduled_end?: string | null;
           updated_at?: string;
         };
         Relationships: [];
@@ -416,6 +422,11 @@ export interface Database {
           is_all_day: boolean;
           location: string | null;
           created_by: string | null;
+          provider?: string;
+          external_event_id?: string | null;
+          external_calendar_id?: string | null;
+          sync_status?: string;
+          last_synced_at?: string | null;
         };
         Insert: {
           business_id: string;
@@ -430,6 +441,11 @@ export interface Database {
           is_all_day?: boolean;
           location?: string | null;
           created_by?: string | null;
+          provider?: string;
+          external_event_id?: string | null;
+          external_calendar_id?: string | null;
+          sync_status?: string;
+          last_synced_at?: string | null;
         };
         Update: {
           customer_id?: string | null;
@@ -442,6 +458,11 @@ export interface Database {
           end_time?: string;
           is_all_day?: boolean;
           location?: string | null;
+          provider?: string;
+          external_event_id?: string | null;
+          external_calendar_id?: string | null;
+          sync_status?: string;
+          last_synced_at?: string | null;
           updated_at?: string;
         };
         Relationships: [];
