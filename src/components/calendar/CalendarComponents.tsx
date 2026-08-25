@@ -174,16 +174,32 @@ export function ActiveTasksPanel({
     }
   });
 
+  const isSelectedToday = selectedDateStr === nowStr;
+
   return (
     <div className="w-full lg:w-80 shrink-0 flex flex-col rounded-2xl border border-border bg-card p-4 space-y-4 shadow-sm">
-      <div className="flex items-center justify-between border-b border-border pb-3">
-        <div className="flex items-center gap-2">
-          <Layers className="h-4 w-4 text-brand" />
-          <h3 className="text-[14px] font-extrabold text-foreground">Active Tasks Hub</h3>
+      <div className="flex flex-col gap-1 border-b border-border pb-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Layers className="h-4 w-4 text-brand" />
+            <h3 className="text-[14px] font-extrabold text-foreground">Active Tasks Hub</h3>
+          </div>
+          <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[10.5px] font-extrabold text-brand">
+            {allTasks.filter((t) => t.status !== "completed").length} Active
+          </span>
         </div>
-        <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[10.5px] font-extrabold text-brand">
-          {allTasks.filter((t) => t.status !== "completed").length} Active
-        </span>
+
+        {/* Selected Date Context Indicator */}
+        <div className="flex items-center gap-1.5 text-[11px] pt-1">
+          <span className="text-muted-foreground font-medium">Viewing Date:</span>
+          <span className={`px-2 py-0.5 rounded-md font-extrabold text-[10.5px] ${
+            isSelectedToday
+              ? "bg-brand text-white shadow-sm"
+              : "bg-secondary text-foreground border border-border"
+          }`}>
+            {isSelectedToday ? "TODAY (" + selectedDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }) + ")" : selectedDate.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
+          </span>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-4 pr-1 text-[12px]">

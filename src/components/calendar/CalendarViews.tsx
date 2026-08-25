@@ -112,27 +112,61 @@ function MonthView({
           }
 
           const dateStr = date.toISOString().slice(0, 10);
+          const selectedStr = currentDate.toISOString().slice(0, 10);
+
           const isToday = dateStr === todayStr;
+          const isSelected = dateStr === selectedStr;
+          const isTodayAndSelected = isToday && isSelected;
 
           const dayEvents = events.filter((e) => e.start_time.slice(0, 10) === dateStr);
           const dayScheduledTasks = tasks.filter(
             (t) => (t as any).scheduled_start && (t as any).scheduled_start.slice(0, 10) === dateStr
           );
 
+          let dateCellBg = "hover:bg-secondary/20";
+          if (isTodayAndSelected) {
+            dateCellBg = "bg-brand/10 border-2 border-brand shadow-sm font-black";
+          } else if (isToday) {
+            dateCellBg = "bg-brand/5 border border-brand/40 font-bold";
+          } else if (isSelected) {
+            dateCellBg = "bg-secondary/50 border-2 border-foreground/60 shadow-sm font-extrabold";
+          }
+
           return (
             <div
               key={dateStr}
               onClick={() => onSelectDate(date)}
-              className={`p-2 min-h-[90px] flex flex-col justify-between transition-colors cursor-pointer hover:bg-secondary/20 ${
-                isToday ? "bg-brand/5 font-extrabold" : ""
-              }`}
+              className={`p-2 min-h-[90px] flex flex-col justify-between transition-all cursor-pointer ${dateCellBg}`}
             >
               <div className="flex items-center justify-between text-[11.5px]">
-                <span className={`inline-flex items-center justify-center h-5 w-5 rounded-full ${
-                  isToday ? "bg-brand text-white font-black" : "text-foreground font-bold"
-                }`}>
-                  {date.getDate()}
-                </span>
+                <div className="flex items-center gap-1">
+                  <span className={`inline-flex items-center justify-center h-5 w-5 rounded-full text-[11px] ${
+                    isTodayAndSelected
+                      ? "bg-brand text-white font-black ring-2 ring-brand/40"
+                      : isToday
+                      ? "bg-brand/20 text-brand font-black"
+                      : isSelected
+                      ? "bg-foreground text-background font-black"
+                      : "text-foreground font-bold"
+                  }`}>
+                    {date.getDate()}
+                  </span>
+                  {isTodayAndSelected && (
+                    <span className="rounded bg-brand px-1 py-0.2 text-[8.5px] font-black text-white uppercase tracking-wider">
+                      TODAY
+                    </span>
+                  )}
+                  {isToday && !isSelected && (
+                    <span className="rounded bg-brand/10 px-1 py-0.2 text-[8.5px] font-extrabold text-brand uppercase tracking-wider">
+                      TODAY
+                    </span>
+                  )}
+                  {isSelected && !isToday && (
+                    <span className="rounded bg-foreground/10 px-1 py-0.2 text-[8.5px] font-extrabold text-foreground uppercase tracking-wider">
+                      SELECTED
+                    </span>
+                  )}
+                </div>
                 {(dayEvents.length > 0 || dayScheduledTasks.length > 0) && (
                   <span className="text-[9.5px] font-extrabold text-muted-foreground">
                     {dayEvents.length + dayScheduledTasks.length} item(s)
