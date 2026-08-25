@@ -777,12 +777,24 @@ export async function fetchAIPerformanceSummary(businessId: string | undefined):
     const hasMinimumSampleSize = confidenceCount >= MIN_ACCURACY_SAMPLE_SIZE;
     const accuracyPct = hasMinimumSampleSize ? Math.round(totalConfidenceSum / confidenceCount) : null;
 
+    // Fetch verified time saved from task_time_entries
+    const { data: rawTimeEntries } = await (supabase.from as any)("task_time_entries")
+      .select("duration_minutes")
+      .eq("business_id", businessId);
+
+    let totalTrackedMinutes = 0;
+    if (rawTimeEntries) {
+      totalTrackedMinutes = rawTimeEntries.reduce((acc: number, e: any) => acc + (e.duration_minutes || 0), 0);
+    }
+
+    const measuredHoursSaved = totalTrackedMinutes > 0 ? Math.round((totalTrackedMinutes / 60) * 10) / 10 : null;
+
     return {
       completedCount: recs.length,
       accuracyPct,
       measuredRevenue: revMeasuredCount > 0 ? measuredRevSum : null,
       expectedRevenue: expectedRevSum > 0 ? expectedRevSum : null,
-      measuredHoursSaved: timeMeasuredCount > 0 ? Math.round((measuredMinutesSavedSum / 60) * 10) / 10 : null,
+      measuredHoursSaved,
       expectedHoursSaved: null,
       scoreImprovement: null, // Defensible null unless historical score before/after logged
       hasMinimumSampleSize,

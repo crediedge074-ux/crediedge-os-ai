@@ -26,6 +26,8 @@ import {
   Send,
   ThumbsUp,
   Heart,
+  Play,
+  Square,
 } from "lucide-react";
 import type { CalculatedCampaign, StoredCampaign } from "@/services/campaigns";
 import type { CalculatedMission, StoredMission } from "@/services/missions";
@@ -34,6 +36,15 @@ import type { WorkspaceMemberInfo } from "@/services/tasks";
 import { updateCampaign } from "@/services/campaigns";
 import { updateMission, createMission } from "@/services/missions";
 import { updateTask, moveTaskMission } from "@/services/tasks";
+import {
+  fetchTaskTimeEntries,
+  startTaskTimer,
+  stopTaskTimer,
+  addManualTimeEntry,
+  calculateTaskProductivity,
+  type TaskTimeEntry,
+  type TaskProductivityMetrics,
+} from "@/services/timeTracking";
 import { getCustomers } from "@/services/customers";
 import { supabase } from "@/lib/supabase";
 
@@ -78,6 +89,14 @@ export function ExecutionSystemWorkspace({
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loadingEntities, setLoadingEntities] = useState(false);
 
+  // Productivity & Time Tracking State
+  const [timeEntries, setTimeEntries] = useState<TaskTimeEntry[]>([]);
+  const [productivity, setProductivity] = useState<TaskProductivityMetrics | null>(null);
+  const [activeTimerId, setActiveTimerId] = useState<string | null>(null);
+  const [manualMinutes, setManualMinutes] = useState<string>("");
+  const [manualNotes, setManualNotes] = useState<string>("");
+  const [trackingLoading, setTrackingLoading] = useState(false);
+
   // Link selectors
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
   const [selectedJobId, setSelectedJobId] = useState<string>("");
@@ -94,7 +113,7 @@ export function ExecutionSystemWorkspace({
     return acc;
   }, {});
 
-  // Load connected entities
+  // Load connected entities & time entries
   useEffect(() => {
     if (!businessId) return;
     setLoadingEntities(true);
@@ -102,14 +121,79 @@ export function ExecutionSystemWorkspace({
       getCustomers(businessId).catch(() => []),
       supabase.from("jobs").select("*").eq("business_id", businessId).then((r) => r.data || []),
       supabase.from("invoices").select("*").eq("business_id", businessId).then((r) => r.data || []),
+      currentTask ? fetchTaskTimeEntries(currentTask.id, businessId) : Promise.resolve([]),
+      currentTask ? calculateTaskProductivity(currentTask.id, businessId) : Promise.resolve(null),
     ])
-      .then(([custList, jobList, invList]) => {
+      .then(([custList, jobList, invList, tEntries, prodMetrics]) => {
         setCustomers(custList);
         setJobs(jobList as Job[]);
         setInvoices(invList as Invoice[]);
+        setTimeEntries(tEntries);
+        setProductivity(prodMetrics);
+        const activeEntry = tEntries.find((e) => !e.endTime && e.entryType === "timer");
+        if (activeEntry) setActiveTimerId(activeEntry.id);
       })
       .finally(() => setLoadingEntities(false));
-  }, [businessId]);
+  }, [businessId, currentTask]);
+
+  const handleStartTimer = async () => {
+    if (!businessId || !currentTask) return;
+    setTrackingLoading(true);
+    try {
+      const entry = await startTaskTimer(currentTask.id, businessId, "");
+      setActiveTimerId(entry.id);
+      const updatedEntries = await fetchTaskTimeEntries(currentTask.id, businessId);
+      setTimeEntries(updatedEntries);
+      const updatedProd = await calculateTaskProductivity(currentTask.id, businessId);
+      setProductivity(updatedProd);
+    } catch (err: any) {
+      alert(`Timer error: ${err.message || String(err)}`);
+    } finally {
+      setTrackingLoading(false);
+    }
+  };
+
+  const handleStopTimer = async () => {
+    if (!businessId || !currentTask || !activeTimerId) return;
+    setTrackingLoading(true);
+    try {
+      await stopTaskTimer(activeTimerId, businessId, manualNotes);
+      setActiveTimerId(null);
+      setManualNotes("");
+      const updatedEntries = await fetchTaskTimeEntries(currentTask.id, businessId);
+      setTimeEntries(updatedEntries);
+      const updatedProd = await calculateTaskProductivity(currentTask.id, businessId);
+      setProductivity(updatedProd);
+    } catch (err: any) {
+      alert(`Timer error: ${err.message || String(err)}`);
+    } finally {
+      setTrackingLoading(false);
+    }
+  };
+
+  const handleAddManualTime = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!businessId || !currentTask || !manualMinutes) return;
+    setTrackingLoading(true);
+    try {
+      await addManualTimeEntry({
+        taskId: currentTask.id,
+        businessId,
+        durationMinutes: Number(manualMinutes),
+        notes: manualNotes.trim() || null,
+      });
+      setManualMinutes("");
+      setManualNotes("");
+      const updatedEntries = await fetchTaskTimeEntries(currentTask.id, businessId);
+      setTimeEntries(updatedEntries);
+      const updatedProd = await calculateTaskProductivity(currentTask.id, businessId);
+      setProductivity(updatedProd);
+    } catch (err: any) {
+      alert(`Manual time error: ${err.message || String(err)}`);
+    } finally {
+      setTrackingLoading(false);
+    }
+  };
 
   // Derived current links
   const targetEntity = currentTask || currentMission || currentCampaign;
@@ -605,14 +689,129 @@ export function ExecutionSystemWorkspace({
           )}
 
           {activeTab === "activity" && (
-            <div className="rounded-xl border border-border bg-secondary/20 p-6 text-center space-y-3">
-              <BarChart3 className="mx-auto h-8 w-8 text-muted-foreground/60" />
-              <div className="text-[14px] font-bold text-foreground">Measured Business Performance</div>
-              <p className="text-[12.5px] text-muted-foreground max-w-md mx-auto">
-                CrediEdgeOS strictly calculates financial performance from verified linked payment records.
-              </p>
-              <div className="inline-block rounded-xl bg-card border border-border px-4 py-2 text-[12px] font-bold text-foreground/80">
-                Insufficient data — Connect an invoice or payment record to measure revenue outcome variance.
+            <div className="space-y-6">
+              {/* Task Productivity & Time Tracking Panel */}
+              {currentTask && (
+                <div className="space-y-4 rounded-xl border border-border bg-card p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+                    <div>
+                      <h3 className="text-[14px] font-bold text-foreground flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-brand" /> Productivity & Duration Intelligence
+                      </h3>
+                      <p className="text-[11.5px] text-muted-foreground mt-0.5">
+                        Compare estimated vs. actual duration, log work sessions, and calculate verified time saved.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {activeTimerId ? (
+                        <button
+                          type="button"
+                          disabled={trackingLoading}
+                          onClick={handleStopTimer}
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-destructive px-3.5 py-1.5 text-[12px] font-bold text-white hover:bg-destructive/90"
+                        >
+                          <Square className="h-3.5 w-3.5" fill="currentColor" /> Stop Timer
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={trackingLoading}
+                          onClick={handleStartTimer}
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-3.5 py-1.5 text-[12px] font-bold text-white hover:opacity-90"
+                        >
+                          <Play className="h-3.5 w-3.5" fill="currentColor" /> Start Timer
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Metrics Bar */}
+                  <div className="grid gap-3 sm:grid-cols-4">
+                    <div className="rounded-xl border border-border bg-secondary/30 p-3.5">
+                      <div className="text-[10.5px] font-medium text-muted-foreground">Estimated Duration</div>
+                      <div className="text-[14px] font-extrabold text-foreground mt-0.5">
+                        {productivity?.estimatedMinutes || 30} min
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-border bg-secondary/30 p-3.5">
+                      <div className="text-[10.5px] font-medium text-muted-foreground">Actual Tracked Duration</div>
+                      <div className="text-[14px] font-extrabold text-foreground mt-0.5">
+                        {productivity?.hasTrackedTime ? `${productivity.actualMinutes} min` : "Not tracked"}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-border bg-secondary/30 p-3.5">
+                      <div className="text-[10.5px] font-medium text-muted-foreground">Duration Variance</div>
+                      <div className="text-[14px] font-extrabold text-foreground mt-0.5">
+                        {productivity?.varianceMinutes !== null && productivity?.varianceMinutes !== undefined
+                          ? `${productivity.varianceMinutes > 0 ? "+" : ""}${productivity.varianceMinutes} min`
+                          : "Not tracked"}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-border bg-secondary/30 p-3.5">
+                      <div className="text-[10.5px] font-medium text-muted-foreground">Verified Time Saved</div>
+                      <div className="text-[14px] font-extrabold text-emerald-600 mt-0.5">
+                        {productivity?.verifiedTimeSavedMinutes !== null && productivity?.verifiedTimeSavedMinutes !== undefined
+                          ? `${productivity.verifiedTimeSavedMinutes} min`
+                          : "Insufficient data"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Manual Log Form */}
+                  <form onSubmit={handleAddManualTime} className="flex flex-wrap items-center gap-3 pt-2">
+                    <input
+                      type="number"
+                      value={manualMinutes}
+                      onChange={(e) => setManualMinutes(e.target.value)}
+                      placeholder="Minutes (e.g. 45)"
+                      min="1"
+                      required
+                      className="h-9 w-32 rounded-xl border border-border bg-secondary/30 px-3 text-[12.5px] text-foreground focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={manualNotes}
+                      onChange={(e) => setManualNotes(e.target.value)}
+                      placeholder="Work session notes / deliverable summary..."
+                      className="h-9 flex-1 min-w-[200px] rounded-xl border border-border bg-secondary/30 px-3 text-[12.5px] text-foreground focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      disabled={trackingLoading || !manualMinutes}
+                      className="inline-flex items-center gap-1 rounded-xl bg-foreground px-3.5 py-2 text-[12px] font-bold text-background hover:bg-foreground/85 disabled:opacity-50"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Log Manual Time
+                    </button>
+                  </form>
+
+                  {/* Entries List */}
+                  {timeEntries.length > 0 && (
+                    <div className="space-y-2 pt-2 border-t border-border">
+                      <div className="text-[12px] font-bold text-foreground">Work Log Entries ({timeEntries.length}):</div>
+                      {timeEntries.map((e) => (
+                        <div key={e.id} className="flex items-center justify-between rounded-lg border border-border bg-secondary/20 p-2.5 text-[11.5px]">
+                          <div>
+                            <span className="font-bold text-foreground capitalize">{e.entryType} Session:</span>{" "}
+                            <span className="text-muted-foreground">{e.notes || "No session notes"}</span>
+                          </div>
+                          <span className="font-extrabold text-foreground">{e.durationMinutes} min</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="rounded-xl border border-border bg-secondary/20 p-6 text-center space-y-3">
+                <BarChart3 className="mx-auto h-8 w-8 text-muted-foreground/60" />
+                <div className="text-[14px] font-bold text-foreground">Measured Business Performance</div>
+                <p className="text-[12.5px] text-muted-foreground max-w-md mx-auto">
+                  CrediEdgeOS strictly calculates financial performance from verified linked payment records.
+                </p>
+                <div className="inline-block rounded-xl bg-card border border-border px-4 py-2 text-[12px] font-bold text-foreground/80">
+                  Insufficient data — Connect an invoice or payment record to measure revenue outcome variance.
+                </div>
               </div>
             </div>
           )}
