@@ -53,7 +53,7 @@ import {
 } from "@/services/taskImpact";
 import { getCustomers } from "@/services/customers";
 import { supabase } from "@/lib/supabase";
-import { ShieldCheck, Award } from "lucide-react";
+import { ShieldCheck, Award, Info, HelpCircle } from "lucide-react";
 
 interface ExecutionSystemWorkspaceProps {
   businessId: string;
@@ -111,6 +111,7 @@ export function ExecutionSystemWorkspace({
   // Business Impact Evaluation State
   const [impactEval, setImpactEval] = useState<TaskBusinessImpactEvaluation | null>(null);
   const [impactLoading, setImpactLoading] = useState(false);
+  const [showMetricGuide, setShowMetricGuide] = useState(false);
 
   // Link selectors
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
@@ -512,7 +513,7 @@ export function ExecutionSystemWorkspace({
                               alert(`Failed to update target metric: ${err.message || String(err)}`);
                             }
                           }}
-                          className="h-7 rounded-lg border border-border bg-card px-2.5 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-brand"
+                          className="h-7 rounded-lg border border-border bg-card px-2.5 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-brand font-semibold"
                         >
                           {TARGET_METRIC_OPTIONS.map((opt) => (
                             <option key={opt.key} value={opt.key}>
@@ -520,8 +521,63 @@ export function ExecutionSystemWorkspace({
                             </option>
                           ))}
                         </select>
+
+                        <button
+                          type="button"
+                          onClick={() => setShowMetricGuide(!showMetricGuide)}
+                          title="What is a Target Metric?"
+                          className="rounded-md p-1 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+                        >
+                          <HelpCircle className="h-3.5 w-3.5 text-brand" />
+                        </button>
                       </div>
                     </div>
+
+                    {/* Explanatory Banner & Metric Description */}
+                    <div className="rounded-lg border border-border/80 bg-card p-3 space-y-2 text-[11.5px]">
+                      <div className="flex items-start gap-2 text-muted-foreground">
+                        <Info className="h-4 w-4 text-brand shrink-0 mt-0.5" />
+                        <p className="leading-snug">
+                          <strong className="text-foreground">Target Metric Purpose:</strong> Select the business outcome this task is intended to improve. CrediEdgeOS uses this to connect the task to relevant business data and measure whether it actually produced a result. Selecting a metric does not automatically increase your CrediEdge Score — results must be verified from real business data.
+                        </p>
+                      </div>
+
+                      {/* Currently Active Metric Description */}
+                      {(() => {
+                        const currentKey = (currentTask as any).target_metric || "none";
+                        const activeOpt = TARGET_METRIC_OPTIONS.find((o) => o.key === currentKey) || TARGET_METRIC_OPTIONS[0];
+                        return (
+                          <div className="pt-1 border-t border-border/40 text-[11px] flex items-center gap-1.5 text-foreground/90 font-medium">
+                            <span className="font-extrabold text-brand uppercase text-[10px] bg-brand/10 px-1.5 py-0.5 rounded">Active Focus</span>
+                            <span><strong>{activeOpt.label}:</strong> {activeOpt.description}</span>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Expandable Metric Guide Popover / Guide */}
+                    {showMetricGuide && (
+                      <div className="rounded-xl border border-border bg-secondary/30 p-3.5 space-y-2 text-[11px] animate-in fade-in duration-150">
+                        <div className="font-bold text-foreground flex items-center justify-between border-b border-border/50 pb-1.5">
+                          <span>Target Metric Reference Guide</span>
+                          <button
+                            type="button"
+                            onClick={() => setShowMetricGuide(false)}
+                            className="text-[10px] text-muted-foreground hover:underline font-normal"
+                          >
+                            Hide Guide
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                          {TARGET_METRIC_OPTIONS.map((opt) => (
+                            <div key={opt.key} className="rounded-lg border border-border bg-card p-2 space-y-0.5">
+                              <div className="font-bold text-foreground text-[11px]">{opt.label}</div>
+                              <div className="text-[10.5px] text-muted-foreground leading-snug">{opt.description}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {impactLoading ? (
                       <div className="text-[12px] text-muted-foreground italic">Evaluating task impact and CrediEdge Score attribution...</div>

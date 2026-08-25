@@ -41,16 +41,66 @@ export interface TaskBusinessImpactEvaluation {
   scoreExplanation: string;
 }
 
-export const TARGET_METRIC_OPTIONS: { key: TargetMetricKey; label: string; scoreFactor: string }[] = [
-  { key: "none", label: "No Specific Metric Target", scoreFactor: "Operations" },
-  { key: "revenue", label: "Revenue Growth", scoreFactor: "Finance" },
-  { key: "cash_collection", label: "Cash Collection & Cashflow", scoreFactor: "Finance" },
-  { key: "customer_retention", label: "Customer Retention & LTV", scoreFactor: "CRM & Growth" },
-  { key: "reviews_reputation", label: "Reviews & Reputation DNA", scoreFactor: "Customer Experience" },
-  { key: "response_time", label: "Enquiry Response Time", scoreFactor: "Communication" },
-  { key: "conversion", label: "Sales & Conversion", scoreFactor: "CRM & Growth" },
-  { key: "operational_efficiency", label: "Operational Efficiency", scoreFactor: "Operations" },
-  { key: "automation_time_saved", label: "Automation / Time Saved", scoreFactor: "Operations" },
+export const TARGET_METRIC_OPTIONS: {
+  key: TargetMetricKey;
+  label: string;
+  description: string;
+  scoreFactor: string;
+}[] = [
+  {
+    key: "none",
+    label: "No Specific Metric Target",
+    description: "Use when the task is not intended to directly improve a specific measurable business outcome.",
+    scoreFactor: "Operations",
+  },
+  {
+    key: "revenue",
+    label: "Revenue Growth",
+    description: "Tasks intended to generate or increase revenue.",
+    scoreFactor: "Finance",
+  },
+  {
+    key: "cash_collection",
+    label: "Cash Collection & Cashflow",
+    description: "Tasks intended to collect outstanding money or improve cashflow.",
+    scoreFactor: "Finance",
+  },
+  {
+    key: "customer_retention",
+    label: "Customer Retention & LTV",
+    description: "Tasks intended to retain customers or increase customer value.",
+    scoreFactor: "CRM & Growth",
+  },
+  {
+    key: "reviews_reputation",
+    label: "Reviews & Reputation",
+    description: "Tasks intended to improve reviews, ratings or reputation.",
+    scoreFactor: "Customer Experience",
+  },
+  {
+    key: "response_time",
+    label: "Enquiry Response Time",
+    description: "Tasks intended to reduce the time taken to respond to enquiries.",
+    scoreFactor: "Communication",
+  },
+  {
+    key: "conversion",
+    label: "Sales & Conversion",
+    description: "Tasks intended to improve leads, sales or conversion rates.",
+    scoreFactor: "CRM & Growth",
+  },
+  {
+    key: "operational_efficiency",
+    label: "Operational Efficiency",
+    description: "Tasks intended to make the business operate faster or more efficiently.",
+    scoreFactor: "Operations",
+  },
+  {
+    key: "automation_time_saved",
+    label: "Automation / Time Saved",
+    description: "Tasks intended to reduce manual work or save measurable time.",
+    scoreFactor: "Operations",
+  },
 ];
 
 export async function evaluateTaskBusinessImpact(
