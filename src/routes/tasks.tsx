@@ -13,7 +13,9 @@ import {
   deleteTask,
   toggleTaskCompletion,
   fetchWorkspaceMembers,
+  getTodaysFocusTasks,
   type WorkspaceMemberInfo,
+  type TodaysFocusSummary,
 } from "@/services/tasks";
 import {
   fetchTaskComments,
@@ -38,7 +40,54 @@ const priorityConfig: Record<string, { label: string; dot: string; badge: string
   low: { label: "Low", dot: "bg-muted-foreground/40", badge: "bg-secondary text-muted-foreground", border: "border-l-border" },
 };
 
-function TodaysFocus({ pendingCount }: { pendingCount: number }) {
+function TodaysFocusPanel({
+  businessId,
+  missions,
+  onTaskComplete,
+  onSelectTask,
+}: {
+  businessId: string | undefined;
+  missions: CalculatedMission[];
+  onTaskComplete: (t: Task) => Promise<void>;
+  onSelectTask: (t: Task) => void;
+}) {
+  const [summary, setSummary] = useState<TodaysFocusSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const missionMap = missions.reduce<Record<string, string>>((acc, m) => {
+    acc[m.id] = m.title;
+    return acc;
+  }, {});
+
+  const loadFocus = () => {
+    if (!businessId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    getTodaysFocusTasks(businessId)
+      .then((res) => setSummary(res))
+      .catch((err) => console.error("[TodaysFocusPanel] error:", err))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadFocus();
+  }, [businessId]);
+
+  if (loading) {
+    return (
+      <div className="mb-6 rounded-2xl bg-foreground p-5 text-background text-center text-xs">
+        Loading Today's Focus workspace tasks...
+      </div>
+    );
+  }
+
+  const focusList = summary?.todaysTasks || [];
+  const hours = summary ? Math.floor(summary.totalEstimatedMinutes / 60) : 0;
+  const mins = summary ? summary.totalEstimatedMinutes % 60 : 0;
+  const timeStr = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+
   return (
     <div className="relative mb-6 overflow-hidden rounded-2xl bg-foreground p-5 text-background shadow-card">
       <div className="pointer-events-none absolute right-0 top-0 h-40 w-40 rounded-full bg-white/5 blur-3xl" />
@@ -46,37 +95,94 @@ function TodaysFocus({ pendingCount }: { pendingCount: number }) {
 
       <div className="relative flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="h-3.5 w-3.5 text-background/60" strokeWidth={2} />
-            <span className="text-[10.5px] font-semibold uppercase tracking-widest text-background/50">
-              Today's Focus
+          <div className="flex items-center gap-2 mb-1.5">
+            <Sparkles className="h-3.5 w-3.5 text-brand" strokeWidth={2} />
+            <span className="text-[10.5px] font-bold uppercase tracking-widest text-background/60">
+              Command Centre • Today's Focus
             </span>
           </div>
-          <h2 className="text-[16px] font-bold leading-snug text-background">
-            {pendingCount > 0
-              ? `You have ${pendingCount} active task${pendingCount !== 1 ? "s" : ""} in your workspace.`
-              : "All workspace tasks are complete — excellent momentum!"}
+          <h2 className="text-[17px] font-black leading-snug text-background">
+            {focusList.length > 0
+              ? `${focusList.length} Priority Task${focusList.length !== 1 ? "s" : ""} Requiring Attention Today`
+              : "All focus tasks complete — workspace is fully synchronized!"}
           </h2>
-          <p className="mt-1.5 text-[12.5px] text-background/60">
-            Tasks are synchronized across your team with member assignments and priority status tracking.
+          <p className="mt-1 text-[12.5px] text-background/70">
+            Automated priority ranking based on due dates, overdue status, and strategic mission alignment.
           </p>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          <div className="rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-center">
-            <div className="text-[10px] font-medium text-background/50">Active Tasks</div>
-            <div className="text-[16px] font-extrabold text-background">{pendingCount}</div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="rounded-xl border border-white/15 bg-white/10 px-3.5 py-2 text-center">
+            <div className="text-[9.5px] font-medium text-background/60">Due Today / Overdue</div>
+            <div className="text-[15px] font-extrabold text-background">{focusList.length}</div>
+          </div>
+          <div className="rounded-xl border border-white/15 bg-white/10 px-3.5 py-2 text-center">
+            <div className="text-[9.5px] font-medium text-background/60">Est. Time Required</div>
+            <div className="text-[15px] font-extrabold text-background">{timeStr}</div>
+          </div>
+          <div className="rounded-xl border border-white/15 bg-white/10 px-3.5 py-2 text-center">
+            <div className="text-[9.5px] font-medium text-background/60">Est. Impact</div>
+            <div className="text-[15px] font-extrabold text-emerald-400">
+              {summary?.hasMeasuredImpact ? `£${summary.totalEstimatedImpact.toLocaleString()}` : "Insufficient data"}
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="relative mt-4 flex items-center gap-2.5 rounded-xl bg-white/8 px-4 py-2.5">
-        <Zap className="h-3.5 w-3.5 shrink-0 text-brand" strokeWidth={2} />
-        <span className="text-[12px] text-background/80">
-          <span className="font-semibold text-background">AI Priority Alignment.</span>{" "}
-          Tasks marked high or urgent priority feed directly into your Command Centre Executive Priorities.
-        </span>
-      </div>
+      {/* Focus Task Items */}
+      {focusList.length > 0 && (
+        <div className="relative mt-4 space-y-2 border-t border-white/10 pt-3">
+          {focusList.map((t) => {
+            const linkedMissionTitle = (t as any).mission_id ? missionMap[(t as any).mission_id] : null;
+            const cfg = priorityConfig[t.priority] || priorityConfig.medium;
+
+            return (
+              <div
+                key={t.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white/8 px-4 py-2.5 transition-colors hover:bg-white/12"
+              >
+                <div className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer" onClick={() => onSelectTask(t)}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onTaskComplete(t).then(() => loadFocus());
+                    }}
+                    title="Complete task"
+                    className="grid h-5 w-5 shrink-0 place-items-center rounded-md border border-white/40 hover:border-white hover:bg-white/20 text-white"
+                  >
+                    <Check className="h-3 w-3" strokeWidth={3} />
+                  </button>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[13px] font-bold text-background truncate">{t.title}</span>
+                      <span className={`rounded-md px-2 py-0.5 text-[9.5px] font-bold uppercase ${cfg.badge}`}>
+                        {cfg.label}
+                      </span>
+                      {linkedMissionTitle && (
+                        <span className="rounded-md bg-white/15 px-2 py-0.5 text-[9.5px] font-bold text-background/90">
+                          Mission: {linkedMissionTitle}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 text-[11px] text-background/70 shrink-0">
+                  <span>Est: {(t as any).estimated_minutes || 30}m</span>
+                  <span>
+                    Est. Impact:{" "}
+                    {(t as any).estimated_impact_value > 0
+                      ? `£${Number((t as any).estimated_impact_value).toLocaleString()}`
+                      : "Insufficient data"}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -992,7 +1098,12 @@ function TasksPage() {
         }}
       />
 
-      <TodaysFocus pendingCount={pendingTasks.length} />
+      <TodaysFocusPanel
+        businessId={businessId}
+        missions={missions}
+        onTaskComplete={handleToggleCompletion}
+        onSelectTask={(t) => setSelectedTask(t)}
+      />
 
       {/* Campaigns */}
       <div className="mb-5">

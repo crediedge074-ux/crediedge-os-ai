@@ -9,6 +9,104 @@ export interface WorkspaceMemberInfo {
   role: string;
 }
 
+export interface TodaysFocusSummary {
+  todaysTasks: Task[];
+  totalTasksCount: number;
+  dueTodayCount: number;
+  overdueCount: number;
+  totalEstimatedMinutes: number;
+  totalEstimatedImpact: number;
+  hasMeasuredImpact: boolean;
+}
+
+export async function getTodaysFocusTasks(businessId: string): Promise<TodaysFocusSummary> {
+  const { data, error } = await supabase
+    .from("tasks")
+    .select("*")
+    .eq("business_id", businessId)
+    .neq("status", "completed")
+    .order("created_at", { ascending: false });
+
+  if (error || !data) {
+    console.error("Error fetching Today's Focus tasks:", error);
+    return {
+      todaysTasks: [],
+      totalTasksCount: 0,
+      dueTodayCount: 0,
+      overdueCount: 0,
+      totalEstimatedMinutes: 0,
+      totalEstimatedImpact: 0,
+      hasMeasuredImpact: false,
+    };
+  }
+
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+
+  const priorityWeights: Record<string, number> = {
+    urgent: 4,
+    high: 3,
+    medium: 2,
+    low: 1,
+  };
+
+  const focusTasks: Task[] = [];
+  let dueTodayCount = 0;
+  let overdueCount = 0;
+  let totalMinutes = 0;
+  let totalImpact = 0;
+  let hasMeasuredImpact = false;
+
+  data.forEach((t: any) => {
+    let isFocus = false;
+    if (t.due_date) {
+      const taskDueDate = t.due_date.slice(0, 10);
+      if (taskDueDate === todayStr) {
+        dueTodayCount++;
+        isFocus = true;
+      } else if (taskDueDate < todayStr) {
+        overdueCount++;
+        isFocus = true;
+      }
+    } else if (t.priority === "urgent" || t.priority === "high") {
+      isFocus = true;
+    }
+
+    if (isFocus) {
+      focusTasks.push(t as Task);
+      totalMinutes += Number(t.estimated_minutes) || 30;
+      const impactVal = Number(t.estimated_impact_value) || 0;
+      if (impactVal > 0) {
+        totalImpact += impactVal;
+        hasMeasuredImpact = true;
+      }
+    }
+  });
+
+  // Sort focus tasks deterministically by priority weight and due date
+  focusTasks.sort((a: any, b: any) => {
+    const wA = priorityWeights[a.priority] || 2;
+    const wB = priorityWeights[b.priority] || 2;
+    if (wA !== wB) return wB - wA;
+
+    const impA = Number(a.estimated_impact_value) || 0;
+    const impB = Number(b.estimated_impact_value) || 0;
+    if (impA !== impB) return impB - impA;
+
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+  });
+
+  return {
+    todaysTasks: focusTasks,
+    totalTasksCount: data.length,
+    dueTodayCount,
+    overdueCount,
+    totalEstimatedMinutes: totalMinutes,
+    totalEstimatedImpact: totalImpact,
+    hasMeasuredImpact,
+  };
+}
+
 export async function getTasks(businessId: string): Promise<Task[]> {
   const { data, error } = await supabase
     .from("tasks")
