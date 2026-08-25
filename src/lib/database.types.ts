@@ -356,6 +356,11 @@ export interface Database {
           completed_at: string | null;
           assigned_to: string | null;
           created_by: string | null;
+          estimated_minutes?: number;
+          estimated_impact_value?: number;
+          risk_level?: string;
+          ai_context_notes?: string | null;
+          target_metric?: string;
         };
         Insert: {
           business_id: string;
@@ -369,6 +374,11 @@ export interface Database {
           completed_at?: string | null;
           assigned_to?: string | null;
           created_by?: string | null;
+          estimated_minutes?: number;
+          estimated_impact_value?: number;
+          risk_level?: string;
+          ai_context_notes?: string | null;
+          target_metric?: string;
         };
         Update: {
           customer_id?: string | null;
@@ -380,6 +390,11 @@ export interface Database {
           due_date?: string | null;
           completed_at?: string | null;
           assigned_to?: string | null;
+          estimated_minutes?: number;
+          estimated_impact_value?: number;
+          risk_level?: string;
+          ai_context_notes?: string | null;
+          target_metric?: string;
           updated_at?: string;
         };
         Relationships: [];

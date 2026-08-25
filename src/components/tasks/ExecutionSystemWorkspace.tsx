@@ -46,8 +46,14 @@ import {
   type TaskTimeEntry,
   type TaskProductivityMetrics,
 } from "@/services/timeTracking";
+import {
+  evaluateTaskBusinessImpact,
+  TARGET_METRIC_OPTIONS,
+  type TaskBusinessImpactEvaluation,
+} from "@/services/taskImpact";
 import { getCustomers } from "@/services/customers";
 import { supabase } from "@/lib/supabase";
+import { ShieldCheck, Award } from "lucide-react";
 
 interface ExecutionSystemWorkspaceProps {
   businessId: string;
@@ -102,6 +108,10 @@ export function ExecutionSystemWorkspace({
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [editNotesText, setEditNotesText] = useState<string>("");
 
+  // Business Impact Evaluation State
+  const [impactEval, setImpactEval] = useState<TaskBusinessImpactEvaluation | null>(null);
+  const [impactLoading, setImpactLoading] = useState(false);
+
   // Link selectors
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
   const [selectedJobId, setSelectedJobId] = useState<string>("");
@@ -139,6 +149,14 @@ export function ExecutionSystemWorkspace({
         if (activeEntry) setActiveTimerId(activeEntry.id);
       })
       .finally(() => setLoadingEntities(false));
+
+    if (currentTask) {
+      setImpactLoading(true);
+      evaluateTaskBusinessImpact(currentTask, businessId)
+        .then((res) => setImpactEval(res))
+        .catch((err) => console.error("Impact evaluation failed:", err))
+        .finally(() => setImpactLoading(false));
+    }
   }, [businessId, currentTask]);
 
   const handleStartTimer = async () => {
@@ -466,6 +484,95 @@ export function ExecutionSystemWorkspace({
                       <div className="text-[11px] font-medium text-muted-foreground">Status</div>
                       <div className="text-[14px] font-bold text-foreground capitalize mt-0.5">{currentTask.status}</div>
                     </div>
+                  </div>
+
+                  {/* ── SECTION 8: BUSINESS IMPACT & CREDIEDGE SCORE CARD ── */}
+                  <div className="rounded-xl border border-brand/30 bg-brand/5 p-4 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 pb-3">
+                      <div className="flex items-center gap-2">
+                        <Award className="h-4 w-4 text-brand" />
+                        <h4 className="text-[13px] font-bold text-foreground">Business Impact & CrediEdge Score™</h4>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-medium text-muted-foreground">Target Metric:</span>
+                        <select
+                          value={(currentTask as any).target_metric || "none"}
+                          onChange={async (e) => {
+                            if (!businessId) return;
+                            const newMetric = e.target.value;
+                            try {
+                              await updateTask(currentTask.id, businessId, { target_metric: newMetric } as any);
+                              onRefresh();
+                              const evalRes = await evaluateTaskBusinessImpact(
+                                { ...currentTask, target_metric: newMetric },
+                                businessId
+                              );
+                              setImpactEval(evalRes);
+                            } catch (err: any) {
+                              alert(`Failed to update target metric: ${err.message || String(err)}`);
+                            }
+                          }}
+                          className="h-7 rounded-lg border border-border bg-card px-2.5 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-brand"
+                        >
+                          {TARGET_METRIC_OPTIONS.map((opt) => (
+                            <option key={opt.key} value={opt.key}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {impactLoading ? (
+                      <div className="text-[12px] text-muted-foreground italic">Evaluating task impact and CrediEdge Score attribution...</div>
+                    ) : impactEval ? (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-[11.5px]">
+                        {/* 1. Estimated Impact */}
+                        <div className="rounded-lg border border-border bg-card p-3 space-y-1">
+                          <div className="flex items-center justify-between text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                            <span>Estimated Impact</span>
+                            <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[9.5px] text-amber-500 font-extrabold">ESTIMATED</span>
+                          </div>
+                          <div className="text-sm font-extrabold text-foreground pt-1">{impactEval.estimatedImpactFormatted}</div>
+                          <p className="text-[10.5px] text-muted-foreground">Targeted outcome expected upon completion.</p>
+                        </div>
+
+                        {/* 2. Verified Result */}
+                        <div className="rounded-lg border border-border bg-card p-3 space-y-1">
+                          <div className="flex items-center justify-between text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                            <span>Verified Result</span>
+                            {impactEval.hasMeasuredData ? (
+                              <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[9.5px] text-emerald-500 font-extrabold flex items-center gap-1">
+                                <ShieldCheck className="h-3 w-3" /> VERIFIED
+                              </span>
+                            ) : (
+                              <span className="rounded bg-secondary px-1.5 py-0.5 text-[9.5px] text-muted-foreground font-semibold">INSUFFICIENT DATA</span>
+                            )}
+                          </div>
+                          <div className="text-sm font-extrabold text-foreground pt-1">
+                            {impactEval.hasMeasuredData ? impactEval.newValueFormatted : "Insufficient Data"}
+                          </div>
+                          <p className="text-[10.5px] text-muted-foreground">{impactEval.verifiedSummaryNotes}</p>
+                        </div>
+
+                        {/* 3. CrediEdge Score Impact */}
+                        <div className="rounded-lg border border-border bg-card p-3 space-y-1">
+                          <div className="flex items-center justify-between text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                            <span>CrediEdge Score™ Impact</span>
+                            <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[9.5px] text-blue-500 font-extrabold">{impactEval.scoreCategoryName}</span>
+                          </div>
+                          <div className="text-sm font-extrabold text-foreground pt-1 flex items-center gap-1.5">
+                            <span>{impactEval.currentOverallScore} / 100</span>
+                            {impactEval.scoreConfirmedChange !== null && (
+                              <span className={`text-[11px] font-bold ${impactEval.scoreConfirmedChange >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                                ({impactEval.scoreConfirmedChange >= 0 ? `+${impactEval.scoreConfirmedChange}` : impactEval.scoreConfirmedChange} pts)
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10.5px] text-muted-foreground">{impactEval.scoreExplanation}</p>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               )}
