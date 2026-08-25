@@ -41,6 +41,7 @@ import {
   startTaskTimer,
   stopTaskTimer,
   addManualTimeEntry,
+  updateTimeEntryNotes,
   calculateTaskProductivity,
   type TaskTimeEntry,
   type TaskProductivityMetrics,
@@ -96,6 +97,10 @@ export function ExecutionSystemWorkspace({
   const [manualMinutes, setManualMinutes] = useState<string>("");
   const [manualNotes, setManualNotes] = useState<string>("");
   const [trackingLoading, setTrackingLoading] = useState(false);
+
+  // Editing Note State
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [editNotesText, setEditNotesText] = useState<string>("");
 
   // Link selectors
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
@@ -793,16 +798,86 @@ export function ExecutionSystemWorkspace({
                   {/* Entries List */}
                   {timeEntries.length > 0 && (
                     <div className="space-y-2 pt-2 border-t border-border">
-                      <div className="text-[12px] font-bold text-foreground">Work Log Entries ({timeEntries.length}):</div>
-                      {timeEntries.map((e) => (
-                        <div key={e.id} className="flex items-center justify-between rounded-lg border border-border bg-secondary/20 p-2.5 text-[11.5px]">
-                          <div>
-                            <span className="font-bold text-foreground capitalize">{e.entryType} Session:</span>{" "}
-                            <span className="text-muted-foreground">{e.notes || "No session notes"}</span>
+                      <div className="text-[12px] font-bold text-foreground">Work Log Audit Trail ({timeEntries.length}):</div>
+                      {timeEntries.map((e) => {
+                        const isEditing = editingEntryId === e.id;
+                        const dateStr = new Date(e.createdAt).toLocaleString("en-GB", {
+                          day: "numeric",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        });
+
+                        const isEdited = e.updatedAt && e.updatedAt !== e.createdAt;
+
+                        return (
+                          <div key={e.id} className="rounded-xl border border-border bg-secondary/20 p-3 space-y-2 text-[11.5px]">
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-1.5">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-foreground capitalize">{e.entryType} Session</span>
+                                <span className="text-muted-foreground">• by <span className="font-semibold text-foreground/80">{e.userName || "Team Member"}</span></span>
+                                <span className="text-muted-foreground">• {dateStr}</span>
+                                {isEdited && <span className="text-[10px] text-muted-foreground/70 italic">(edited)</span>}
+                              </div>
+                              <span className="font-extrabold text-foreground bg-secondary px-2 py-0.5 rounded-md">{e.durationMinutes} min</span>
+                            </div>
+
+                            {isEditing ? (
+                              <div className="flex items-center gap-2 pt-1">
+                                <input
+                                  type="text"
+                                  value={editNotesText}
+                                  onChange={(evt) => setEditNotesText(evt.target.value)}
+                                  placeholder="Add or update work session notes..."
+                                  className="h-8 flex-1 rounded-lg border border-border bg-card px-3 text-[12px] text-foreground focus:outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    if (!businessId) return;
+                                    try {
+                                      await updateTimeEntryNotes(e.id, businessId, editNotesText);
+                                      setEditingEntryId(null);
+                                      if (currentTask) {
+                                        const updatedEntries = await fetchTaskTimeEntries(currentTask.id, businessId);
+                                        setTimeEntries(updatedEntries);
+                                      }
+                                    } catch (err: any) {
+                                      alert(`Failed to save note: ${err.message || String(err)}`);
+                                    }
+                                  }}
+                                  className="rounded-lg bg-brand px-3 py-1 text-[11px] font-bold text-white"
+                                >
+                                  Save Note
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingEntryId(null)}
+                                  className="rounded-lg border border-border px-3 py-1 text-[11px] font-semibold text-muted-foreground"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between gap-2 pt-0.5">
+                                <p className="text-muted-foreground italic">
+                                  {e.notes ? `"${e.notes}"` : <span className="text-muted-foreground/60">No notes provided for this session</span>}
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingEntryId(e.id);
+                                    setEditNotesText(e.notes || "");
+                                  }}
+                                  className="text-[10.5px] font-semibold text-brand hover:underline shrink-0"
+                                >
+                                  {e.notes ? "Edit note" : "+ Add note"}
+                                </button>
+                              </div>
+                            )}
                           </div>
-                          <span className="font-extrabold text-foreground">{e.durationMinutes} min</span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>

@@ -8,12 +8,14 @@ export interface TaskTimeEntry {
   businessId: string;
   taskId: string;
   userId: string | null;
+  userName?: string | null;
   startTime: string;
   endTime: string | null;
   durationMinutes: number;
   entryType: TimeEntryType;
   notes: string | null;
   createdAt: string;
+  updatedAt?: string | null;
 }
 
 export interface TaskProductivityMetrics {
@@ -39,22 +41,60 @@ export async function fetchTaskTimeEntries(taskId: string, businessId: string): 
       return [];
     }
 
-    return (data || []).map((e: any) => ({
+    const entries = data || [];
+    const userIds = Array.from(new Set(entries.map((e: any) => e.user_id).filter(Boolean)));
+    const profileMap: Record<string, string> = {};
+
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, first_name, last_name")
+        .in("id", userIds as string[]);
+
+      (profiles || []).forEach((p: any) => {
+        profileMap[p.id] = p.full_name || `${p.first_name || ""} ${p.last_name || ""}`.trim() || "Team Member";
+      });
+    }
+
+    return entries.map((e: any) => ({
       id: e.id,
       businessId: e.business_id,
       taskId: e.task_id,
       userId: e.user_id,
+      userName: e.user_id ? profileMap[e.user_id] || "Team Member" : "System",
       startTime: e.start_time,
       endTime: e.end_time,
       durationMinutes: e.duration_minutes || 0,
       entryType: e.entry_type || "manual",
       notes: e.notes,
       createdAt: e.created_at,
+      updatedAt: e.updated_at,
     }));
   } catch (err) {
     console.error("[fetchTaskTimeEntries] unexpected error:", err);
     return [];
   }
+}
+
+export async function updateTimeEntryNotes(
+  entryId: string,
+  businessId: string,
+  notes: string
+): Promise<boolean> {
+  const now = new Date().toISOString();
+  const { error } = await (supabase.from as any)("task_time_entries")
+    .update({
+      notes: notes.trim() || null,
+      updated_at: now,
+    })
+    .eq("id", entryId)
+    .eq("business_id", businessId);
+
+  if (error) {
+    console.error("[updateTimeEntryNotes] error:", error);
+    throw new Error(error.message || JSON.stringify(error));
+  }
+  return true;
 }
 
 export async function startTaskTimer(
