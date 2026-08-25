@@ -60,14 +60,20 @@ export async function fetchTaskTimeEntries(taskId: string, businessId: string): 
 export async function startTaskTimer(
   taskId: string,
   businessId: string,
-  userId: string
+  userId?: string | null
 ): Promise<TaskTimeEntry> {
+  if (!taskId || !businessId) {
+    throw new Error("Missing required task_id or business_id for timer.");
+  }
+
+  const sanitizedUserId = userId && userId.trim() !== "" ? userId.trim() : null;
   const now = new Date().toISOString();
+
   const { data: created, error } = await (supabase.from as any)("task_time_entries")
     .insert({
       business_id: businessId,
       task_id: taskId,
-      user_id: userId,
+      user_id: sanitizedUserId,
       start_time: now,
       entry_type: "timer",
       duration_minutes: 0,
@@ -162,18 +168,23 @@ export async function addManualTimeEntry(params: {
   entryType?: TimeEntryType;
 }): Promise<TaskTimeEntry> {
   const { taskId, businessId, userId, durationMinutes, notes, entryType } = params;
+  if (!taskId || !businessId) {
+    throw new Error("Missing required task_id or business_id for manual time entry.");
+  }
+
+  const sanitizedUserId = userId && userId.trim() !== "" ? userId.trim() : null;
   const now = new Date().toISOString();
 
   const { data: created, error } = await (supabase.from as any)("task_time_entries")
     .insert({
       business_id: businessId,
       task_id: taskId,
-      user_id: userId || null,
+      user_id: sanitizedUserId,
       start_time: now,
       end_time: now,
       duration_minutes: Math.max(1, durationMinutes),
       entry_type: entryType || "manual",
-      notes: notes || null,
+      notes: notes?.trim() || null,
     })
     .select()
     .single();

@@ -140,7 +140,9 @@ export function ExecutionSystemWorkspace({
     if (!businessId || !currentTask) return;
     setTrackingLoading(true);
     try {
-      const entry = await startTaskTimer(currentTask.id, businessId, "");
+      const { data: { session } } = await supabase.auth.getSession();
+      const currentUserId = session?.user?.id || null;
+      const entry = await startTaskTimer(currentTask.id, businessId, currentUserId);
       setActiveTimerId(entry.id);
       const updatedEntries = await fetchTaskTimeEntries(currentTask.id, businessId);
       setTimeEntries(updatedEntries);
@@ -176,9 +178,12 @@ export function ExecutionSystemWorkspace({
     if (!businessId || !currentTask || !manualMinutes) return;
     setTrackingLoading(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const currentUserId = session?.user?.id || null;
       await addManualTimeEntry({
         taskId: currentTask.id,
         businessId,
+        userId: currentUserId,
         durationMinutes: Number(manualMinutes),
         notes: manualNotes.trim() || null,
       });
