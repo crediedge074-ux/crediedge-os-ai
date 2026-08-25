@@ -477,6 +477,7 @@ import {
   type CalculatedMission,
 } from "@/services/missions";
 import { fetchCampaigns, type CalculatedCampaign } from "@/services/campaigns";
+import { calculateDeterministicTaskPriority, type PrioritisedTask } from "@/services/taskPriority";
 
 function MissionsSection({
   businessId,
@@ -748,36 +749,144 @@ function MissionsSection({
   );
 }
 
-function AIPriorityQueue({ tasks }: { tasks: Task[] }) {
-  const top3 = tasks.filter((t) => t.status !== "completed").slice(0, 3);
+function AIPriorityQueue({
+  tasks,
+  missions = [],
+  campaigns = [],
+  onTaskComplete,
+  onSelectTask,
+}: {
+  tasks: Task[];
+  missions?: CalculatedMission[];
+  campaigns?: CalculatedCampaign[];
+  onTaskComplete?: (t: Task) => Promise<void>;
+  onSelectTask?: (t: Task) => void;
+}) {
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+
+  const missionMap = missions.reduce<Record<string, string>>((acc, m) => {
+    acc[m.id] = m.title;
+    return acc;
+  }, {});
+
+  const campaignMap = campaigns.reduce<Record<string, string>>((acc, c) => {
+    acc[c.id] = c.name;
+    return acc;
+  }, {});
+
+  const pendingTasks = tasks.filter((t) => t.status !== "completed");
+
+  const prioritisedList: PrioritisedTask[] = pendingTasks.map((t) => {
+    const cName = (t as any).campaign_id ? campaignMap[(t as any).campaign_id] : null;
+    const mTitle = (t as any).mission_id ? missionMap[(t as any).mission_id] : null;
+    return calculateDeterministicTaskPriority(t, cName, mTitle);
+  });
+
+  prioritisedList.sort((a, b) => b.calculatedScore - a.calculatedScore);
+  const top3 = prioritisedList.slice(0, 3);
 
   return (
-    <div className="rounded-2xl border border-border bg-card shadow-soft">
-      <div className="flex items-center gap-2.5 border-b border-border px-5 py-3.5">
-        <Sparkles className="h-3.5 w-3.5 text-brand" strokeWidth={2} />
-        <span className="text-[13.5px] font-semibold text-foreground">AI Priority Queue</span>
-        <span className="ml-auto rounded-md bg-brand/10 px-2 py-0.5 text-[10px] font-semibold text-brand">
-          AI
+    <div className="rounded-2xl border border-border bg-card shadow-soft overflow-hidden">
+      <div className="flex items-center justify-between border-b border-border px-5 py-3.5 bg-secondary/30">
+        <div className="flex items-center gap-2.5">
+          <Sparkles className="h-4 w-4 text-brand" strokeWidth={2} />
+          <span className="text-[13.5px] font-bold text-foreground">CrediEdge Priority Intelligence Queue</span>
+          <span className="rounded-md bg-brand/10 px-2 py-0.5 text-[10px] font-bold text-brand uppercase">
+            Deterministic Engine
+          </span>
+        </div>
+
+        <span className="text-[11px] font-medium text-muted-foreground">
+          Calculated from due dates, impact, effort, and campaign links
         </span>
       </div>
-      <div className="p-4 space-y-2">
-        <p className="text-[12px] text-muted-foreground mb-3">
-          Complete these priority tasks first for maximum business impact today.
-        </p>
+
+      <div className="p-5 space-y-3">
         {top3.length === 0 ? (
-          <div className="text-[12px] text-muted-foreground italic">No pending tasks in AI queue.</div>
+          <div className="p-6 text-center text-xs text-muted-foreground italic">
+            No pending tasks in queue. All workspace workstreams are up to date!
+          </div>
         ) : (
-          top3.map((t, idx) => (
-            <div key={t.id} className="flex items-center gap-3 rounded-xl bg-secondary/50 px-3.5 py-2.5">
-              <div className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand text-[11px] font-extrabold text-white">
-                {idx + 1}
+          top3.map((pt, idx) => {
+            const isExpanded = expandedTaskId === pt.task.id;
+
+            return (
+              <div
+                key={pt.task.id}
+                className="rounded-xl border border-border bg-secondary/20 p-4 transition-all hover:border-foreground/20 space-y-3"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-foreground text-[12px] font-black text-background">
+                      #{idx + 1}
+                    </div>
+
+                    <div className="min-w-0 flex-1 cursor-pointer" onClick={() => onSelectTask && onSelectTask(pt.task)}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[13.5px] font-bold text-foreground truncate">{pt.task.title}</span>
+                        <span className="rounded-md bg-brand/10 px-2 py-0.5 text-[10px] font-bold text-brand">
+                          Score: {pt.calculatedScore} / 100 ({pt.calculatedTier})
+                        </span>
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+                        <span>Est. Effort: {pt.estimatedEffortText}</span>
+                        <span>Est. Impact: {pt.estimatedImpactText}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedTaskId(isExpanded ? null : pt.task.id)}
+                      className="text-[11px] font-semibold text-brand hover:underline"
+                    >
+                      {isExpanded ? "Hide Reasoning" : "Inspect Reasoning"}
+                    </button>
+
+                    {onTaskComplete && (
+                      <button
+                        type="button"
+                        onClick={() => onTaskComplete(pt.task)}
+                        className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1 text-[11px] font-bold text-white hover:bg-emerald-700"
+                      >
+                        <Check className="h-3 w-3" strokeWidth={3} /> Complete
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* AI Overlay / Context Notes */}
+                {pt.aiRecommendation && (
+                  <div className="flex items-start gap-2 rounded-xl border border-brand/20 bg-brand/5 p-3 text-[12px] text-foreground/90">
+                    <Zap className="h-4 w-4 shrink-0 text-brand mt-0.5" />
+                    <div>
+                      <div className="font-bold text-brand text-[11.5px] mb-0.5">Grounded AI Intelligence Note</div>
+                      <p className="leading-relaxed">{pt.aiRecommendation.explanation}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Expanded Reasoning Factors */}
+                {isExpanded && (
+                  <div className="rounded-xl border border-border bg-card p-3.5 space-y-2 text-[12px]">
+                    <div className="font-bold text-foreground text-[11.5px]">Deterministic Priority Calculation Breakdown:</div>
+                    <div className="space-y-1.5">
+                      {pt.reasons.map((r, rIdx) => (
+                        <div key={rIdx} className="flex items-center justify-between text-[11.5px] text-muted-foreground">
+                          <span className="flex items-center gap-1.5">
+                            <span className="h-1.5 w-1.5 rounded-full bg-brand" />
+                            {r.factor}
+                          </span>
+                          <span className="font-bold text-emerald-600">+{r.points} pts</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-[12px] font-medium text-foreground truncate">{t.title}</div>
-                <div className="text-[10.5px] text-muted-foreground">Priority: {t.priority}</div>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
@@ -1133,7 +1242,13 @@ function TasksPage() {
           <h2 className="text-[13px] font-semibold tracking-tight text-foreground">AI Priority Queue</h2>
           <div className="h-px flex-1 bg-border" />
         </div>
-        <AIPriorityQueue tasks={tasks} />
+        <AIPriorityQueue
+          tasks={tasks}
+          missions={missions}
+          campaigns={campaigns}
+          onTaskComplete={handleToggleCompletion}
+          onSelectTask={(t) => setSelectedTask(t)}
+        />
       </div>
 
       {/* Task Directory Header */}
