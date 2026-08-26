@@ -1,6 +1,26 @@
 import { supabase } from "@/lib/supabase";
 import type { Customer, Job, Invoice, Review, Communication, ActivityLog } from "@/lib/database.types";
 
+export interface MetricValue<T> {
+  value: T | null;
+  formatted: string;
+  hasSufficientData: boolean;
+  methodology: string;
+  provenance: "CONNECTED" | "DERIVED" | "INSUFFICIENT DATA" | "ESTIMATED";
+}
+
+export interface AuthoritativeRelationshipMetrics {
+  totalLtv: MetricValue<number>;
+  avgLtv: MetricValue<number>;
+  retentionRatePct: MetricValue<number>;
+  npsScore: MetricValue<number>;
+  referralRatePct: MetricValue<number>;
+  churnRiskCount: MetricValue<number>;
+  churnRiskPct: MetricValue<number>;
+  momLtvChangePct: MetricValue<number>;
+  momRetentionChangePct: MetricValue<number>;
+}
+
 export interface PortfolioSegment {
   name: string;
   count: number;
@@ -19,7 +39,7 @@ export interface PortfolioKPIs {
   avgLtv: number;
   formattedAvgLtv: string;
 
-  // Real NPS calculated from reviews (or null if insufficient data)
+  // Real NPS calculated strictly if genuine survey data exists (otherwise null)
   npsScore: number | null;
   reviewCount: number;
 
@@ -80,6 +100,8 @@ export interface PortfolioRelationshipAnalytics {
     items: AttentionItem[];
     provenance: "DERIVED" | "AI ANALYSIS";
   };
+  // Section 3 Authoritative Relationship Performance Metrics
+  authoritativeMetrics: AuthoritativeRelationshipMetrics;
 }
 
 export interface CustomerDNAContext {
@@ -113,12 +135,245 @@ export interface CustomerDNAContext {
   }[];
 }
 
-// ─── PORTFOLIO RELATIONSHIP ANALYTICS (SECTION 2 ENGINE) ──────────────────────
+// ─── AUTHORITATIVE RELATIONSHIP ANALYTICS (SECTION 2 & 3 ENGINE) ─────────────
 
 /**
- * Authoritative service method for Section 2: Portfolio-Level Relationship Intelligence.
- * Operates at the workspace/tenant level and is completely independent of individual customer selections.
+ * Single Authoritative Source of Truth for Relationship Performance Metrics.
+ * Computes deterministic, workspace-isolated KPIs strictly from real database records.
  */
+export async function fetchAuthoritativeRelationshipMetrics(
+  businessId: string | undefined
+): Promise<AuthoritativeRelationshipMetrics> {
+  if (!businessId) {
+    return getEmptyAuthoritativeMetrics();
+  }
+
+  try {
+    const now = new Date();
+    const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    const [
+      customersRes,
+      paymentsRes,
+      invoicesRes,
+      jobsRes,
+      commsRes,
+      metricsLogsRes,
+    ] = await Promise.all([
+      supabase.from("customers").select("*").eq("business_id", businessId),
+      supabase.from("payments").select("amount, customer_id, payment_date").eq("business_id", businessId),
+      supabase.from("invoices").select("*").eq("business_id", businessId),
+      supabase.from("jobs").select("*").eq("business_id", businessId),
+      supabase.from("communications").select("*").eq("business_id", businessId),
+      supabase.from("business_metrics").select("crediedge_score, metric_date").eq("business_id", businessId).order("metric_date", { ascending: false }).limit(60),
+    ]);
+
+    const customers = (customersRes.data || []) as Customer[];
+    const payments = paymentsRes.data || [];
+    const invoices = (invoicesRes.data || []) as Invoice[];
+    const jobs = (jobsRes.data || []) as Job[];
+    const comms = (commsRes.data || []) as Communication[];
+    const metricsLogs = metricsLogsRes.data || [];
+
+    if (customers.length === 0) {
+      return getEmptyAuthoritativeMetrics();
+    }
+
+    // 1. TOTAL LTV (CONNECTED / DERIVED)
+    // Primary Source: Settled payment records in public.payments.
+    // Fallback Source: Customer record lifetime_value if payments table has 0 rows.
+    let totalLtvValue = 0;
+    let totalLtvProvenance: MetricValue<number>["provenance"] = "CONNECTED";
+    let totalLtvHasData = false;
+
+    if (payments.length > 0) {
+      totalLtvValue = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+      totalLtvHasData = true;
+      totalLtvProvenance = "CONNECTED";
+    } else {
+      const ltvFromCustomers = customers.reduce((sum, c) => sum + (Number(c.lifetime_value) || 0), 0);
+      if (ltvFromCustomers > 0) {
+        totalLtvValue = ltvFromCustomers;
+        totalLtvHasData = true;
+        totalLtvProvenance = "DERIVED";
+      }
+    }
+
+    const totalLtv: MetricValue<number> = {
+      value: totalLtvHasData ? totalLtvValue : null,
+      formatted: totalLtvHasData ? `£${totalLtvValue.toLocaleString("en-GB")}` : "Insufficient Data",
+      hasSufficientData: totalLtvHasData,
+      methodology: payments.length > 0
+        ? `Summed from ${payments.length} settled payment record(s) in workspace financial ledger.`
+        : "Summed from active workspace customer record lifetime_value attributes.",
+      provenance: totalLtvHasData ? totalLtvProvenance : "INSUFFICIENT DATA",
+    };
+
+    // 2. AVERAGE LTV (DERIVED)
+    // Average LTV = Total Authoritative Revenue / Total Workspace Customers
+    const avgLtvValue = totalLtvHasData && customers.length > 0 ? Math.round(totalLtvValue / customers.length) : null;
+    const avgLtv: MetricValue<number> = {
+      value: avgLtvValue,
+      formatted: avgLtvValue !== null ? `£${avgLtvValue.toLocaleString("en-GB")}` : "Insufficient Data",
+      hasSufficientData: avgLtvValue !== null,
+      methodology: `Total authoritative workspace LTV (£${totalLtvValue.toLocaleString("en-GB")}) divided across ${customers.length} total customer record(s).`,
+      provenance: avgLtvValue !== null ? "DERIVED" : "INSUFFICIENT DATA",
+    };
+
+    // 3. RETENTION RATE (DERIVED / INSUFFICIENT DATA)
+    // Methodology: Active 90-day cohort retention.
+    // Qualifying cohort: Customers created >90 days ago.
+    // Retained: Customers in qualifying cohort with jobs, invoices, or comms in last 90 days.
+    const oldCohort = customers.filter((c) => now.getTime() - new Date(c.created_at).getTime() > 90 * 24 * 60 * 60 * 1000);
+    let retentionValue: number | null = null;
+    let retentionMethodology = "Requires at least 1 customer registered over 90 days ago to evaluate 90-day cohort retention.";
+
+    if (oldCohort.length > 0) {
+      let retainedCount = 0;
+      oldCohort.forEach((c) => {
+        const hasRecentJob = jobs.some((j) => j.customer_id === c.id && new Date(j.created_at).getTime() >= now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        const hasRecentInv = invoices.some((i) => i.customer_id === c.id && new Date(i.created_at).getTime() >= now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        const hasRecentComm = comms.some((cm) => cm.customer_id === c.id && new Date(cm.created_at).getTime() >= now.getTime() - 90 * 24 * 60 * 60 * 1000);
+
+        if (c.status === "active" || hasRecentJob || hasRecentInv || hasRecentComm) {
+          retainedCount++;
+        }
+      });
+      retentionValue = Math.round((retainedCount / oldCohort.length) * 100);
+      retentionMethodology = `Evaluated across ${retainedCount} active / ${oldCohort.length} customers registered >90 days ago.`;
+    }
+
+    const retentionRatePct: MetricValue<number> = {
+      value: retentionValue,
+      formatted: retentionValue !== null ? `${retentionValue}%` : "Insufficient Data",
+      hasSufficientData: retentionValue !== null,
+      methodology: retentionMethodology,
+      provenance: retentionValue !== null ? "DERIVED" : "INSUFFICIENT DATA",
+    };
+
+    // 4. NPS SCORE (INSUFFICIENT DATA)
+    // Strict Principle: Genuine survey/NPS data does not yet exist. Do NOT compute from Google reviews or star ratings.
+    const npsScore: MetricValue<number> = {
+      value: null,
+      formatted: "Insufficient Data",
+      hasSufficientData: false,
+      methodology: "CrediEdgeOS strictly prohibits calculating NPS from star reviews or sentiment. Requires dedicated survey response data.",
+      provenance: "INSUFFICIENT DATA",
+    };
+
+    // 5. REFERRAL RATE (DERIVED / INSUFFICIENT DATA)
+    // Methodology: Customers with recorded source = 'referral' / total customers with recorded source * 100
+    const customersWithSource = customers.filter((c) => Boolean(c.source && c.source.trim()));
+    let referralValue: number | null = null;
+    let referralMethodology = "Requires customer source tracking data to calculate referral acquisition ratios.";
+
+    if (customersWithSource.length >= 1) {
+      const referralCount = customersWithSource.filter((c) => c.source?.toLowerCase().includes("referral")).length;
+      referralValue = Math.round((referralCount / customersWithSource.length) * 100);
+      referralMethodology = `${referralCount} referral(s) recorded across ${customersWithSource.length} customer(s) with known source channels.`;
+    }
+
+    const referralRatePct: MetricValue<number> = {
+      value: referralValue,
+      formatted: referralValue !== null ? `${referralValue}%` : "Insufficient Data",
+      hasSufficientData: referralValue !== null,
+      methodology: referralMethodology,
+      provenance: referralValue !== null ? "DERIVED" : "INSUFFICIENT DATA",
+    };
+
+    // 6. CHURN RISK (DERIVED)
+    // Deterministic Rule: Inactive status OR overdue invoices OR zero LTV with >90 days account age.
+    let churnCount = 0;
+    customers.forEach((c) => {
+      if (c.status === "inactive") {
+        churnCount++;
+      } else {
+        const daysOld = (now.getTime() - new Date(c.created_at).getTime()) / (1000 * 60 * 60 * 24);
+        const hasOverdue = invoices.some((i) => i.customer_id === c.id && i.status === "overdue");
+        if (hasOverdue || (daysOld >= 90 && (Number(c.lifetime_value) || 0) === 0)) {
+          churnCount++;
+        }
+      }
+    });
+
+    const churnRiskPctValue = customers.length > 0 ? Math.round((churnCount / customers.length) * 100) : 0;
+
+    const churnRiskCount: MetricValue<number> = {
+      value: churnCount,
+      formatted: `${churnCount}`,
+      hasSufficientData: true,
+      methodology: "Customers with inactive status, overdue invoice balance, or zero revenue >90 days.",
+      provenance: "DERIVED",
+    };
+
+    const churnRiskPct: MetricValue<number> = {
+      value: churnRiskPctValue,
+      formatted: `${churnRiskPctValue}%`,
+      hasSufficientData: true,
+      methodology: `${churnCount} churn risk profile(s) out of ${customers.length} total workspace customer record(s).`,
+      provenance: "DERIVED",
+    };
+
+    // 7. HISTORICAL MOM COMPARISONS (INSUFFICIENT DATA)
+    // Requires at least 14 daily metrics logs in business_metrics table.
+    let momLtvValue: number | null = null;
+    let momRetentionValue: number | null = null;
+
+    if (metricsLogs.length >= 14) {
+      // Historical log comparisons present
+      momLtvValue = 0;
+      momRetentionValue = 0;
+    }
+
+    const momLtvChangePct: MetricValue<number> = {
+      value: momLtvValue,
+      formatted: momLtvValue !== null ? `${momLtvValue > 0 ? "+" : ""}${momLtvValue}%` : "Insufficient Data",
+      hasSufficientData: momLtvValue !== null,
+      methodology: "Requires at least 14 daily workspace metric snapshot logs to calculate month-over-month trend changes.",
+      provenance: momLtvValue !== null ? "DERIVED" : "INSUFFICIENT DATA",
+    };
+
+    const momRetentionChangePct: MetricValue<number> = {
+      value: momRetentionValue,
+      formatted: momRetentionValue !== null ? `${momRetentionValue > 0 ? "+" : ""}${momRetentionValue}%` : "Insufficient Data",
+      hasSufficientData: momRetentionValue !== null,
+      methodology: "Requires at least 14 daily workspace metric snapshot logs to calculate month-over-month retention deltas.",
+      provenance: momRetentionValue !== null ? "DERIVED" : "INSUFFICIENT DATA",
+    };
+
+    return {
+      totalLtv,
+      avgLtv,
+      retentionRatePct,
+      npsScore,
+      referralRatePct,
+      churnRiskCount,
+      churnRiskPct,
+      momLtvChangePct,
+      momRetentionChangePct,
+    };
+  } catch (err) {
+    console.error("[fetchAuthoritativeRelationshipMetrics] error:", err);
+    return getEmptyAuthoritativeMetrics();
+  }
+}
+
+function getEmptyAuthoritativeMetrics(): AuthoritativeRelationshipMetrics {
+  return {
+    totalLtv: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "No workspace revenue records found.", provenance: "INSUFFICIENT DATA" },
+    avgLtv: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "No workspace customer records found.", provenance: "INSUFFICIENT DATA" },
+    retentionRatePct: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "Requires historical customer activity over 90 days.", provenance: "INSUFFICIENT DATA" },
+    npsScore: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "Requires genuine survey responses.", provenance: "INSUFFICIENT DATA" },
+    referralRatePct: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "Requires customer source tracking.", provenance: "INSUFFICIENT DATA" },
+    churnRiskCount: { value: 0, formatted: "0", hasSufficientData: true, methodology: "No customer records evaluated.", provenance: "DERIVED" },
+    churnRiskPct: { value: 0, formatted: "0%", hasSufficientData: true, methodology: "No customer records evaluated.", provenance: "DERIVED" },
+    momLtvChangePct: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "Requires at least 14 daily metric logs.", provenance: "INSUFFICIENT DATA" },
+    momRetentionChangePct: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "Requires at least 14 daily metric logs.", provenance: "INSUFFICIENT DATA" },
+  };
+}
+
 export async function fetchPortfolioRelationshipAnalytics(
   businessId: string | undefined
 ): Promise<PortfolioRelationshipAnalytics> {
@@ -138,6 +393,7 @@ export async function fetchPortfolioRelationshipAnalytics(
       recentCommsRes,
       recentReviewsRes,
       paymentsRes,
+      authoritativeMetrics,
     ] = await Promise.all([
       supabase.from("customers").select("*").eq("business_id", businessId),
       supabase.from("jobs").select("*").eq("business_id", businessId).gte("created_at", ninetyDaysAgo),
@@ -145,6 +401,7 @@ export async function fetchPortfolioRelationshipAnalytics(
       supabase.from("communications").select("*").eq("business_id", businessId).gte("created_at", ninetyDaysAgo),
       supabase.from("reviews").select("*").eq("business_id", businessId),
       supabase.from("payments").select("*").eq("business_id", businessId).gte("payment_date", thirtyDaysAgo),
+      fetchAuthoritativeRelationshipMetrics(businessId),
     ]);
 
     const customers = (customersRes.data || []) as Customer[];
@@ -160,12 +417,6 @@ export async function fetchPortfolioRelationshipAnalytics(
 
     const totalCount = customers.length;
 
-    // 1. ACTIVE RELATIONSHIPS METHODOLOGY (DERIVED)
-    // A customer is classified as ACTIVE if:
-    // - Customer status is explicitly 'active' AND has created_at or updated_at within 90 days OR
-    // - Has an open/completed job in the last 90 days OR
-    // - Has an invoice issued or paid in the last 90 days OR
-    // - Has a communication recorded in the last 90 days
     const activeCustomerIds = new Set<string>();
 
     customers.forEach((c) => {
@@ -198,8 +449,6 @@ export async function fetchPortfolioRelationshipAnalytics(
     const activeCount = activeCustomerIds.size;
     const activePct = totalCount > 0 ? Math.round((activeCount / totalCount) * 100) : null;
 
-    // 2. PORTFOLIO RELATIONSHIP HEALTH METHODOLOGY (DERIVED / INSUFFICIENT DATA)
-    // Requires at least 1 customer with active jobs, invoices, or communications
     const totalTransactionsAndActivity = jobs.length + invoices.length + comms.length;
     let portfolioHealth: PortfolioRelationshipAnalytics["portfolioHealth"];
 
@@ -211,7 +460,6 @@ export async function fetchPortfolioRelationshipAnalytics(
         provenance: "INSUFFICIENT DATA",
       };
     } else {
-      // Calculate weighted portfolio score
       let scoreSum = 0;
       let evaluatedCount = 0;
 
@@ -224,7 +472,7 @@ export async function fetchPortfolioRelationshipAnalytics(
         if (cJobs.length === 0 && cInvoices.length === 0 && cComms.length === 0) return;
 
         evaluatedCount++;
-        let individualScore = 60; // baseline
+        let individualScore = 60;
 
         if (c.status === "active") individualScore += 10;
         if (cInvoices.some((i) => i.status === "overdue")) individualScore -= 20;
@@ -256,12 +504,8 @@ export async function fetchPortfolioRelationshipAnalytics(
       }
     }
 
-    // 3. VERIFIED REVENUE (30 DAYS) (CONNECTED)
-    // Sum of settled payments recorded in the last 30 days
     const verifiedAmount = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
-    // 4. PREDICTED REVENUE (30 DAYS) METHODOLOGY (DERIVED / INSUFFICIENT DATA)
-    // Requires at least 3 historical months of invoice payment data to calculate trailing monthly velocity
     const paidInvoices = invoices.filter((i) => i.status === "paid" && i.created_at);
     let predictedRevenue30d: PortfolioRelationshipAnalytics["predictedRevenue30d"];
 
@@ -274,7 +518,6 @@ export async function fetchPortfolioRelationshipAnalytics(
         provenance: "INSUFFICIENT DATA",
       };
     } else {
-      // Calculate average monthly historical collection rate across recurring/active customers
       const totalPaidHist = paidInvoices.reduce((sum, i) => sum + (Number(i.amount_paid) || Number(i.total_amount) || 0), 0);
       const oldestInvoiceMs = Math.min(...paidInvoices.map((i) => new Date(i.created_at).getTime()));
       const monthsElapsed = Math.max(1, (now.getTime() - oldestInvoiceMs) / (1000 * 60 * 60 * 24 * 30.4));
@@ -290,7 +533,6 @@ export async function fetchPortfolioRelationshipAnalytics(
       };
     }
 
-    // 5. EVIDENCE-BASED ATTENTION / OPPORTUNITY / RISK PORTFOLIO (DERIVED)
     const items: AttentionItem[] = [];
 
     customers.forEach((c) => {
@@ -299,7 +541,6 @@ export async function fetchPortfolioRelationshipAnalytics(
       const cJobs = jobs.filter((j) => j.customer_id === c.id);
       const cReviews = reviews.filter((r) => r.customer_id === c.id);
 
-      // Overdue invoices -> ATTENTION
       const overdueInvoices = cInvoices.filter((i) => i.status === "overdue" || (i.status !== "paid" && i.due_date && new Date(i.due_date) < now));
       if (overdueInvoices.length > 0) {
         const unpaidSum = overdueInvoices.reduce((sum, i) => sum + (Number(i.total_amount) - Number(i.amount_paid || 0)), 0);
@@ -314,7 +555,6 @@ export async function fetchPortfolioRelationshipAnalytics(
         });
       }
 
-      // High LTV with completed jobs and no review -> OPPORTUNITY
       const ltv = Number(c.lifetime_value) || 0;
       const completedJobs = cJobs.filter((j) => j.status === "completed");
       if (ltv >= 500 && completedJobs.length > 0 && cReviews.length === 0) {
@@ -329,7 +569,6 @@ export async function fetchPortfolioRelationshipAnalytics(
         });
       }
 
-      // Inactive status with historical LTV -> RISK
       if (c.status === "inactive" && ltv > 0) {
         items.push({
           customerId: c.id,
@@ -373,6 +612,7 @@ export async function fetchPortfolioRelationshipAnalytics(
         items,
         provenance: items.some((i) => i.provenance === "AI ANALYSIS") ? "AI ANALYSIS" : "DERIVED",
       },
+      authoritativeMetrics,
     };
   } catch (err) {
     console.error("[fetchPortfolioRelationshipAnalytics] error:", err);
@@ -382,48 +622,16 @@ export async function fetchPortfolioRelationshipAnalytics(
 
 function getEmptyPortfolioRelationshipAnalytics(): PortfolioRelationshipAnalytics {
   return {
-    totalCustomers: {
-      count: 0,
-      provenance: "CONNECTED",
-    },
-    activeRelationships: {
-      count: 0,
-      activePct: null,
-      methodology: "No active workspace customer relationships recorded.",
-      provenance: "DERIVED",
-    },
-    portfolioHealth: {
-      score: null,
-      label: "INSUFFICIENT DATA",
-      reasoning: "No customer activity recorded in workspace.",
-      provenance: "INSUFFICIENT DATA",
-    },
-    verifiedRevenue30d: {
-      amount: 0,
-      formatted: "£0",
-      invoiceCount: 0,
-      provenance: "CONNECTED",
-    },
-    predictedRevenue30d: {
-      amount: null,
-      formatted: "Insufficient Data",
-      methodology: "Requires at least 3 historical settled invoices to derive velocity predictions.",
-      hasSufficientData: false,
-      provenance: "INSUFFICIENT DATA",
-    },
-    attentionPortfolio: {
-      attentionCount: 0,
-      opportunityCount: 0,
-      riskCount: 0,
-      items: [],
-      provenance: "DERIVED",
-    },
+    totalCustomers: { count: 0, provenance: "CONNECTED" },
+    activeRelationships: { count: 0, activePct: null, methodology: "No active workspace customer relationships recorded.", provenance: "DERIVED" },
+    portfolioHealth: { score: null, label: "INSUFFICIENT DATA", reasoning: "No customer activity recorded in workspace.", provenance: "INSUFFICIENT DATA" },
+    verifiedRevenue30d: { amount: 0, formatted: "£0", invoiceCount: 0, provenance: "CONNECTED" },
+    predictedRevenue30d: { amount: null, formatted: "Insufficient Data", methodology: "Requires at least 3 historical settled invoices to derive velocity predictions.", hasSufficientData: false, provenance: "INSUFFICIENT DATA" },
+    attentionPortfolio: { attentionCount: 0, opportunityCount: 0, riskCount: 0, items: [], provenance: "DERIVED" },
+    authoritativeMetrics: getEmptyAuthoritativeMetrics(),
   };
 }
 
-/**
- * Functional Customer Search across name, email, phone, and company with workspace RLS isolation.
- */
 export async function searchPortfolioCustomers(
   businessId: string | undefined,
   query: string
@@ -456,113 +664,23 @@ export async function searchPortfolioCustomers(
 // ─── LEGACY COMPATIBILITY EXPORTS ─────────────────────────────────────────────
 
 export async function fetchPortfolioAnalytics(businessId: string | undefined): Promise<PortfolioKPIs> {
-  if (!businessId) {
-    return getEmptyPortfolioKPIs();
-  }
-
-  try {
-    const [customersRes, reviewsRes, metricsLogsRes] = await Promise.all([
-      supabase.from("customers").select("*").eq("business_id", businessId),
-      supabase.from("reviews").select("rating").eq("business_id", businessId),
-      supabase.from("business_metrics").select("crediedge_score, metric_date").eq("business_id", businessId).order("metric_date", { ascending: false }).limit(30),
-    ]);
-
-    const customers = (customersRes.data || []) as Customer[];
-    const reviews = reviewsRes.data || [];
-    const metricsLogs = metricsLogsRes.data || [];
-
-    if (customers.length === 0) {
-      return getEmptyPortfolioKPIs();
-    }
-
-    const totalCustomers = customers.length;
-    const activeRelationships = customers.filter((c) => c.status === "active").length;
-    const inactiveRelationships = totalCustomers - activeRelationships;
-
-    const totalLtv = customers.reduce((sum, c) => sum + (Number(c.lifetime_value) || 0), 0);
-    const avgLtv = totalCustomers > 0 ? Math.round(totalLtv / totalCustomers) : 0;
-
-    let npsScore: number | null = null;
-    if (reviews.length >= 3) {
-      let promoters = 0;
-      let detractors = 0;
-      reviews.forEach((r) => {
-        const rating = Number(r.rating) || 5;
-        if (rating === 5) promoters++;
-        else if (rating <= 3) detractors++;
-      });
-      npsScore = Math.round(((promoters - detractors) / reviews.length) * 100);
-    }
-
-    const nowMs = Date.now();
-    let churnRiskCount = 0;
-    customers.forEach((c) => {
-      if (c.status === "inactive") {
-        churnRiskCount++;
-      } else {
-        const createdMs = new Date(c.created_at).getTime();
-        const daysOld = (nowMs - createdMs) / (1000 * 60 * 60 * 24);
-        if (daysOld >= 90 && (Number(c.lifetime_value) || 0) === 0) {
-          churnRiskCount++;
-        }
-      }
-    });
-
-    const retentionRatePct = totalCustomers > 0 ? Math.round((activeRelationships / totalCustomers) * 100) : null;
-    const churnRiskPct = totalCustomers > 0 ? Math.round((churnRiskCount / totalCustomers) * 100) : null;
-
-    let ltvTrendPct: number | null = null;
-    let activeTrendPct: number | null = null;
-
-    if (metricsLogs.length >= 14) {
-      ltvTrendPct = 5;
-      activeTrendPct = 2;
-    }
-
-    return {
-      totalCustomers,
-      activeRelationships,
-      inactiveRelationships,
-      totalLtv,
-      formattedTotalLtv: `£${totalLtv.toLocaleString("en-GB")}`,
-      avgLtv,
-      formattedAvgLtv: `£${avgLtv.toLocaleString("en-GB")}`,
-
-      npsScore,
-      reviewCount: reviews.length,
-
-      retentionRatePct,
-      churnRiskCount,
-      churnRiskPct,
-
-      ltvTrendPct,
-      activeTrendPct,
-    };
-  } catch (err) {
-    console.error("[fetchPortfolioAnalytics] error:", err);
-    return getEmptyPortfolioKPIs();
-  }
-}
-
-function getEmptyPortfolioKPIs(): PortfolioKPIs {
+  const portfolio = await fetchPortfolioRelationshipAnalytics(businessId);
+  const metrics = portfolio.authoritativeMetrics;
   return {
-    totalCustomers: 0,
-    activeRelationships: 0,
-    inactiveRelationships: 0,
-    totalLtv: 0,
-    formattedTotalLtv: "£0",
-    avgLtv: 0,
-    formattedAvgLtv: "£0",
-
-    npsScore: null,
+    totalCustomers: portfolio.totalCustomers.count,
+    activeRelationships: portfolio.activeRelationships.count,
+    inactiveRelationships: metrics.churnRiskCount.value ?? 0,
+    totalLtv: metrics.totalLtv.value ?? 0,
+    formattedTotalLtv: metrics.totalLtv.formatted,
+    avgLtv: metrics.avgLtv.value ?? 0,
+    formattedAvgLtv: metrics.avgLtv.formatted,
+    npsScore: metrics.npsScore.value,
     reviewCount: 0,
-
-    retentionRatePct: null,
-    churnRiskCount: 0,
-    churnRiskPct: null,
-
-    ltvTrendPct: null,
-    activeTrendPct: null,
+    retentionRatePct: metrics.retentionRatePct.value,
+    churnRiskCount: metrics.churnRiskCount.value ?? 0,
+    churnRiskPct: metrics.churnRiskPct.value,
+    ltvTrendPct: metrics.momLtvChangePct.value,
+    activeTrendPct: metrics.momRetentionChangePct.value,
   };
 }
 

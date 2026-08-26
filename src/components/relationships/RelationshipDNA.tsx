@@ -273,57 +273,69 @@ function CustomerKPIs({ kpis }: { kpis: PortfolioKPIs }) {
       <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4 shadow-soft">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-medium text-muted-foreground">Total LTV</span>
-          <span className="rounded bg-brand/10 px-1 py-0.2 text-[8.5px] font-extrabold text-brand uppercase">CONNECTED</span>
+          <span className="rounded bg-brand/10 px-1 py-0.2 text-[8.5px] font-extrabold text-brand uppercase">
+            {kpis.totalLtv > 0 ? "CONNECTED" : "INSUFFICIENT DATA"}
+          </span>
         </div>
-        <div className="text-[20px] font-bold tracking-tight text-foreground">{kpis.formattedTotalLtv}</div>
-        <div className="text-[10.5px] font-medium text-muted-foreground">From customer records</div>
+        <div className="text-[20px] font-bold tracking-tight text-foreground">
+          {kpis.totalLtv > 0 ? kpis.formattedTotalLtv : "Insufficient Data"}
+        </div>
+        <div className="text-[10.5px] font-medium text-muted-foreground truncate">
+          {kpis.totalLtv > 0 ? "From settled payment ledger" : "No settled revenue recorded"}
+        </div>
       </div>
 
       <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4 shadow-soft">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-medium text-muted-foreground">Avg. LTV</span>
-          <span className="rounded bg-blue-500/10 px-1 py-0.2 text-[8.5px] font-extrabold text-blue-500 uppercase">DERIVED</span>
-        </div>
-        <div className="text-[20px] font-bold tracking-tight text-foreground">{kpis.formattedAvgLtv}</div>
-        <div className="text-[10.5px] font-medium text-muted-foreground">Across active portfolio</div>
-      </div>
-
-      <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4 shadow-soft">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] font-medium text-muted-foreground">Active Ratio</span>
-          <span className="rounded bg-emerald-500/10 px-1 py-0.2 text-[8.5px] font-extrabold text-emerald-500 uppercase">DERIVED</span>
-        </div>
-        <div className="text-[20px] font-bold tracking-tight text-foreground">
-          {kpis.retentionRatePct !== null ? `${kpis.retentionRatePct}%` : "N/A"}
-        </div>
-        <div className="text-[10.5px] font-medium text-muted-foreground">
-          {kpis.activeRelationships} active / {kpis.totalCustomers} total
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4 shadow-soft">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] font-medium text-muted-foreground">Review NPS</span>
-          <span className="rounded bg-secondary px-1 py-0.2 text-[8.5px] font-extrabold text-muted-foreground uppercase">
-            {kpis.npsScore !== null ? "DERIVED" : "INSUFFICIENT DATA"}
+          <span className="rounded bg-blue-500/10 px-1 py-0.2 text-[8.5px] font-extrabold text-blue-500 uppercase">
+            {kpis.avgLtv > 0 ? "DERIVED" : "INSUFFICIENT DATA"}
           </span>
         </div>
         <div className="text-[20px] font-bold tracking-tight text-foreground">
-          {kpis.npsScore !== null ? `${kpis.npsScore}` : "Insufficient Data"}
+          {kpis.avgLtv > 0 ? kpis.formattedAvgLtv : "Insufficient Data"}
         </div>
-        <div className="text-[10.5px] font-medium text-muted-foreground">
-          {kpis.reviewCount > 0 ? `From ${kpis.reviewCount} review(s)` : "Requires 3+ reviews"}
+        <div className="text-[10.5px] font-medium text-muted-foreground truncate">
+          {kpis.avgLtv > 0 ? "Across qualifying clients" : "Requires revenue history"}
         </div>
       </div>
 
       <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4 shadow-soft">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-medium text-muted-foreground">Inactive / Risk</span>
+          <span className="text-[11px] font-medium text-muted-foreground">Retention Rate</span>
+          <span className="rounded bg-emerald-500/10 px-1 py-0.2 text-[8.5px] font-extrabold text-emerald-500 uppercase">
+            {kpis.retentionRatePct !== null ? "DERIVED" : "INSUFFICIENT DATA"}
+          </span>
+        </div>
+        <div className="text-[20px] font-bold tracking-tight text-foreground">
+          {kpis.retentionRatePct !== null ? `${kpis.retentionRatePct}%` : "Insufficient Data"}
+        </div>
+        <div className="text-[10.5px] font-medium text-muted-foreground truncate">
+          {kpis.retentionRatePct !== null ? "90-day active cohort" : "Requires >90d history"}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4 shadow-soft">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-medium text-muted-foreground">Genuine NPS</span>
+          <span className="rounded bg-secondary px-1 py-0.2 text-[8.5px] font-extrabold text-muted-foreground uppercase">
+            INSUFFICIENT DATA
+          </span>
+        </div>
+        <div className="text-[20px] font-bold tracking-tight text-foreground">Insufficient Data</div>
+        <div className="text-[10.5px] font-medium text-muted-foreground truncate">
+          Requires survey response feed
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4 shadow-soft">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-medium text-muted-foreground">Churn Risk</span>
           <span className="rounded bg-amber-500/10 px-1 py-0.2 text-[8.5px] font-extrabold text-amber-500 uppercase">DERIVED</span>
         </div>
         <div className="text-[20px] font-bold tracking-tight text-foreground">{kpis.churnRiskCount}</div>
-        <div className="text-[10.5px] font-medium text-muted-foreground">
-          {kpis.churnRiskPct !== null ? `${kpis.churnRiskPct}% of portfolio` : "Requires customer history"}
+        <div className="text-[10.5px] font-medium text-muted-foreground truncate">
+          {kpis.churnRiskPct !== null ? `${kpis.churnRiskPct}% of portfolio` : "Evaluated workspace records"}
         </div>
       </div>
 
@@ -337,8 +349,8 @@ function CustomerKPIs({ kpis }: { kpis: PortfolioKPIs }) {
         <div className="text-[20px] font-bold tracking-tight text-foreground">
           {kpis.ltvTrendPct !== null ? `+${kpis.ltvTrendPct}%` : "Insufficient Data"}
         </div>
-        <div className="text-[10.5px] font-medium text-muted-foreground">
-          {kpis.ltvTrendPct !== null ? "vs previous month" : "Requires historical logs"}
+        <div className="text-[10.5px] font-medium text-muted-foreground truncate">
+          {kpis.ltvTrendPct !== null ? "vs previous month" : "Requires 14+ daily snapshot logs"}
         </div>
       </div>
     </div>
