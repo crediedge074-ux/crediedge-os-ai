@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { AppLayout } from "@/components/ui/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PortfolioRelationshipHeader } from "@/components/relationships/PortfolioRelationshipHeader";
 import { RelationshipDNA } from "@/components/relationships/RelationshipDNA";
 import { CustomerForm } from "@/components/customers/CustomerForm";
 import { useCreateCustomer, useUpdateCustomer, useCustomers } from "@/hooks/useCustomers";
@@ -68,18 +69,12 @@ function RelationshipsPage() {
         secondaryAction={{ label: "Sync Data", onClick: () => refresh() }}
       />
 
-      <div className="mb-6 flex flex-col sm:flex-row gap-3 items-center justify-between">
-        <div className="relative w-full sm:w-80">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search customers..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-xl border border-border bg-card pl-9 pr-4 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-brand"
-          />
-        </div>
-      </div>
+      <PortfolioRelationshipHeader
+        onSelectCustomer={(cust) => {
+          handleEdit(cust);
+        }}
+        onAddCustomer={handleCreateNew}
+      />
 
       <RelationshipDNA
         onAddCustomer={handleCreateNew}
