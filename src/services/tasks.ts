@@ -153,13 +153,26 @@ export async function moveTaskMission(
 }
 
 export async function createTask(insert: TaskInsert): Promise<Task> {
+  const payload: any = {
+    ...insert,
+    status: insert.status || "todo",
+    priority: insert.priority || "medium",
+  };
+
+  // Convert empty string parameters to null to avoid UUID syntax errors
+  if (payload.assigned_to === "") payload.assigned_to = null;
+  if (payload.customer_id === "") payload.customer_id = null;
+  if (payload.job_id === "") payload.job_id = null;
+  if (payload.invoice_id === "") payload.invoice_id = null;
+  if (payload.campaign_id === "") payload.campaign_id = null;
+  if (payload.mission_id === "") payload.mission_id = null;
+  if (payload.goal_id === "") payload.goal_id = null;
+  if (payload.communication_id === "") payload.communication_id = null;
+  if (payload.review_id === "") payload.review_id = null;
+
   const { data, error } = await supabase
     .from("tasks")
-    .insert({
-      ...insert,
-      status: insert.status || "todo",
-      priority: insert.priority || "medium",
-    })
+    .insert(payload)
     .select()
     .single();
 
@@ -190,9 +203,21 @@ export async function createTask(insert: TaskInsert): Promise<Task> {
 }
 
 export async function updateTask(id: string, businessId: string, updates: TaskUpdate): Promise<Task> {
+  const payload: any = { ...updates, updated_at: new Date().toISOString() };
+
+  if (payload.assigned_to === "") payload.assigned_to = null;
+  if (payload.customer_id === "") payload.customer_id = null;
+  if (payload.job_id === "") payload.job_id = null;
+  if (payload.invoice_id === "") payload.invoice_id = null;
+  if (payload.campaign_id === "") payload.campaign_id = null;
+  if (payload.mission_id === "") payload.mission_id = null;
+  if (payload.goal_id === "") payload.goal_id = null;
+  if (payload.communication_id === "") payload.communication_id = null;
+  if (payload.review_id === "") payload.review_id = null;
+
   const { data, error } = await supabase
     .from("tasks")
-    .update({ ...updates, updated_at: new Date().toISOString() })
+    .update(payload)
     .eq("id", id)
     .eq("business_id", businessId)
     .select()
