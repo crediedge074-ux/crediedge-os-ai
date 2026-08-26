@@ -67,16 +67,23 @@ export async function createCalendarEvent(input: CalendarEventInsertInput): Prom
   const { data: session } = await supabase.auth.getSession();
   const userId = session?.session?.user?.id || null;
 
+  const payload: any = {
+    ...input,
+    event_type: input.event_type || "meeting",
+    is_all_day: input.is_all_day ?? false,
+    provider: input.provider || "internal",
+    sync_status: input.sync_status || "synced",
+    created_by: userId,
+  };
+
+  // Convert empty string parameters to null to avoid UUID syntax errors
+  if (payload.customer_id === "") payload.customer_id = null;
+  if (payload.job_id === "") payload.job_id = null;
+  if (payload.task_id === "") payload.task_id = null;
+
   const { data, error } = await supabase
     .from("calendar_events")
-    .insert({
-      ...input,
-      event_type: input.event_type || "meeting",
-      is_all_day: input.is_all_day ?? false,
-      provider: input.provider || "internal",
-      sync_status: input.sync_status || "synced",
-      created_by: userId,
-    } as any)
+    .insert(payload)
     .select()
     .single();
 
@@ -103,12 +110,18 @@ export async function updateCalendarEvent(
   businessId: string,
   updates: CalendarEventUpdateInput
 ): Promise<CalendarEvent> {
+  const payload: any = {
+    ...updates,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (payload.customer_id === "") payload.customer_id = null;
+  if (payload.job_id === "") payload.job_id = null;
+  if (payload.task_id === "") payload.task_id = null;
+
   const { data, error } = await supabase
     .from("calendar_events")
-    .update({
-      ...updates,
-      updated_at: new Date().toISOString(),
-    } as any)
+    .update(payload)
     .eq("id", id)
     .eq("business_id", businessId)
     .select()

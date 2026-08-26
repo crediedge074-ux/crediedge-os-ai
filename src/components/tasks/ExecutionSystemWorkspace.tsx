@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import type { CalculatedCampaign, StoredCampaign } from "@/services/campaigns";
 import type { CalculatedMission, StoredMission } from "@/services/missions";
-import type { Task, Customer, Job, Invoice } from "@/lib/database.types";
+import type { Task, Customer, Job, Invoice, Goal, Communication, Review } from "@/lib/database.types";
 import type { WorkspaceMemberInfo } from "@/services/tasks";
 import { updateCampaign } from "@/services/campaigns";
 import { updateMission, createMission } from "@/services/missions";
@@ -51,6 +51,7 @@ import {
   TARGET_METRIC_OPTIONS,
   type TaskBusinessImpactEvaluation,
 } from "@/services/taskImpact";
+import { fetchTaskAnalytics, type TaskAnalyticsReport } from "@/services/taskAnalytics";
 import { getCustomers } from "@/services/customers";
 import { supabase } from "@/lib/supabase";
 import { ShieldCheck, Award, Info, HelpCircle } from "lucide-react";
@@ -94,6 +95,9 @@ export function ExecutionSystemWorkspace({
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [communications, setCommunications] = useState<Communication[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [loadingEntities, setLoadingEntities] = useState(false);
 
   // Productivity & Time Tracking State
@@ -113,10 +117,17 @@ export function ExecutionSystemWorkspace({
   const [impactLoading, setImpactLoading] = useState(false);
   const [showMetricGuide, setShowMetricGuide] = useState(false);
 
+  // Task Analytics State
+  const [analytics, setAnalytics] = useState<TaskAnalyticsReport | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
   // Link selectors
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
   const [selectedJobId, setSelectedJobId] = useState<string>("");
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>("");
+  const [selectedGoalId, setSelectedGoalId] = useState<string>("");
+  const [selectedCommId, setSelectedCommId] = useState<string>("");
+  const [selectedReviewId, setSelectedReviewId] = useState<string>("");
   const [linking, setLinking] = useState(false);
 
   // Current entity context
@@ -137,13 +148,19 @@ export function ExecutionSystemWorkspace({
       getCustomers(businessId).catch(() => []),
       supabase.from("jobs").select("*").eq("business_id", businessId).then((r) => r.data || []),
       supabase.from("invoices").select("*").eq("business_id", businessId).then((r) => r.data || []),
+      supabase.from("goals").select("*").eq("business_id", businessId).then((r) => r.data || []),
+      supabase.from("communications").select("*").eq("business_id", businessId).limit(25).then((r) => r.data || []),
+      supabase.from("reviews").select("*").eq("business_id", businessId).limit(25).then((r) => r.data || []),
       currentTask ? fetchTaskTimeEntries(currentTask.id, businessId) : Promise.resolve([]),
       currentTask ? calculateTaskProductivity(currentTask.id, businessId) : Promise.resolve(null),
     ])
-      .then(([custList, jobList, invList, tEntries, prodMetrics]) => {
+      .then(([custList, jobList, invList, goalList, commList, revList, tEntries, prodMetrics]) => {
         setCustomers(custList);
         setJobs(jobList as Job[]);
         setInvoices(invList as Invoice[]);
+        setGoals(goalList as Goal[]);
+        setCommunications(commList as Communication[]);
+        setReviews(revList as Review[]);
         setTimeEntries(tEntries);
         setProductivity(prodMetrics);
         const activeEntry = tEntries.find((e) => !e.endTime && e.entryType === "timer");
@@ -158,7 +175,15 @@ export function ExecutionSystemWorkspace({
         .catch((err) => console.error("Impact evaluation failed:", err))
         .finally(() => setImpactLoading(false));
     }
-  }, [businessId, currentTask]);
+
+    if (activeTab === "activity") {
+      setAnalyticsLoading(true);
+      fetchTaskAnalytics(businessId)
+        .then((res) => setAnalytics(res))
+        .catch((err) => console.error("Task analytics fetch failed:", err))
+        .finally(() => setAnalyticsLoading(false));
+    }
+  }, [businessId, currentTask, activeTab]);
 
   const handleStartTimer = async () => {
     if (!businessId || !currentTask) return;
@@ -229,22 +254,32 @@ export function ExecutionSystemWorkspace({
   const activeCustomerId = targetEntity?.customer_id;
   const activeJobId = targetEntity?.job_id;
   const activeInvoiceId = (targetEntity as any)?.invoice_id;
+  const activeGoalId = (targetEntity as any)?.goal_id;
+  const activeCommId = (targetEntity as any)?.communication_id;
+  const activeReviewId = (targetEntity as any)?.review_id;
 
   const linkedCustomer = customers.find((c) => c.id === activeCustomerId);
   const linkedJob = jobs.find((j) => j.id === activeJobId);
   const linkedInvoice = invoices.find((i) => i.id === activeInvoiceId);
+  const linkedGoal = goals.find((g) => g.id === activeGoalId);
+  const linkedComm = communications.find((c) => c.id === activeCommId);
+  const linkedReview = reviews.find((r) => r.id === activeReviewId);
 
   // Link entity handler
-  const handleLinkEntity = async (type: "customer" | "job" | "invoice", entityId: string | null) => {
+  const handleLinkEntity = async (
+    type: "customer" | "job" | "invoice" | "goal" | "communication" | "review",
+    entityId: string | null
+  ) => {
     if (!businessId || !targetEntity) return;
     setLinking(true);
     try {
+      const fieldKey = type === "communication" ? "communication_id" : `${type}_id`;
       if (currentTask) {
-        await updateTask(currentTask.id, businessId, { [`${type}_id`]: entityId } as any);
-      } else if (currentMission) {
-        await updateMission(currentMission.id, businessId, { [`${type}_id`]: entityId } as any);
-      } else if (currentCampaign) {
-        await updateCampaign(currentCampaign.id, businessId, { [`${type}_id`]: entityId } as any);
+        await updateTask(currentTask.id, businessId, { [fieldKey]: entityId } as any);
+      } else if (currentMission && ["customer", "job", "invoice"].includes(type)) {
+        await updateMission(currentMission.id, businessId, { [fieldKey]: entityId } as any);
+      } else if (currentCampaign && ["customer", "job", "invoice"].includes(type)) {
+        await updateCampaign(currentCampaign.id, businessId, { [fieldKey]: entityId } as any);
       }
       onRefresh();
     } catch (err: any) {
@@ -765,52 +800,6 @@ export function ExecutionSystemWorkspace({
                     )}
                   </div>
 
-                  {/* Linked Job */}
-                  <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-                    <div className="flex items-center gap-2 text-[12.5px] font-bold text-foreground">
-                      <Briefcase className="h-4 w-4 text-blue-600" /> Job Link
-                    </div>
-                    {linkedJob ? (
-                      <div className="space-y-2">
-                        <div className="text-[13px] font-extrabold text-foreground">
-                          {linkedJob.job_number} — {linkedJob.title}
-                        </div>
-                        <div className="text-[11px] text-muted-foreground">Status: {linkedJob.status}</div>
-                        <button
-                          type="button"
-                          disabled={linking}
-                          onClick={() => handleLinkEntity("job", null)}
-                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-destructive hover:underline"
-                        >
-                          <Unlink className="h-3 w-3" /> Unlink Job
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <select
-                          value={selectedJobId}
-                          onChange={(e) => setSelectedJobId(e.target.value)}
-                          className="h-8 w-full rounded-lg border border-border bg-secondary/30 px-2 text-[12px] text-foreground focus:outline-none"
-                        >
-                          <option value="">Select workspace job...</option>
-                          {jobs.map((j) => (
-                            <option key={j.id} value={j.id}>
-                              {j.job_number}: {j.title}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          disabled={!selectedJobId || linking}
-                          onClick={() => handleLinkEntity("job", selectedJobId)}
-                          className="inline-flex items-center gap-1 rounded-lg bg-foreground px-3 py-1 text-[11px] font-semibold text-background hover:bg-foreground/85 disabled:opacity-50"
-                        >
-                          <Link className="h-3 w-3" /> Connect Job
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
                   {/* Linked Invoice */}
                   <div className="rounded-xl border border-border bg-card p-4 space-y-3">
                     <div className="flex items-center gap-2 text-[12.5px] font-bold text-foreground">
@@ -852,6 +841,190 @@ export function ExecutionSystemWorkspace({
                           className="inline-flex items-center gap-1 rounded-lg bg-foreground px-3 py-1 text-[11px] font-semibold text-background hover:bg-foreground/85 disabled:opacity-50"
                         >
                           <Link className="h-3 w-3" /> Connect Invoice
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Linked Goal */}
+                  <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-[12.5px] font-bold text-foreground">
+                      <Target className="h-4 w-4 text-amber-500" /> Strategic Goal Link
+                    </div>
+                    {linkedGoal ? (
+                      <div className="space-y-2">
+                        <div className="text-[13px] font-extrabold text-foreground">
+                          {linkedGoal.title}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">Target: {linkedGoal.target_value} {linkedGoal.unit || ""}</div>
+                        <button
+                          type="button"
+                          disabled={linking}
+                          onClick={() => handleLinkEntity("goal", null)}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-destructive hover:underline"
+                        >
+                          <Unlink className="h-3 w-3" /> Unlink Goal
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <select
+                          value={selectedGoalId}
+                          onChange={(e) => setSelectedGoalId(e.target.value)}
+                          className="h-8 w-full rounded-lg border border-border bg-secondary/30 px-2 text-[12px] text-foreground focus:outline-none"
+                        >
+                          <option value="">Select workspace goal...</option>
+                          {goals.map((g) => (
+                            <option key={g.id} value={g.id}>
+                              {g.title}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          disabled={!selectedGoalId || linking}
+                          onClick={() => handleLinkEntity("goal", selectedGoalId)}
+                          className="inline-flex items-center gap-1 rounded-lg bg-foreground px-3 py-1 text-[11px] font-semibold text-background hover:bg-foreground/85 disabled:opacity-50"
+                        >
+                          <Link className="h-3 w-3" /> Connect Goal
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Linked Communication */}
+                  <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-[12.5px] font-bold text-foreground">
+                      <MessageSquare className="h-4 w-4 text-blue-500" /> Communication Link
+                    </div>
+                    {linkedComm ? (
+                      <div className="space-y-2">
+                        <div className="text-[13px] font-extrabold text-foreground truncate">
+                          {linkedComm.subject || linkedComm.body.slice(0, 40)}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">Channel: {linkedComm.channel}</div>
+                        <button
+                          type="button"
+                          disabled={linking}
+                          onClick={() => handleLinkEntity("communication", null)}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-destructive hover:underline"
+                        >
+                          <Unlink className="h-3 w-3" /> Unlink Communication
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <select
+                          value={selectedCommId}
+                          onChange={(e) => setSelectedCommId(e.target.value)}
+                          className="h-8 w-full rounded-lg border border-border bg-secondary/30 px-2 text-[12px] text-foreground focus:outline-none"
+                        >
+                          <option value="">Select communication record...</option>
+                          {communications.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.subject || c.body.slice(0, 30)} ({c.channel})
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          disabled={!selectedCommId || linking}
+                          onClick={() => handleLinkEntity("communication", selectedCommId)}
+                          className="inline-flex items-center gap-1 rounded-lg bg-foreground px-3 py-1 text-[11px] font-semibold text-background hover:bg-foreground/85 disabled:opacity-50"
+                        >
+                          <Link className="h-3 w-3" /> Connect Communication
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Linked Review */}
+                  <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-[12.5px] font-bold text-foreground">
+                      <Sparkles className="h-4 w-4 text-yellow-500" /> Review Link
+                    </div>
+                    {linkedReview ? (
+                      <div className="space-y-2">
+                        <div className="text-[13px] font-extrabold text-foreground">
+                          {linkedReview.rating ? `${linkedReview.rating}★ Review` : "Feedback Record"}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground truncate">{linkedReview.feedback || "No comment"}</div>
+                        <button
+                          type="button"
+                          disabled={linking}
+                          onClick={() => handleLinkEntity("review", null)}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-destructive hover:underline"
+                        >
+                          <Unlink className="h-3 w-3" /> Unlink Review
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <select
+                          value={selectedReviewId}
+                          onChange={(e) => setSelectedReviewId(e.target.value)}
+                          className="h-8 w-full rounded-lg border border-border bg-secondary/30 px-2 text-[12px] text-foreground focus:outline-none"
+                        >
+                          <option value="">Select review record...</option>
+                          {reviews.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.rating || 5}★ Review ({r.source || "internal"})
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          disabled={!selectedReviewId || linking}
+                          onClick={() => handleLinkEntity("review", selectedReviewId)}
+                          className="inline-flex items-center gap-1 rounded-lg bg-foreground px-3 py-1 text-[11px] font-semibold text-background hover:bg-foreground/85 disabled:opacity-50"
+                        >
+                          <Link className="h-3 w-3" /> Connect Review
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Linked Job (Optional Legacy Support) */}
+                  <div className="rounded-xl border border-border bg-card/60 p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-[12.5px] font-bold text-foreground">
+                      <Briefcase className="h-4 w-4 text-blue-600" /> Job Link (Optional)
+                    </div>
+                    {linkedJob ? (
+                      <div className="space-y-2">
+                        <div className="text-[13px] font-extrabold text-foreground">
+                          {linkedJob.job_number} — {linkedJob.title}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">Status: {linkedJob.status}</div>
+                        <button
+                          type="button"
+                          disabled={linking}
+                          onClick={() => handleLinkEntity("job", null)}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-destructive hover:underline"
+                        >
+                          <Unlink className="h-3 w-3" /> Unlink Job
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <select
+                          value={selectedJobId}
+                          onChange={(e) => setSelectedJobId(e.target.value)}
+                          className="h-8 w-full rounded-lg border border-border bg-secondary/30 px-2 text-[12px] text-foreground focus:outline-none"
+                        >
+                          <option value="">Select workspace job (optional)...</option>
+                          {jobs.map((j) => (
+                            <option key={j.id} value={j.id}>
+                              {j.job_number}: {j.title}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          disabled={!selectedJobId || linking}
+                          onClick={() => handleLinkEntity("job", selectedJobId)}
+                          className="inline-flex items-center gap-1 rounded-lg bg-foreground px-3 py-1 text-[11px] font-semibold text-background hover:bg-foreground/85 disabled:opacity-50"
+                        >
+                          <Link className="h-3 w-3" /> Connect Job
                         </button>
                       </div>
                     )}
@@ -1046,15 +1219,99 @@ export function ExecutionSystemWorkspace({
                 </div>
               )}
 
-              <div className="rounded-xl border border-border bg-secondary/20 p-6 text-center space-y-3">
-                <BarChart3 className="mx-auto h-8 w-8 text-muted-foreground/60" />
-                <div className="text-[14px] font-bold text-foreground">Measured Business Performance</div>
-                <p className="text-[12.5px] text-muted-foreground max-w-md mx-auto">
-                  CrediEdgeOS strictly calculates financial performance from verified linked payment records.
-                </p>
-                <div className="inline-block rounded-xl bg-card border border-border px-4 py-2 text-[12px] font-bold text-foreground/80">
-                  Insufficient data — Connect an invoice or payment record to measure revenue outcome variance.
+              {/* Task Analytics & Historical Metrics Section */}
+              <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-border pb-3">
+                  <div>
+                    <h3 className="text-[14px] font-bold text-foreground flex items-center gap-2">
+                      <BarChart3 className="h-4 w-4 text-brand" /> Task Analytics & Execution Velocity
+                    </h3>
+                    <p className="text-[11.5px] text-muted-foreground mt-0.5">
+                      Deterministic operational metrics calculated from workspace task completion timestamps.
+                    </p>
+                  </div>
+                  <span className="rounded-md bg-secondary px-2.5 py-0.5 text-[10.5px] font-bold text-foreground">
+                    {analytics?.totalTasksCreated || 0} Total Created
+                  </span>
                 </div>
+
+                {analyticsLoading ? (
+                  <div className="p-6 text-center text-xs text-muted-foreground italic">
+                    Loading workspace task analytics...
+                  </div>
+                ) : analytics?.hasSufficientData ? (
+                  <div className="space-y-4">
+                    <div className="grid gap-3 sm:grid-cols-4 text-[11.5px]">
+                      <div className="rounded-xl border border-border bg-secondary/30 p-3.5">
+                        <div className="text-[10.5px] font-medium text-muted-foreground">Completion Rate</div>
+                        <div className="text-[15px] font-black text-brand mt-0.5">
+                          {analytics.overallCompletionRatePct !== null ? `${analytics.overallCompletionRatePct}%` : "N/A"}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">
+                          {analytics.totalTasksCompleted} / {analytics.totalTasksCreated} tasks done
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-border bg-secondary/30 p-3.5">
+                        <div className="text-[10.5px] font-medium text-muted-foreground">Avg Resolution Time</div>
+                        <div className="text-[15px] font-black text-foreground mt-0.5">
+                          {analytics.avgCompletionDays !== null ? `${analytics.avgCompletionDays} days` : "Insufficient data"}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">
+                          From creation to completion
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-border bg-secondary/30 p-3.5">
+                        <div className="text-[10.5px] font-medium text-muted-foreground">Overdue Tasks</div>
+                        <div className={`text-[15px] font-black mt-0.5 ${analytics.totalOverdueTasks > 0 ? "text-red-500" : "text-emerald-500"}`}>
+                          {analytics.totalOverdueTasks}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">
+                          Pending tasks past due date
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-border bg-secondary/30 p-3.5">
+                        <div className="text-[10.5px] font-medium text-muted-foreground">Verified Impact</div>
+                        <div className="text-[15px] font-black text-emerald-600 mt-0.5">
+                          {analytics.hasVerifiedImpactData ? `£${analytics.totalVerifiedImpactValue.toLocaleString("en-GB")}` : "Insufficient data"}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">
+                          From linked payment records
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Monthly Throughput Trends */}
+                    {analytics.monthlyTrends.length > 0 && (
+                      <div className="space-y-2 pt-2 border-t border-border">
+                        <div className="text-[12px] font-bold text-foreground">Monthly Operational Throughput:</div>
+                        <div className="grid gap-2 sm:grid-cols-3">
+                          {analytics.monthlyTrends.slice(-3).map((mt) => (
+                            <div key={mt.monthKey} className="rounded-xl border border-border bg-secondary/20 p-3 text-[11px] space-y-1">
+                              <div className="font-bold text-foreground border-b border-border/40 pb-1 flex justify-between">
+                                <span>{mt.monthLabel}</span>
+                                <span className="text-brand font-extrabold">{mt.completionRatePct !== null ? `${mt.completionRatePct}% rate` : "N/A"}</span>
+                              </div>
+                              <div className="flex justify-between text-muted-foreground pt-0.5">
+                                <span>Created: {mt.createdCount}</span>
+                                <span>Completed: {mt.completedCount}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-border bg-secondary/20 p-6 text-center space-y-2">
+                    <div className="text-[13px] font-bold text-foreground">Insufficient Workspace Task History</div>
+                    <p className="text-[11.5px] text-muted-foreground max-w-md mx-auto">
+                      Create and complete operational tasks to generate execution velocity analytics and completion rate trends.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           )}
