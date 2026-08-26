@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { Brain, TrendingUp, TrendingDown, MessageSquare, CircleDollarSign, Star, Clock, Calendar, ChevronDown, ChevronRight, Zap, Target, Heart, Shield, ChartBar as BarChart2, Users, ArrowRight, Lightbulb, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, ChartBar as BarChart3, Repeat, Gift, Phone, Mail, MessageCircle, Sparkles, Award, Eye, RefreshCw } from "lucide-react";
 import { useCustomers } from "@/hooks/useCustomers";
 import type { Customer } from "@/lib/database.types";
+import { AIDisclosure } from "@/components/ui/AIDisclosure";
+import { ShieldCheck, Flag } from "lucide-react";
 
 // ─── Animated Number ────────────────────────────────────────────────────────
 
@@ -433,59 +435,80 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
 
 // ─── HERO ─────────────────────────────────────────────────────────────────────
 
-function RelationshipDNAHero({ total, active }: { total: number; active: number }) {
+function RelationshipDNAHero({
+  total,
+  active,
+  totalLtv,
+  attentionCount,
+  upsellCount,
+}: {
+  total: number;
+  active: number;
+  totalLtv: number;
+  attentionCount: number;
+  upsellCount: number;
+}) {
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-foreground p-6 text-background shadow-card">
-      <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-brand/20 blur-3xl" />
-      <div className="absolute -bottom-8 left-1/3 h-40 w-40 rounded-full bg-brand/10 blur-2xl" />
+    <div className="space-y-4">
+      <div className="relative overflow-hidden rounded-2xl bg-foreground p-6 text-background shadow-card">
+        <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-brand/20 blur-3xl" />
+        <div className="absolute -bottom-8 left-1/3 h-40 w-40 rounded-full bg-brand/10 blur-2xl" />
 
-      <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-background/10 px-3 py-1 text-[10.5px] font-semibold uppercase tracking-wider">
-            <Sparkles className="h-3 w-3 text-brand" />
-            AI-Powered Intelligence
+        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-background/10 px-3 py-1 text-[10.5px] font-semibold uppercase tracking-wider">
+              <Sparkles className="h-3 w-3 text-brand" />
+              AI-Powered Intelligence
+            </div>
+            <h1 className="text-[22px] font-bold leading-tight tracking-tight text-background">
+              Relationship DNA™
+            </h1>
+            <p className="mt-1.5 max-w-lg text-[13px] leading-relaxed text-background/70">
+              Your AI analyses workspace customer records, order frequency, and contact channels to evaluate relationship health, retention risks, and engagement opportunities.
+            </p>
           </div>
-          <h1 className="text-[22px] font-bold leading-tight tracking-tight text-background">
-            Relationship DNA™
-          </h1>
-          <p className="mt-1.5 max-w-lg text-[13px] leading-relaxed text-background/70">
-            Your AI understands every customer's personality, buying behaviour, and relationship health — so you know exactly who needs attention, who's ready to spend, and who's at risk.
-          </p>
-        </div>
 
-        <div className="flex shrink-0 flex-wrap gap-3">
-          {[
-            { label: "Total Customers", value: String(total), icon: Users },
-            { label: "Active Relationships", value: String(active), icon: Heart },
-            { label: "Avg. Relationship Health", value: "76%", icon: BarChart2 },
-            { label: "Predicted Revenue (30d)", value: "£8,240", icon: TrendingUp },
-          ].map((stat) => {
-            const Icon = stat.icon;
-            return (
-              <div key={stat.label} className="flex min-w-[100px] flex-col gap-0.5 rounded-xl bg-background/10 p-3">
-                <div className="flex items-center gap-1.5">
-                  <Icon className="h-3 w-3 text-background/60" strokeWidth={1.75} />
-                  <span className="text-[10px] font-medium text-background/60">{stat.label}</span>
+          <div className="flex shrink-0 flex-wrap gap-3">
+            {[
+              { label: "Total Customers", value: String(total), icon: Users, badge: "CONNECTED" },
+              { label: "Active Relationships", value: String(active), icon: Heart, badge: "CONNECTED" },
+              { label: "Workspace Lifetime Value", value: `£${totalLtv.toLocaleString("en-GB")}`, icon: CircleDollarSign, badge: "CONNECTED" },
+              { label: "Upsell Candidates", value: String(upsellCount), icon: TrendingUp, badge: "DERIVED" },
+            ].map((stat) => {
+              const Icon = stat.icon;
+              return (
+                <div key={stat.label} className="flex min-w-[110px] flex-col gap-0.5 rounded-xl bg-background/10 p-3">
+                  <div className="flex items-center justify-between gap-1">
+                    <div className="flex items-center gap-1.5">
+                      <Icon className="h-3 w-3 text-background/60" strokeWidth={1.75} />
+                      <span className="text-[10px] font-medium text-background/60">{stat.label}</span>
+                    </div>
+                    <span className="text-[8.5px] font-extrabold uppercase bg-white/20 text-white px-1 rounded">
+                      {stat.badge}
+                    </span>
+                  </div>
+                  <span className="text-[18px] font-bold tracking-tight text-background">{stat.value}</span>
                 </div>
-                <span className="text-[18px] font-bold tracking-tight text-background">{stat.value}</span>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="relative mt-5 flex flex-wrap gap-2.5">
+          {[
+            { label: `${attentionCount} customer(s) require re-engagement attention`, dot: attentionCount > 0 ? "bg-brand animate-pulse" : "bg-emerald-400" },
+            { label: `${upsellCount} high-value expansion opportunities identified`, dot: "bg-emerald-400" },
+            { label: `${total - active} inactive profile(s) logged`, dot: "bg-amber-400" },
+          ].map((item) => (
+            <div key={item.label} className="flex items-center gap-2 rounded-lg bg-background/10 px-3 py-1.5">
+              <span className={`h-1.5 w-1.5 rounded-full ${item.dot}`} />
+              <span className="text-[11.5px] text-background/80">{item.label}</span>
+            </div>
+          ))}
         </div>
       </div>
 
-      <div className="relative mt-5 flex flex-wrap gap-2.5">
-        {[
-          { label: "3 customers need immediate attention", dot: "bg-brand animate-pulse" },
-          { label: "5 upsell opportunities identified", dot: "bg-emerald-400" },
-          { label: "2 customers showing churn signals", dot: "bg-amber-400" },
-        ].map((item) => (
-          <div key={item.label} className="flex items-center gap-2 rounded-lg bg-background/10 px-3 py-1.5">
-            <span className={`h-1.5 w-1.5 rounded-full ${item.dot}`} />
-            <span className="text-[11.5px] text-background/80">{item.label}</span>
-          </div>
-        ))}
-      </div>
+      <AIDisclosure />
     </div>
   );
 }
@@ -809,6 +832,7 @@ function AICustomerSummary({
 
 function TodaysPriorities({ customer }: { customer: DnaCustomer }) {
   const [expanded, setExpanded] = useState<number | null>(null);
+  const [reported, setReported] = useState<Record<number, boolean>>({});
 
   return (
     <div className="rounded-2xl border border-border bg-card shadow-card">
@@ -835,6 +859,9 @@ function TodaysPriorities({ customer }: { customer: DnaCustomer }) {
                     <span className="text-[11px] font-bold text-brand">{p.impact} impact</span>
                     <span className="text-muted-foreground/40">·</span>
                     <span className="text-[10.5px] text-muted-foreground">{p.confidence}% confidence</span>
+                    <span className="rounded bg-amber-500/10 px-1.5 py-0.2 text-[9px] font-extrabold text-amber-500 uppercase">
+                      ESTIMATED IMPACT
+                    </span>
                   </div>
                 </div>
               </div>
@@ -856,6 +883,25 @@ function TodaysPriorities({ customer }: { customer: DnaCustomer }) {
                     <div className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-brand">Why AI recommends this</div>
                     <p className="text-[11.5px] leading-relaxed text-foreground/80">{p.reason}</p>
                   </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-brand/10 text-[10.5px]">
+                  <span className="text-muted-foreground italic">Note: Estimated impact requires verified invoice/payment confirmation.</span>
+                  {reported[i] ? (
+                    <span className="text-emerald-500 font-bold flex items-center gap-1">
+                      <ShieldCheck className="h-3 w-3" /> Feedback logged for credit review
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReported((prev) => ({ ...prev, [i]: true }));
+                      }}
+                      className="text-muted-foreground hover:text-destructive flex items-center gap-1 font-semibold"
+                    >
+                      <Flag className="h-3 w-3" /> Report inaccurate AI response
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -1245,11 +1291,18 @@ export function RelationshipDNA({
     return <EmptyState onAdd={onAddCustomer ?? (() => {})} />;
   }
 
+  const totalLtv = rawCustomers.reduce((acc, c) => acc + (Number(c.lifetime_value) || 0), 0);
+  const attentionCount = rawCustomers.filter((c) => c.status === "inactive" || (c.lifetime_value || 0) === 0).length;
+  const upsellCount = rawCustomers.filter((c) => (c.lifetime_value || 0) >= 1500).length;
+
   return (
     <div className="space-y-6">
       <RelationshipDNAHero
         total={rawCustomers.length}
         active={rawCustomers.filter((c) => c.status === "active").length}
+        totalLtv={totalLtv}
+        attentionCount={attentionCount}
+        upsellCount={upsellCount}
       />
 
       <CustomerKPIs customers={customers} />
