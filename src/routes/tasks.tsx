@@ -25,6 +25,7 @@ import {
   toggleCommentReaction,
   type TaskComment,
 } from "@/services/comments";
+import { appEvents, APP_EVENTS } from "@/lib/events";
 import type { Task, TaskInsert } from "@/lib/database.types";
 
 export const Route = createFileRoute("/tasks")({
@@ -73,6 +74,8 @@ function TodaysFocusPanel({
 
   useEffect(() => {
     loadFocus();
+    const unsubscribe = appEvents.on(APP_EVENTS.TASKS_MUTATED, loadFocus);
+    return () => unsubscribe();
   }, [businessId]);
 
   if (loading) {
@@ -521,6 +524,8 @@ function MissionsSection({
 
   useEffect(() => {
     loadData();
+    const unsubscribe = appEvents.on(APP_EVENTS.TASKS_MUTATED, loadData);
+    return () => unsubscribe();
   }, [businessId]);
 
   const handleOpenModal = (m?: CalculatedMission) => {
@@ -1153,6 +1158,7 @@ function TasksPage() {
 
     try {
       await toggleTaskCompletion(task.id, businessId, task.status, task.title);
+      appEvents.emit(APP_EVENTS.TASKS_MUTATED);
     } catch (err) {
       console.error("Failed to toggle completion:", err);
       loadData();
@@ -1166,7 +1172,7 @@ function TasksPage() {
     } else {
       await createTask({ ...taskData, business_id: businessId });
     }
-    loadData();
+    appEvents.emit(APP_EVENTS.TASKS_MUTATED);
   };
 
   const handleDeleteTask = async (taskId: string) => {
@@ -1175,6 +1181,7 @@ function TasksPage() {
 
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
     await deleteTask(taskId, businessId);
+    appEvents.emit(APP_EVENTS.TASKS_MUTATED);
   };
 
   const memberMap = members.reduce<Record<string, string>>((acc, m) => {

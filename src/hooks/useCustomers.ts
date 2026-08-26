@@ -8,6 +8,7 @@ import {
   archiveCustomer,
   searchCustomers,
 } from "@/services/customers";
+import { appEvents, APP_EVENTS } from "@/lib/events";
 import type { Customer, CustomerInsert, CustomerUpdate } from "@/lib/database.types";
 
 export function useCustomers(query?: string) {
@@ -39,6 +40,8 @@ export function useCustomers(query?: string) {
 
   useEffect(() => {
     load();
+    const unsubscribe = appEvents.on(APP_EVENTS.CUSTOMERS_MUTATED, load);
+    return () => unsubscribe();
   }, [load]);
 
   return { customers, loading, error, refresh: load };
@@ -83,6 +86,7 @@ export function useCreateCustomer() {
         created_by: user?.id ?? null,
       });
       console.log("[useCreateCustomer] customer created successfully, ID:", customer.id);
+      appEvents.emit(APP_EVENTS.CUSTOMERS_MUTATED);
       return customer;
     } catch (err: any) {
       console.error("[useCreateCustomer] error in create:", err);
@@ -107,6 +111,7 @@ export function useUpdateCustomer() {
     setError(null);
     try {
       const customer = await updateCustomer(id, { ...updates, updated_by: user?.id ?? null });
+      appEvents.emit(APP_EVENTS.CUSTOMERS_MUTATED);
       return customer;
     } catch (err: any) {
       const msg = err?.message || "Failed to update customer";
@@ -129,6 +134,7 @@ export function useDeleteCustomer() {
     setError(null);
     try {
       await archiveCustomer(id);
+      appEvents.emit(APP_EVENTS.CUSTOMERS_MUTATED);
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to archive customer");

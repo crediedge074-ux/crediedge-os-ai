@@ -23,6 +23,7 @@ import {
   type PortfolioRelationshipAnalytics,
   type AttentionItem,
 } from "@/services/relationshipAnalytics";
+import { appEvents, APP_EVENTS } from "@/lib/events";
 import type { Customer } from "@/lib/database.types";
 import { AIDisclosure } from "@/components/ui/AIDisclosure";
 
@@ -47,7 +48,7 @@ export function PortfolioRelationshipHeader({
   // Expanded methodology state
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadAnalytics = () => {
     if (!businessId) {
       setLoading(false);
       return;
@@ -58,6 +59,12 @@ export function PortfolioRelationshipHeader({
       .then((res) => setAnalytics(res))
       .catch((err) => console.error("[PortfolioRelationshipHeader] fetch error:", err))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadAnalytics();
+    const unsubscribe = appEvents.on(APP_EVENTS.CUSTOMERS_MUTATED, loadAnalytics);
+    return () => unsubscribe();
   }, [businessId]);
 
   useEffect(() => {
