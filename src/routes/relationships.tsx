@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { PortfolioRelationshipHeader } from "@/components/relationships/PortfolioRelationshipHeader";
 import { RelationshipDNA } from "@/components/relationships/RelationshipDNA";
 import { CustomerForm } from "@/components/customers/CustomerForm";
+import { CustomerWorkspace } from "@/components/relationships/CustomerWorkspace";
 import { useCreateCustomer, useUpdateCustomer, useCustomers } from "@/hooks/useCustomers";
 import { Users, Search, X, Mail, Phone, MapPin, Edit3 } from "lucide-react";
 import type { Customer, CustomerInsert, CustomerUpdate } from "@/lib/database.types";
@@ -93,66 +94,19 @@ function RelationshipsPage() {
         saving={creating || updating}
       />
 
-      {/* Customer List Modal */}
-      {listModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-foreground/30 backdrop-blur-sm" onClick={() => setListModalOpen(false)} />
-          <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
-            <div className="flex items-center justify-between border-b border-border px-5 py-4">
-              <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-brand" strokeWidth={1.75} />
-                <h3 className="text-[14px] font-semibold text-foreground">All Customers ({customers.length})</h3>
-              </div>
-              <button
-                onClick={() => setListModalOpen(false)}
-                className="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="max-h-[60vh] overflow-y-auto divide-y divide-border p-2">
-              {customers.length === 0 ? (
-                <div className="p-8 text-center text-sm text-muted-foreground">No customers found.</div>
-              ) : (
-                customers.map((c) => (
-                  <div key={c.id} className="flex items-center justify-between p-3 transition-colors hover:bg-secondary/40 rounded-xl">
-                    <div>
-                      <div className="text-[13px] font-semibold text-foreground">{c.full_name || `${c.first_name || ''} ${c.last_name || ''}`.trim() || 'Unnamed Customer'}</div>
-                      <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
-                        {c.email && (
-                          <span className="flex items-center gap-1">
-                            <Mail className="h-3 w-3" /> {c.email}
-                          </span>
-                        )}
-                        {c.phone && (
-                          <span className="flex items-center gap-1">
-                            <Phone className="h-3 w-3" /> {c.phone}
-                          </span>
-                        )}
-                        {c.city && (
-                          <span className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3" /> {c.city}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => {
-                        setListModalOpen(false);
-                        handleEdit(c);
-                      }}
-                      className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-[11.5px] font-medium text-foreground transition-all hover:border-brand hover:text-brand"
-                    >
-                      <Edit3 className="h-3 w-3" /> Edit
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Customer Workspace Modal */}
+      <CustomerWorkspace
+        open={listModalOpen}
+        onClose={() => setListModalOpen(false)}
+        onEditCustomer={(cust) => {
+          setListModalOpen(false);
+          handleEdit(cust);
+        }}
+        onAddCustomer={() => {
+          setListModalOpen(false);
+          handleCreateNew();
+        }}
+      />
     </AppLayout>
   );
 }
