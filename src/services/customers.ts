@@ -2,6 +2,144 @@ import { supabase } from "@/lib/supabase";
 import type { Customer, CustomerInsert, CustomerUpdate } from "@/lib/database.types";
 import { logActivity } from "./activity";
 
+export interface DuplicateCheckResult {
+  hasDuplicate: boolean;
+  matchType: "EMAIL" | "PHONE" | "NAME" | "COMPANY" | null;
+  matchingCustomer: Customer | null;
+  confidenceScore: number; // 0 - 100
+  matchReason: string;
+}
+
+/**
+ * Workspace-isolated duplicate customer check before creation or editing.
+ * Checks for matching email, phone, full name, or company name.
+ */
+export async function checkDuplicateCustomer(
+  businessId: string,
+  data: {
+    email?: string | null;
+    phone?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
+    companyName?: string | null;
+    fullName?: string | null;
+  },
+  excludeId?: string | null
+): Promise<DuplicateCheckResult> {
+  const cleanEmail = data.email?.trim().toLowerCase();
+  const cleanPhone = data.phone?.trim().replace(/\D/g, "");
+  const cleanCompany = data.companyName?.trim().toLowerCase();
+  const cleanName = (data.fullName || `${data.firstName || ""} ${data.lastName || ""}`).trim().toLowerCase();
+
+  try {
+    let query = supabase
+      .from("customers")
+      .select("*")
+      .eq("business_id", businessId)
+      .eq("is_active", true);
+
+    if (excludeId) {
+      query = query.neq("id", excludeId);
+    }
+
+    const { data: existing, error } = await query;
+
+    if (error || !existing || existing.length === 0) {
+      return {
+        hasDuplicate: false,
+        matchType: null,
+        matchingCustomer: null,
+        confidenceScore: 0,
+        matchReason: "No existing workspace customers found.",
+      };
+    }
+
+    const customers = existing as Customer[];
+
+    // 1. Exact Email Match (Highest confidence: 100%)
+    if (cleanEmail) {
+      const emailMatch = customers.find((c) => c.email && c.email.trim().toLowerCase() === cleanEmail);
+      if (emailMatch) {
+        return {
+          hasDuplicate: true,
+          matchType: "EMAIL",
+          matchingCustomer: emailMatch,
+          confidenceScore: 100,
+          matchReason: `Matching email address (${cleanEmail}) found on existing customer record.`,
+        };
+      }
+    }
+
+    // 2. Exact Phone Match (High confidence: 90%)
+    if (cleanPhone && cleanPhone.length >= 7) {
+      const phoneMatch = customers.find((c) => {
+        if (!c.phone) return false;
+        const existingPhoneDigits = c.phone.replace(/\D/g, "");
+        return existingPhoneDigits === cleanPhone;
+      });
+      if (phoneMatch) {
+        return {
+          hasDuplicate: true,
+          matchType: "PHONE",
+          matchingCustomer: phoneMatch,
+          confidenceScore: 90,
+          matchReason: `Matching phone number found on existing customer record.`,
+        };
+      }
+    }
+
+    // 3. Exact Company Name Match for business customers (Confidence: 85%)
+    if (cleanCompany && cleanCompany.length >= 3) {
+      const companyMatch = customers.find(
+        (c) => c.company_name && c.company_name.trim().toLowerCase() === cleanCompany
+      );
+      if (companyMatch) {
+        return {
+          hasDuplicate: true,
+          matchType: "COMPANY",
+          matchingCustomer: companyMatch,
+          confidenceScore: 85,
+          matchReason: `Matching company name (${cleanCompany}) found on existing workspace customer.`,
+        };
+      }
+    }
+
+    // 4. Exact Full Name Match (Confidence: 75%)
+    if (cleanName && cleanName.length >= 4) {
+      const nameMatch = customers.find((c) => {
+        const existingName = (c.full_name || `${c.first_name || ""} ${c.last_name || ""}`).trim().toLowerCase();
+        return existingName === cleanName;
+      });
+      if (nameMatch) {
+        return {
+          hasDuplicate: true,
+          matchType: "NAME",
+          matchingCustomer: nameMatch,
+          confidenceScore: 75,
+          matchReason: `Matching customer name (${cleanName}) found on existing workspace record.`,
+        };
+      }
+    }
+
+    return {
+      hasDuplicate: false,
+      matchType: null,
+      matchingCustomer: null,
+      confidenceScore: 0,
+      matchReason: "No duplicate records detected.",
+    };
+  } catch (err) {
+    console.error("[checkDuplicateCustomer] error:", err);
+    return {
+      hasDuplicate: false,
+      matchType: null,
+      matchingCustomer: null,
+      confidenceScore: 0,
+      matchReason: "Duplicate check failed (non-blocking).",
+    };
+  }
+}
+
 export async function getCustomers(businessId: string): Promise<Customer[]> {
   const { data, error } = await supabase
     .from("customers")
