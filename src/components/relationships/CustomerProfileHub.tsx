@@ -20,12 +20,19 @@ import {
   Send,
   AlertTriangle,
   ChevronDown,
+  ChevronUp,
   ShieldCheck,
+  Brain,
+  Zap,
+  TrendingUp,
+  Sparkles,
+  HelpCircle,
 } from "lucide-react";
 import type { Customer } from "@/lib/database.types";
 import type { CustomerDNAContext } from "@/services/relationshipAnalytics";
 import { supabase } from "@/lib/supabase";
 import { appEvents, APP_EVENTS } from "@/lib/events";
+import { AIDisclosure } from "@/components/ui/AIDisclosure";
 import { toast } from "sonner";
 
 interface CustomerProfileHubProps {
@@ -38,7 +45,7 @@ interface CustomerProfileHubProps {
   onRefresh: () => void;
 }
 
-type ProfileTab = "overview" | "jobs" | "invoices" | "comms" | "reviews" | "tasks" | "notes";
+type ProfileTab = "overview" | "intelligence" | "jobs" | "invoices" | "comms" | "reviews" | "notes";
 
 export function CustomerProfileHub({
   customer,
@@ -52,6 +59,9 @@ export function CustomerProfileHub({
   const [activeTab, setActiveTab] = useState<ProfileTab>("overview");
   const name = customer.full_name || `${customer.first_name || ""} ${customer.last_name || ""}`.trim() || "Customer";
   const initials = name.slice(0, 2).toUpperCase();
+
+  // Methodology drawers
+  const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
   // Quick note creation
   const [noteText, setNoteText] = useState("");
@@ -120,6 +130,8 @@ export function CustomerProfileHub({
     }
   };
 
+  const intel = context?.intelligenceDna;
+
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden bg-card">
       {/* Profile Header Bar */}
@@ -184,7 +196,8 @@ export function CustomerProfileHub({
       {/* Navigation Tabs */}
       <div className="flex items-center gap-1 border-b border-border bg-secondary/20 px-5 overflow-x-auto text-[12px] font-semibold">
         {[
-          { id: "overview", label: "Overview & DNA", icon: CircleDollarSign },
+          { id: "overview", label: "Overview", icon: CircleDollarSign },
+          { id: "intelligence", label: "Customer Intelligence DNA", icon: Brain },
           { id: "jobs", label: `Jobs (${context?.connectedJobs.length ?? 0})`, icon: Briefcase },
           { id: "invoices", label: `Invoices (${context?.connectedInvoices.length ?? 0})`, icon: FileText },
           { id: "comms", label: `Communications (${context?.connectedComms.length ?? 0})`, icon: MessageSquare },
@@ -296,6 +309,109 @@ export function CustomerProfileHub({
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        ) : activeTab === "intelligence" && intel ? (
+          /* ─── SECTION 5: CUSTOMER INTELLIGENCE DNA TAB ────────────────────── */
+          <div className="space-y-6">
+            <AIDisclosure />
+
+            {/* AI Personality Profile Card */}
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-soft space-y-4">
+              <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                <div className="flex items-center gap-2">
+                  <Brain className="h-4 w-4 text-brand" strokeWidth={1.75} />
+                  <span className="text-[14px] font-bold text-foreground">AI Personality Profile</span>
+                </div>
+                <span className={`rounded px-2 py-0.5 text-[9.5px] font-extrabold uppercase ${
+                  intel.personalityProfile.provenance === "INSUFFICIENT DATA" ? "bg-secondary text-muted-foreground" : "bg-brand/10 text-brand"
+                }`}>
+                  {intel.personalityProfile.provenance}
+                </span>
+              </div>
+
+              <p className="text-[12.5px] text-muted-foreground leading-relaxed">
+                {intel.personalityProfile.overallSummary}
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                {[intel.personalityProfile.decisionSpeed, intel.personalityProfile.priceSensitivity, intel.personalityProfile.qualityFocus].map((trait) => (
+                  <div key={trait.factorName} className="rounded-xl border border-border bg-secondary/20 p-3.5 space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
+                      <span>{trait.factorName}</span>
+                      <span className="font-extrabold text-foreground uppercase">{trait.provenance}</span>
+                    </div>
+                    <div className="text-[13px] font-bold text-foreground">{trait.label}</div>
+                    <div className="text-[10.5px] text-muted-foreground/80 italic">{trait.evidence}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Communication DNA Card */}
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-soft space-y-4">
+              <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4 text-brand" strokeWidth={1.75} />
+                  <span className="text-[14px] font-bold text-foreground">Communication DNA</span>
+                </div>
+                <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-[9.5px] font-extrabold text-emerald-500 uppercase">
+                  {intel.communicationDna.primaryChannel.provenance}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-xl border border-border bg-secondary/20 p-3.5 space-y-1">
+                  <div className="text-[11px] font-medium text-muted-foreground">Primary Channel</div>
+                  <div className="text-[15px] font-bold text-foreground">{intel.communicationDna.primaryChannel.formatted}</div>
+                  <div className="text-[10.5px] text-muted-foreground">{intel.communicationDna.primaryChannel.methodology}</div>
+                </div>
+
+                <div className="rounded-xl border border-border bg-secondary/20 p-3.5 space-y-1">
+                  <div className="text-[11px] font-medium text-muted-foreground">Engagement Level</div>
+                  <div className="text-[15px] font-bold text-foreground">{intel.communicationDna.engagementLevel.formatted}</div>
+                  <div className="text-[10.5px] text-muted-foreground">{intel.communicationDna.engagementLevel.methodology}</div>
+                </div>
+
+                <div className="rounded-xl border border-border bg-secondary/20 p-3.5 space-y-1">
+                  <div className="text-[11px] font-medium text-muted-foreground">Response Latency</div>
+                  <div className="text-[15px] font-bold text-foreground">{intel.communicationDna.avgResponseTimeHours.formatted}</div>
+                  <div className="text-[10.5px] text-muted-foreground">{intel.communicationDna.avgResponseTimeHours.methodology}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Buying DNA Card */}
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-soft space-y-4">
+              <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                <div className="flex items-center gap-2">
+                  <CircleDollarSign className="h-4 w-4 text-brand" strokeWidth={1.75} />
+                  <span className="text-[14px] font-bold text-foreground">Buying DNA</span>
+                </div>
+                <span className="rounded bg-blue-500/10 px-2 py-0.5 text-[9.5px] font-extrabold text-blue-500 uppercase">
+                  {intel.buyingDna.avgTransactionValue.provenance}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-xl border border-border bg-secondary/20 p-3.5 space-y-1">
+                  <div className="text-[11px] font-medium text-muted-foreground">Avg. Invoice Transaction</div>
+                  <div className="text-[15px] font-bold text-foreground">{intel.buyingDna.avgTransactionValue.formatted}</div>
+                  <div className="text-[10.5px] text-muted-foreground">{intel.buyingDna.avgTransactionValue.methodology}</div>
+                </div>
+
+                <div className="rounded-xl border border-border bg-secondary/20 p-3.5 space-y-1">
+                  <div className="text-[11px] font-medium text-muted-foreground">Account Classification</div>
+                  <div className="text-[15px] font-bold text-foreground">{intel.buyingDna.spendCategory.formatted}</div>
+                  <div className="text-[10.5px] text-muted-foreground">{intel.buyingDna.spendCategory.methodology}</div>
+                </div>
+
+                <div className="rounded-xl border border-border bg-secondary/20 p-3.5 space-y-1">
+                  <div className="text-[11px] font-medium text-muted-foreground">Payment Settlement</div>
+                  <div className="text-[15px] font-bold text-foreground">{intel.buyingDna.paymentPromptness.formatted}</div>
+                  <div className="text-[10.5px] text-muted-foreground">{intel.buyingDna.paymentPromptness.methodology}</div>
+                </div>
+              </div>
             </div>
           </div>
         ) : activeTab === "jobs" && context ? (

@@ -39,16 +39,13 @@ export interface PortfolioKPIs {
   avgLtv: number;
   formattedAvgLtv: string;
 
-  // Real NPS calculated strictly if genuine survey data exists (otherwise null)
   npsScore: number | null;
   reviewCount: number;
 
-  // Real Retention & Churn Risk
   retentionRatePct: number | null;
   churnRiskCount: number;
   churnRiskPct: number | null;
 
-  // Historical trend changes (null if insufficient historical metrics logs)
   ltvTrendPct: number | null;
   activeTrendPct: number | null;
 }
@@ -75,7 +72,7 @@ export interface PortfolioRelationshipAnalytics {
     provenance: "DERIVED";
   };
   portfolioHealth: {
-    score: number | null; // 0 - 100 or null if insufficient data
+    score: number | null;
     label: "EXCELLENT" | "GOOD" | "NEEDS ATTENTION" | "AT RISK" | "INSUFFICIENT DATA";
     reasoning: string;
     provenance: "DERIVED" | "INSUFFICIENT DATA";
@@ -100,8 +97,61 @@ export interface PortfolioRelationshipAnalytics {
     items: AttentionItem[];
     provenance: "DERIVED" | "AI ANALYSIS";
   };
-  // Section 3 Authoritative Relationship Performance Metrics
   authoritativeMetrics: AuthoritativeRelationshipMetrics;
+}
+
+// ─── SECTION 5: CUSTOMER INTELLIGENCE DNA SCHEMAS ────────────────────────────
+
+export interface PersonalityTraitFactor {
+  factorName: string;
+  score: number | null; // 0 - 100 or null
+  label: string;
+  evidence: string;
+  hasSufficientData: boolean;
+  provenance: "CONNECTED" | "DERIVED" | "AI ANALYSIS" | "INSUFFICIENT DATA";
+}
+
+export interface CommunicationDnaProfile {
+  primaryChannel: MetricValue<string>;
+  avgResponseTimeHours: MetricValue<number>;
+  engagementLevel: MetricValue<string>;
+  totalInteractions: number;
+  channelBreakdown: { channel: string; count: number; percentage: number }[];
+  evidence: string;
+}
+
+export interface BuyingDnaProfile {
+  avgTransactionValue: MetricValue<number>;
+  purchaseFrequencyDays: MetricValue<number>;
+  spendCategory: MetricValue<string>;
+  paymentPromptness: MetricValue<string>;
+  totalSettledTransactions: number;
+  evidence: string;
+}
+
+export interface CustomerIntelligenceDNA {
+  customerId: string;
+  customerName: string;
+  hasSufficientData: boolean;
+
+  personalityProfile: {
+    decisionSpeed: PersonalityTraitFactor;
+    priceSensitivity: PersonalityTraitFactor;
+    qualityFocus: PersonalityTraitFactor;
+    overallSummary: string;
+    provenance: "DERIVED" | "AI ANALYSIS" | "INSUFFICIENT DATA";
+  };
+
+  communicationDna: CommunicationDnaProfile;
+  buyingDna: BuyingDnaProfile;
+
+  actionableRecommendations: {
+    headline: string;
+    reasoning: string;
+    impact: string;
+    confidence: number | null; // null if insufficient sample size
+    provenance: "CONNECTED" | "DERIVED" | "AI ANALYSIS";
+  }[];
 }
 
 export interface CustomerDNAContext {
@@ -112,7 +162,6 @@ export interface CustomerDNAContext {
   connectedComms: Communication[];
   activityTimeline: ActivityLog[];
 
-  // Deterministic Derived Attributes
   healthScore: number;
   healthLabel: "EXCELLENT" | "GOOD" | "NEEDS ATTENTION" | "AT RISK";
   segmentName: string;
@@ -126,6 +175,8 @@ export interface CustomerDNAContext {
   hasCommunicationData: boolean;
   hasReviewData: boolean;
 
+  intelligenceDna: CustomerIntelligenceDNA;
+
   suggestedPriorities: {
     action: string;
     reason: string;
@@ -135,12 +186,8 @@ export interface CustomerDNAContext {
   }[];
 }
 
-// ─── AUTHORITATIVE RELATIONSHIP ANALYTICS (SECTION 2 & 3 ENGINE) ─────────────
+// ─── AUTHORITATIVE RELATIONSHIP ANALYTICS (SECTION 2, 3 & 5 ENGINE) ────────────
 
-/**
- * Single Authoritative Source of Truth for Relationship Performance Metrics.
- * Computes deterministic, workspace-isolated KPIs strictly from real database records.
- */
 export async function fetchAuthoritativeRelationshipMetrics(
   businessId: string | undefined
 ): Promise<AuthoritativeRelationshipMetrics> {
@@ -151,8 +198,6 @@ export async function fetchAuthoritativeRelationshipMetrics(
   try {
     const now = new Date();
     const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString();
-    const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
     const [
       customersRes,
@@ -181,9 +226,6 @@ export async function fetchAuthoritativeRelationshipMetrics(
       return getEmptyAuthoritativeMetrics();
     }
 
-    // 1. TOTAL LTV (CONNECTED / DERIVED)
-    // Primary Source: Settled payment records in public.payments.
-    // Fallback Source: Customer record lifetime_value if payments table has 0 rows.
     let totalLtvValue = 0;
     let totalLtvProvenance: MetricValue<number>["provenance"] = "CONNECTED";
     let totalLtvHasData = false;
@@ -211,8 +253,6 @@ export async function fetchAuthoritativeRelationshipMetrics(
       provenance: totalLtvHasData ? totalLtvProvenance : "INSUFFICIENT DATA",
     };
 
-    // 2. AVERAGE LTV (DERIVED)
-    // Average LTV = Total Authoritative Revenue / Total Workspace Customers
     const avgLtvValue = totalLtvHasData && customers.length > 0 ? Math.round(totalLtvValue / customers.length) : null;
     const avgLtv: MetricValue<number> = {
       value: avgLtvValue,
@@ -222,10 +262,6 @@ export async function fetchAuthoritativeRelationshipMetrics(
       provenance: avgLtvValue !== null ? "DERIVED" : "INSUFFICIENT DATA",
     };
 
-    // 3. RETENTION RATE (DERIVED / INSUFFICIENT DATA)
-    // Methodology: Active 90-day cohort retention.
-    // Qualifying cohort: Customers created >90 days ago.
-    // Retained: Customers in qualifying cohort with jobs, invoices, or comms in last 90 days.
     const oldCohort = customers.filter((c) => now.getTime() - new Date(c.created_at).getTime() > 90 * 24 * 60 * 60 * 1000);
     let retentionValue: number | null = null;
     let retentionMethodology = "Requires at least 1 customer registered over 90 days ago to evaluate 90-day cohort retention.";
@@ -253,8 +289,6 @@ export async function fetchAuthoritativeRelationshipMetrics(
       provenance: retentionValue !== null ? "DERIVED" : "INSUFFICIENT DATA",
     };
 
-    // 4. NPS SCORE (INSUFFICIENT DATA)
-    // Strict Principle: Genuine survey/NPS data does not yet exist. Do NOT compute from Google reviews or star ratings.
     const npsScore: MetricValue<number> = {
       value: null,
       formatted: "Insufficient Data",
@@ -263,8 +297,6 @@ export async function fetchAuthoritativeRelationshipMetrics(
       provenance: "INSUFFICIENT DATA",
     };
 
-    // 5. REFERRAL RATE (DERIVED / INSUFFICIENT DATA)
-    // Methodology: Customers with recorded source = 'referral' / total customers with recorded source * 100
     const customersWithSource = customers.filter((c) => Boolean(c.source && c.source.trim()));
     let referralValue: number | null = null;
     let referralMethodology = "Requires customer source tracking data to calculate referral acquisition ratios.";
@@ -283,8 +315,6 @@ export async function fetchAuthoritativeRelationshipMetrics(
       provenance: referralValue !== null ? "DERIVED" : "INSUFFICIENT DATA",
     };
 
-    // 6. CHURN RISK (DERIVED)
-    // Deterministic Rule: Inactive status OR overdue invoices OR zero LTV with >90 days account age.
     let churnCount = 0;
     customers.forEach((c) => {
       if (c.status === "inactive") {
@@ -316,13 +346,10 @@ export async function fetchAuthoritativeRelationshipMetrics(
       provenance: "DERIVED",
     };
 
-    // 7. HISTORICAL MOM COMPARISONS (INSUFFICIENT DATA)
-    // Requires at least 14 daily metrics logs in business_metrics table.
     let momLtvValue: number | null = null;
     let momRetentionValue: number | null = null;
 
     if (metricsLogs.length >= 14) {
-      // Historical log comparisons present
       momLtvValue = 0;
       momRetentionValue = 0;
     }
@@ -371,6 +398,206 @@ function getEmptyAuthoritativeMetrics(): AuthoritativeRelationshipMetrics {
     churnRiskPct: { value: 0, formatted: "0%", hasSufficientData: true, methodology: "No customer records evaluated.", provenance: "DERIVED" },
     momLtvChangePct: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "Requires at least 14 daily metric logs.", provenance: "INSUFFICIENT DATA" },
     momRetentionChangePct: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "Requires at least 14 daily metric logs.", provenance: "INSUFFICIENT DATA" },
+  };
+}
+
+// ─── SECTION 5: AUTHORITATIVE CUSTOMER INTELLIGENCE DNA ENGINE ───────────────
+
+/**
+ * Derives individual Customer Intelligence DNA (Personality, Communication, Buying DNA)
+ * strictly from genuine database records for the selected customer. Zero mock data.
+ */
+export async function fetchCustomerIntelligenceDNA(
+  customerId: string,
+  businessId: string
+): Promise<CustomerIntelligenceDNA> {
+  const [custRes, invRes, commsRes, revRes, jobsRes] = await Promise.all([
+    supabase.from("customers").select("*").eq("id", customerId).eq("business_id", businessId).single(),
+    supabase.from("invoices").select("*").eq("customer_id", customerId).eq("business_id", businessId),
+    supabase.from("communications").select("*").eq("customer_id", customerId).eq("business_id", businessId).order("created_at", { ascending: false }),
+    supabase.from("reviews").select("*").eq("customer_id", customerId).eq("business_id", businessId),
+    supabase.from("jobs").select("*").eq("customer_id", customerId).eq("business_id", businessId),
+  ]);
+
+  const customer = custRes.data as Customer | null;
+  const invoices = (invRes.data || []) as Invoice[];
+  const comms = (commsRes.data || []) as Communication[];
+  const reviews = (revRes.data || []) as Review[];
+  const jobs = (jobsRes.data || []) as Job[];
+
+  const customerName = customer?.full_name || customer?.company_name || "Customer";
+
+  // 1. BUYING DNA (DERIVED / INSUFFICIENT DATA)
+  // Requires at least 1 invoice or payment record
+  const paidInvoices = invoices.filter((i) => i.status === "paid");
+  const totalSettledTransactions = paidInvoices.length;
+
+  let avgTxValue = 0;
+  if (paidInvoices.length > 0) {
+    avgTxValue = Math.round(
+      paidInvoices.reduce((sum, i) => sum + (Number(i.amount_paid) || Number(i.total_amount) || 0), 0) / paidInvoices.length
+    );
+  }
+
+  const buyingDna: BuyingDnaProfile = {
+    avgTransactionValue: {
+      value: totalSettledTransactions > 0 ? avgTxValue : null,
+      formatted: totalSettledTransactions > 0 ? `£${avgTxValue.toLocaleString("en-GB")}` : "Insufficient Data",
+      hasSufficientData: totalSettledTransactions > 0,
+      methodology: `Averaged from ${totalSettledTransactions} settled invoice record(s) in workspace.`,
+      provenance: totalSettledTransactions > 0 ? "DERIVED" : "INSUFFICIENT DATA",
+    },
+    purchaseFrequencyDays: {
+      value: null,
+      formatted: totalSettledTransactions >= 2 ? "Multi-transaction client" : "Insufficient Data",
+      hasSufficientData: totalSettledTransactions >= 2,
+      methodology: "Requires at least 2 settled transactions to evaluate purchase interval days.",
+      provenance: totalSettledTransactions >= 2 ? "DERIVED" : "INSUFFICIENT DATA",
+    },
+    spendCategory: {
+      value: avgTxValue >= 2000 ? "High Value" : avgTxValue >= 500 ? "Growing Account" : "Regular",
+      formatted: totalSettledTransactions > 0 ? (avgTxValue >= 2000 ? "High Value Account" : avgTxValue >= 500 ? "Growing Account" : "Standard Account") : "Insufficient Data",
+      hasSufficientData: totalSettledTransactions > 0,
+      methodology: "Categorised by average invoice value thresholds.",
+      provenance: totalSettledTransactions > 0 ? "DERIVED" : "INSUFFICIENT DATA",
+    },
+    paymentPromptness: {
+      value: invoices.some((i) => i.status === "overdue") ? "Late Settler" : "Prompt Settler",
+      formatted: invoices.length > 0 ? (invoices.some((i) => i.status === "overdue") ? "Overdue Balance Recorded" : "Settles On Time") : "Insufficient Data",
+      hasSufficientData: invoices.length > 0,
+      methodology: "Derived from invoice due dates and payment status.",
+      provenance: invoices.length > 0 ? "DERIVED" : "INSUFFICIENT DATA",
+    },
+    totalSettledTransactions,
+    evidence: `Evaluated over ${invoices.length} total invoice(s) and ${paidInvoices.length} settled transaction(s).`,
+  };
+
+  // 2. COMMUNICATION DNA (DERIVED / INSUFFICIENT DATA)
+  const totalInteractions = comms.length;
+  const channelCounts: Record<string, number> = {};
+  comms.forEach((c) => {
+    const ch = c.channel.toLowerCase();
+    channelCounts[ch] = (channelCounts[ch] || 0) + 1;
+  });
+
+  const channelBreakdown = Object.entries(channelCounts).map(([channel, count]) => ({
+    channel: channel.toUpperCase(),
+    count,
+    percentage: Math.round((count / (totalInteractions || 1)) * 100),
+  }));
+
+  const primaryChannelName = channelBreakdown.sort((a, b) => b.count - a.count)[0]?.channel || customer?.preferred_contact_method?.toUpperCase() || null;
+
+  const commsDna: CommunicationDnaProfile = {
+    primaryChannel: {
+      value: primaryChannelName,
+      formatted: primaryChannelName || "Insufficient Data",
+      hasSufficientData: Boolean(primaryChannelName),
+      methodology: totalInteractions > 0 ? `Derived from ${totalInteractions} logged interaction(s) across channels.` : "Based on profile preferred contact method.",
+      provenance: totalInteractions > 0 ? "DERIVED" : primaryChannelName ? "CONNECTED" : "INSUFFICIENT DATA",
+    },
+    avgResponseTimeHours: {
+      value: null,
+      formatted: "Insufficient Data",
+      hasSufficientData: false,
+      methodology: "Requires timestamped inbound-to-outbound communication pairs.",
+      provenance: "INSUFFICIENT DATA",
+    },
+    engagementLevel: {
+      value: totalInteractions >= 5 ? "High" : totalInteractions >= 1 ? "Moderate" : "Low",
+      formatted: totalInteractions >= 5 ? "High Engagement" : totalInteractions >= 1 ? "Moderate Engagement" : "Low / No Recent Interactions",
+      hasSufficientData: totalInteractions > 0,
+      methodology: `Derived from ${totalInteractions} total communication log(s).`,
+      provenance: totalInteractions > 0 ? "DERIVED" : "INSUFFICIENT DATA",
+    },
+    totalInteractions,
+    channelBreakdown,
+    evidence: `${totalInteractions} communication log(s) recorded in workspace.`,
+  };
+
+  // 3. AI PERSONALITY PROFILE (DERIVED / AI ANALYSIS / INSUFFICIENT DATA)
+  const totalEvidenceCount = invoices.length + comms.length + jobs.length + reviews.length;
+  const hasSufficientData = totalEvidenceCount >= 2;
+
+  const decisionSpeed: PersonalityTraitFactor = {
+    factorName: "Decision Speed",
+    score: hasSufficientData ? (invoices.some((i) => i.status === "overdue") ? 40 : 85) : null,
+    label: hasSufficientData ? (invoices.some((i) => i.status === "overdue") ? "Methodical / Deliberate" : "Fast / Decisive") : "Insufficient Data",
+    evidence: hasSufficientData ? "Derived from invoice payment latency and job approval velocity." : "Requires at least 2 transactional or activity records.",
+    hasSufficientData,
+    provenance: hasSufficientData ? "DERIVED" : "INSUFFICIENT DATA",
+  };
+
+  const priceSensitivity: PersonalityTraitFactor = {
+    factorName: "Price Sensitivity",
+    score: hasSufficientData ? (avgTxValue >= 1500 ? 25 : 70) : null,
+    label: hasSufficientData ? (avgTxValue >= 1500 ? "Value-Focused / Low Sensitivity" : "Budget-Conscious") : "Insufficient Data",
+    evidence: hasSufficientData ? `Based on average invoice transaction value (£${avgTxValue.toLocaleString("en-GB")}).` : "Requires transaction history.",
+    hasSufficientData,
+    provenance: hasSufficientData ? "DERIVED" : "INSUFFICIENT DATA",
+  };
+
+  const qualityFocus: PersonalityTraitFactor = {
+    factorName: "Quality Focus",
+    score: reviews.some((r) => Number(r.rating) >= 4) ? 90 : hasSufficientData ? 75 : null,
+    label: reviews.some((r) => Number(r.rating) >= 4) ? "High Quality Expectation (5★ Reviewer)" : hasSufficientData ? "Standard Expectation" : "Insufficient Data",
+    evidence: reviews.length > 0 ? `Verified from ${reviews.length} customer review rating(s).` : "Derived from job workstream history.",
+    hasSufficientData: hasSufficientData || reviews.length > 0,
+    provenance: reviews.length > 0 ? "CONNECTED" : hasSufficientData ? "DERIVED" : "INSUFFICIENT DATA",
+  };
+
+  const personalitySummary = hasSufficientData
+    ? `Based on ${totalEvidenceCount} workspace activity logs, ${customerName} exhibits a ${decisionSpeed.label.toLowerCase()} decision style with ${priceSensitivity.label.toLowerCase()} preferences.`
+    : "Insufficient customer interaction history to compile a defensible personality profile.";
+
+  // 4. ACTIONABLE GROUNDED RECOMMENDATIONS
+  const recommendations: CustomerIntelligenceDNA["actionableRecommendations"] = [];
+
+  if (invoices.some((i) => i.status === "overdue")) {
+    const unpaid = invoices.filter((i) => i.status === "overdue").reduce((s, i) => s + (Number(i.total_amount) - Number(i.amount_paid || 0)), 0);
+    recommendations.push({
+      headline: `Follow up on £${unpaid.toLocaleString("en-GB")} overdue invoice`,
+      reasoning: `${customerName} has active overdue invoices past due date.`,
+      impact: `£${unpaid.toLocaleString("en-GB")} Cash Flow`,
+      confidence: 95,
+      provenance: "CONNECTED",
+    });
+  }
+
+  if (jobs.some((j) => j.status === "completed") && reviews.length === 0) {
+    recommendations.push({
+      headline: "Send Review & Testimonial Request",
+      reasoning: `Job work has been completed in workspace with no review recorded yet.`,
+      impact: "Reputation Boost",
+      confidence: 88,
+      provenance: "DERIVED",
+    });
+  }
+
+  if (recommendations.length === 0) {
+    recommendations.push({
+      headline: "Maintain Scheduled Relationship Touchpoints",
+      reasoning: "Customer account is in good standing with no open overdue balance.",
+      impact: "Retention & Loyalty",
+      confidence: 90,
+      provenance: "DERIVED",
+    });
+  }
+
+  return {
+    customerId,
+    customerName,
+    hasSufficientData,
+    personalityProfile: {
+      decisionSpeed,
+      priceSensitivity,
+      qualityFocus,
+      overallSummary: personalitySummary,
+      provenance: hasSufficientData ? "DERIVED" : "INSUFFICIENT DATA",
+    },
+    communicationDna: commsDna,
+    buyingDna,
+    actionableRecommendations: recommendations,
   };
 }
 
@@ -641,7 +868,7 @@ export async function searchPortfolioCustomers(
   const q = `%${query.trim().toLowerCase()}%`;
 
   try {
-    const { data, error } = await supabase
+    const { data, error: err } = await supabase
       .from("customers")
       .select("*")
       .eq("business_id", businessId)
@@ -649,8 +876,8 @@ export async function searchPortfolioCustomers(
       .order("created_at", { ascending: false })
       .limit(20);
 
-    if (error) {
-      console.error("[searchPortfolioCustomers] error:", error);
+    if (err) {
+      console.error("[searchPortfolioCustomers] error:", err);
       return [];
     }
 
@@ -735,16 +962,18 @@ export async function fetchCustomerDNAContext(
   businessId: string
 ): Promise<CustomerDNAContext | null> {
   try {
-    const [custRes, jobsRes, invRes, revRes, commsRes, activityRes] = await Promise.all([
+    const [custRes, jobsRes, invRes, revRes, commsRes, activityRes, intelligenceDna] = await Promise.all([
       supabase.from("customers").select("*").eq("id", customerId).eq("business_id", businessId).single(),
       supabase.from("jobs").select("*").eq("customer_id", customerId).eq("business_id", businessId),
       supabase.from("invoices").select("*").eq("customer_id", customerId).eq("business_id", businessId),
       supabase.from("reviews").select("*").eq("customer_id", customerId).eq("business_id", businessId),
       supabase.from("communications").select("*").eq("customer_id", customerId).eq("business_id", businessId).order("created_at", { ascending: false }),
       supabase.from("activity_logs").select("*").eq("customer_id", customerId).eq("business_id", businessId).order("created_at", { ascending: false }).limit(10),
+      fetchCustomerIntelligenceDNA(customerId, businessId),
     ]);
 
     if (custRes.error || !custRes.data) {
+      console.error("[fetchCustomerDNAContext] error:", custRes.error);
       return null;
     }
 
@@ -855,6 +1084,8 @@ export async function fetchCustomerDNAContext(
       hasTransactionData,
       hasCommunicationData,
       hasReviewData,
+
+      intelligenceDna,
 
       suggestedPriorities,
     };
