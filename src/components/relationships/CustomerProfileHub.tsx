@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import {
+  Activity,
   Users,
   Building2,
   Mail,
@@ -242,11 +243,17 @@ export function CustomerProfileHub({
               </div>
 
               <div className="rounded-2xl border border-border bg-card p-4 shadow-soft">
-                <div className="text-[11px] font-medium text-muted-foreground">Relationship Health</div>
-                <div className="mt-1 text-[22px] font-bold text-foreground">
-                  {context.healthScore} <span className="text-[12px] font-bold text-brand uppercase">{context.healthLabel}</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-medium text-muted-foreground">Relationship Health</span>
+                  <span className="rounded bg-brand/10 px-1 py-0.2 text-[8.5px] font-extrabold text-brand uppercase">
+                    {context.authoritativeHealth.provenance}
+                  </span>
                 </div>
-                <div className="mt-0.5 text-[10.5px] text-muted-foreground">Derived activity score</div>
+                <div className="mt-1 text-[22px] font-bold text-foreground">
+                  {context.authoritativeHealth.overallScore !== null ? `${context.authoritativeHealth.overallScore} / 100` : "N/A"}
+                  <span className="ml-2 text-[12px] font-bold text-brand uppercase">{context.authoritativeHealth.overallLabel}</span>
+                </div>
+                <div className="mt-0.5 text-[10.5px] text-muted-foreground truncate">{context.authoritativeHealth.explanation.summary}</div>
               </div>
 
               <div className="rounded-2xl border border-border bg-card p-4 shadow-soft">
@@ -315,6 +322,38 @@ export function CustomerProfileHub({
           /* ─── SECTION 5: CUSTOMER INTELLIGENCE DNA TAB ────────────────────── */
           <div className="space-y-6">
             <AIDisclosure />
+
+            {/* ─── AUTHORITATIVE RELATIONSHIP HEALTH BREAKDOWN ─────────────── */}
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-soft space-y-4">
+              <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                <div className="flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-brand" strokeWidth={1.75} />
+                  <span className="text-[14px] font-bold text-foreground">Relationship Health Breakdown</span>
+                </div>
+                <span className="rounded bg-brand/10 px-2 py-0.5 text-[9.5px] font-extrabold text-brand uppercase">
+                  {context.authoritativeHealth.provenance}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-5 gap-2.5">
+                {[
+                  context.authoritativeHealth.components.engagement,
+                  context.authoritativeHealth.components.satisfaction,
+                  context.authoritativeHealth.components.loyalty,
+                  context.authoritativeHealth.components.advocacy,
+                  context.authoritativeHealth.components.growth,
+                ].map((comp) => (
+                  <div key={comp.componentName} className="rounded-xl border border-border bg-secondary/20 p-3 space-y-1">
+                    <div className="flex items-center justify-between text-[10.5px] font-semibold text-muted-foreground">
+                      <span>{comp.componentName} ({comp.weightPct}%)</span>
+                      <span className="font-extrabold text-foreground uppercase">{comp.provenance}</span>
+                    </div>
+                    <div className="text-[14px] font-extrabold text-foreground">{comp.formatted}</div>
+                    <div className="text-[10px] text-muted-foreground/80 truncate">{comp.evidence}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
 
             {/* AI Personality Profile Card */}
             <div className="rounded-2xl border border-border bg-card p-5 shadow-soft space-y-4">
