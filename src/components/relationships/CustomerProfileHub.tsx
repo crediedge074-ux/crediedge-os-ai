@@ -48,7 +48,7 @@ interface CustomerProfileHubProps {
   onRefresh: () => void;
 }
 
-type ProfileTab = "overview" | "opportunities" | "intelligence" | "jobs" | "invoices" | "comms" | "reviews" | "notes";
+type ProfileTab = "overview" | "predictions" | "opportunities" | "intelligence" | "jobs" | "invoices" | "comms" | "reviews" | "notes";
 
 export function CustomerProfileHub({
   customer,
@@ -159,6 +159,7 @@ export function CustomerProfileHub({
   const intel = context?.intelligenceDna;
   const opps = context?.customerOpportunities || [];
   const campaigns = context?.connectedCampaigns || [];
+  const preds = context?.customerPredictions || [];
 
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden bg-card">
@@ -225,6 +226,7 @@ export function CustomerProfileHub({
       <div className="flex items-center gap-1 border-b border-border bg-secondary/20 px-5 overflow-x-auto text-[12px] font-semibold">
         {[
           { id: "overview", label: "Overview", icon: CircleDollarSign },
+          { id: "predictions", label: `AI Predictions (${preds.length})`, icon: Zap },
           { id: "opportunities", label: `Opportunities (${opps.length})`, icon: TrendingUp },
           { id: "intelligence", label: "Customer Intelligence DNA", icon: Brain },
           { id: "jobs", label: `Jobs (${context?.connectedJobs.length ?? 0})`, icon: Briefcase },
@@ -396,6 +398,42 @@ export function CustomerProfileHub({
                 </div>
               </form>
             </div>
+          </div>
+        ) : activeTab === "predictions" && context ? (
+          /* ─── SECTION 9: AI PREDICTIONS TAB ────────────────────────────────── */
+          <div className="space-y-4">
+            <AIDisclosure />
+            <h3 className="text-[13.5px] font-bold text-foreground">Customer AI Predictions ({preds.length})</h3>
+
+            {preds.length === 0 ? (
+              <div className="p-8 text-center text-xs text-muted-foreground italic">
+                No active predictions available. Requires historical transaction/activity logs.
+              </div>
+            ) : (
+              <div className="divide-y divide-border border border-border rounded-2xl bg-card">
+                {preds.map((pred) => (
+                  <div key={pred.id} className="p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="rounded bg-brand/10 px-2 py-0.5 text-[9.5px] font-extrabold text-brand uppercase">
+                          {pred.predictionType.replace("_", " ")}
+                        </span>
+                        <span className="font-bold text-[13px] text-foreground">{pred.prediction}</span>
+                      </div>
+                      <span className="rounded bg-secondary px-2 py-0.5 text-[9px] font-extrabold text-muted-foreground uppercase">
+                        {pred.provenance}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                      <span className="font-bold text-brand">{pred.formattedProbability}</span>
+                      <span>•</span>
+                      <span>{pred.timeframe}</span>
+                    </div>
+                    <p className="text-[10.5px] text-muted-foreground/80 italic">Evidence: {pred.evidence}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ) : activeTab === "opportunities" && context ? (
           /* ─── SECTION 8: REVENUE OPPORTUNITIES TAB ───────────────────────── */

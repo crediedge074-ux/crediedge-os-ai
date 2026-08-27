@@ -17,16 +17,18 @@ import {
   Target,
   ArrowRight,
   Plus,
+  Zap,
 } from "lucide-react";
 import { useBusiness } from "@/hooks/useBusiness";
 import {
   fetchPortfolioRelationshipAnalytics,
   fetchPortfolioActivityFeed,
   searchPortfolioCustomers,
-  associateCustomerWithCampaign,
   type PortfolioRelationshipAnalytics,
   type PortfolioRelationshipPriority,
   type RevenueOpportunity,
+  type CustomerSegment,
+  type CustomerPrediction,
 } from "@/services/relationshipAnalytics";
 import type { Customer, ActivityLog } from "@/lib/database.types";
 import { appEvents, APP_EVENTS } from "@/lib/events";
@@ -37,9 +39,11 @@ import { toast } from "sonner";
 export function PortfolioRelationshipHeader({
   onSelectCustomer,
   onAddCustomer,
+  onOpenSegment,
 }: {
   onSelectCustomer?: (customer: Customer) => void;
   onAddCustomer?: () => void;
+  onOpenSegment?: (segment: CustomerSegment) => void;
 }) {
   const { business } = useBusiness();
   const businessId = business?.id;
@@ -58,6 +62,7 @@ export function PortfolioRelationshipHeader({
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [expandedPriorityId, setExpandedPriorityId] = useState<string | null>(null);
   const [expandedOpportunityId, setExpandedOpportunityId] = useState<string | null>(null);
+  const [expandedPredictionId, setExpandedPredictionId] = useState<string | null>(null);
 
   const loadData = () => {
     if (!businessId) {
@@ -126,6 +131,8 @@ export function PortfolioRelationshipHeader({
     portfolioPriorities,
     revenueOpportunities,
     connectedCampaigns,
+    customerSegments,
+    portfolioPredictions,
   } = analytics;
 
   const handleActNow = (opp: RevenueOpportunity) => {
@@ -357,6 +364,112 @@ export function PortfolioRelationshipHeader({
           </button>
         </div>
       </div>
+
+      {/* ─── SECTION 9: AUTHORITATIVE CUSTOMER SEGMENTS ──────────────────────── */}
+      <div className="rounded-2xl border border-border bg-card shadow-card overflow-hidden">
+        <div className="border-b border-border px-5 py-3.5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Users className="h-4 w-4 text-brand" strokeWidth={1.75} />
+            <span className="text-[13.5px] font-semibold tracking-tight text-foreground">
+              Customer Segmentation Engine
+            </span>
+          </div>
+          <span className="rounded bg-brand/10 px-2 py-0.5 text-[10px] font-bold text-brand uppercase">
+            {customerSegments.length} Segments
+          </span>
+        </div>
+
+        {customerSegments.length === 0 ? (
+          <div className="p-8 text-center text-xs text-muted-foreground italic">
+            No customer profiles available to evaluate workspace segment classifications.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 p-4">
+            {customerSegments.map((seg) => (
+              <div
+                key={seg.id}
+                onClick={() => onOpenSegment && onOpenSegment(seg)}
+                className="group cursor-pointer rounded-xl border border-border bg-secondary/20 p-3.5 space-y-2 hover:border-brand hover:bg-card transition-all"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-[12.5px] text-foreground group-hover:text-brand transition-colors">{seg.name}</span>
+                  <span className="rounded bg-secondary px-1.5 py-0.2 text-[8.5px] font-extrabold text-muted-foreground uppercase">{seg.provenance}</span>
+                </div>
+                <div className="text-[18px] font-extrabold text-foreground">{seg.customerCount} <span className="text-[11px] font-medium text-muted-foreground">clients</span></div>
+                <div className="text-[11px] font-bold text-brand">{seg.formattedFinancialValue}</div>
+                <p className="text-[10.5px] text-muted-foreground line-clamp-2">{seg.description}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ─── SECTION 9: AUTHORITATIVE PORTFOLIO PREDICTIONS ──────────────────── */}
+      {portfolioPredictions.length > 0 && (
+        <div className="rounded-2xl border border-border bg-card shadow-card overflow-hidden">
+          <div className="border-b border-border px-5 py-3.5 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-brand" strokeWidth={1.75} />
+              <span className="text-[13.5px] font-semibold tracking-tight text-foreground">
+                Authoritative AI Portfolio Predictions
+              </span>
+            </div>
+            <span className="rounded bg-brand/10 px-2 py-0.5 text-[10px] font-bold text-brand uppercase">
+              {portfolioPredictions.length} Predictions
+            </span>
+          </div>
+
+          <div className="divide-y divide-border">
+            {portfolioPredictions.map((pred) => {
+              const isExpanded = expandedPredictionId === pred.id;
+              return (
+                <div key={pred.id} className="p-4 space-y-2 hover:bg-secondary/20 transition-colors">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[9.5px] font-extrabold text-brand uppercase">
+                          {pred.predictionType.replace("_", " ")}
+                        </span>
+                        <span className="text-[13px] font-bold text-foreground">{pred.prediction}</span>
+                        <span className="text-[11px] text-muted-foreground">— {pred.customerName}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                        <span className="font-bold text-brand">{pred.formattedProbability}</span>
+                        <span>•</span>
+                        <span>{pred.timeframe}</span>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 flex items-center gap-2">
+                      <span className="rounded bg-secondary px-2 py-0.5 text-[9px] font-extrabold text-muted-foreground uppercase">
+                        {pred.provenance}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedPredictionId(isExpanded ? null : pred.id)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
+                      >
+                        <Eye className="h-3 w-3" /> Methodology
+                        {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Prediction Methodology Drawer */}
+                  {isExpanded && (
+                    <div className="mt-2 rounded-xl border border-border bg-secondary/30 p-3.5 space-y-1.5 text-[11.5px]">
+                      <div className="font-bold text-foreground text-[11px] uppercase tracking-wider">Prediction Engine Evidence:</div>
+                      <p className="text-muted-foreground"><strong className="text-foreground">Evidence:</strong> {pred.evidence}</p>
+                      <p className="text-muted-foreground"><strong className="text-foreground">Methodology:</strong> {pred.methodology}</p>
+                      <p className="text-muted-foreground/70 italic"><strong className="text-foreground">Limitations:</strong> {pred.limitations}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ─── SECTION 8: REVENUE OPPORTUNITIES ─────────────────────────────────── */}
       <div className="rounded-2xl border border-border bg-card shadow-card overflow-hidden">

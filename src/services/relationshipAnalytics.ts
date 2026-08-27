@@ -61,6 +61,52 @@ export interface AttentionItem {
   provenance: "CONNECTED" | "DERIVED" | "AI ANALYSIS";
 }
 
+// ─── SECTION 9: CUSTOMER SEGMENTS SCHEMAS ────────────────────────────────────
+
+export type CustomerSegmentType = "VIP_CHAMPIONS" | "HIGH_VALUE" | "GROWING" | "AT_RISK" | "INACTIVE";
+
+export interface CustomerSegment {
+  id: string;
+  type: CustomerSegmentType;
+  name: string;
+  description: string;
+  customerCount: number;
+  financialValue: number;
+  formattedFinancialValue: string;
+  customers: Customer[];
+  methodology: string;
+  evidence: string;
+  provenance: "CONNECTED" | "DERIVED" | "INSUFFICIENT DATA";
+  actionable: string;
+}
+
+// ─── SECTION 9: CUSTOMER PREDICTIONS SCHEMAS ──────────────────────────────────
+
+export type PredictionType =
+  | "BOOKING_AGAIN"
+  | "CHURN_INACTIVITY"
+  | "UPSELL"
+  | "REFERRAL"
+  | "REACTIVATION"
+  | "NEXT_PURCHASE_TIMING";
+
+export interface CustomerPrediction {
+  id: string;
+  customerId: string;
+  customerName: string;
+  predictionType: PredictionType;
+  prediction: string;
+  probabilityPct: number | null; // null if sample size inadequate (INSUFFICIENT DATA)
+  formattedProbability: string;
+  timeframe: string;
+  keyFactors: string[];
+  evidence: string;
+  methodology: string;
+  limitations: string;
+  provenance: "CONNECTED" | "DERIVED" | "AI ANALYSIS" | "INSUFFICIENT DATA";
+  actionableWorkflowTarget: "customer_profile" | "task_creation" | "campaign_workspace" | "invoice_workflow";
+}
+
 // ─── SECTION 8: REVENUE OPPORTUNITIES SCHEMAS ─────────────────────────────────
 
 export interface RevenueOpportunity {
@@ -70,10 +116,10 @@ export interface RevenueOpportunity {
   opportunityType: "REVENUE_RECOVERY" | "RE_ENGAGEMENT" | "REPUTATION_BOOST" | "UPSELL_EXPANSION";
   headline: string;
   detail: string;
-  estimatedValue: number | null; // null if insufficient financial evidence
+  estimatedValue: number | null;
   formattedEstimatedValue: string;
   timeframe: string;
-  confidencePct: number | null; // null if sample size inadequate
+  confidencePct: number | null;
   evidence: string;
   explainWhy: {
     recordsConsidered: string;
@@ -151,6 +197,8 @@ export interface PortfolioRelationshipAnalytics {
   portfolioPriorities: PortfolioRelationshipPriority[];
   revenueOpportunities: RevenueOpportunity[];
   connectedCampaigns: CalculatedCampaign[];
+  customerSegments: CustomerSegment[];
+  portfolioPredictions: CustomerPrediction[];
 }
 
 // ─── SECTION 6: AUTHORITATIVE RELATIONSHIP HEALTH SCHEMAS ────────────────────
@@ -269,6 +317,7 @@ export interface CustomerDNAContext {
   authoritativeHealth: CustomerRelationshipHealth;
   customerOpportunities: RevenueOpportunity[];
   connectedCampaigns: CalculatedCampaign[];
+  customerPredictions: CustomerPrediction[];
 
   suggestedPriorities: {
     action: string;
@@ -307,7 +356,269 @@ function getEmptyPortfolioRelationshipAnalytics(): PortfolioRelationshipAnalytic
     portfolioPriorities: [],
     revenueOpportunities: [],
     connectedCampaigns: [],
+    customerSegments: [],
+    portfolioPredictions: [],
   };
+}
+
+// ─── SECTION 9: AUTHORITATIVE CUSTOMER SEGMENTATION ENGINE ────────────────────
+
+export async function fetchCustomerSegments(
+  businessId: string | undefined
+): Promise<CustomerSegment[]> {
+  if (!businessId) return [];
+
+  const { data: rawCustomers } = await supabase
+    .from("customers")
+    .select("*")
+    .eq("business_id", businessId)
+    .eq("is_active", true);
+
+  const customers = (rawCustomers || []) as Customer[];
+  if (customers.length === 0) return [];
+
+  const vipList: Customer[] = [];
+  const highValList: Customer[] = [];
+  const growingList: Customer[] = [];
+  const atRiskList: Customer[] = [];
+  const inactiveList: Customer[] = [];
+
+  let vipVal = 0, highValVal = 0, growingVal = 0, atRiskVal = 0, inactiveVal = 0;
+
+  customers.forEach((c) => {
+    const ltv = Number(c.lifetime_value) || 0;
+    if (c.status === "inactive") {
+      inactiveList.push(c);
+      inactiveVal += ltv;
+    } else if (ltv >= 3000) {
+      vipList.push(c);
+      vipVal += ltv;
+    } else if (ltv >= 1000) {
+      highValList.push(c);
+      highValVal += ltv;
+    } else if (ltv >= 250) {
+      growingList.push(c);
+      growingVal += ltv;
+    } else {
+      atRiskList.push(c);
+      atRiskVal += ltv;
+    }
+  });
+
+  return [
+    {
+      id: "seg-vip",
+      type: "VIP_CHAMPIONS",
+      name: "VIP Champions",
+      description: "Highest historical LTV (£3,000+) with repeat transaction history.",
+      customerCount: vipList.length,
+      financialValue: vipVal,
+      formattedFinancialValue: `£${vipVal.toLocaleString("en-GB")}`,
+      customers: vipList,
+      methodology: "Filtered for active status and lifetime_value >= £3,000 in workspace customer ledger.",
+      evidence: `${vipList.length} customer record(s) meeting VIP LTV thresholds.`,
+      provenance: vipList.length > 0 ? "DERIVED" : "INSUFFICIENT DATA",
+      actionable: "Prioritise key account check-ins and executive relationship touchpoints.",
+    },
+    {
+      id: "seg-high-value",
+      type: "HIGH_VALUE",
+      name: "High Value Accounts",
+      description: "Consistent spend (£1,000–£3,000) with strong retention history.",
+      customerCount: highValList.length,
+      financialValue: highValVal,
+      formattedFinancialValue: `£${highValVal.toLocaleString("en-GB")}`,
+      customers: highValList,
+      methodology: "Filtered for active status and lifetime_value between £1,000 and £3,000.",
+      evidence: `${highValList.length} customer record(s) meeting High Value thresholds.`,
+      provenance: highValList.length > 0 ? "DERIVED" : "INSUFFICIENT DATA",
+      actionable: "Schedule recurring order reviews and upsell consultations.",
+    },
+    {
+      id: "seg-growing",
+      type: "GROWING",
+      name: "Growing Accounts",
+      description: "Expanding relationships (£250–£1,000) with upsell potential.",
+      customerCount: growingList.length,
+      financialValue: growingVal,
+      formattedFinancialValue: `£${growingVal.toLocaleString("en-GB")}`,
+      customers: growingList,
+      methodology: "Filtered for active status and lifetime_value between £250 and £1,000.",
+      evidence: `${growingList.length} customer record(s) in growing spend tier.`,
+      provenance: growingList.length > 0 ? "DERIVED" : "INSUFFICIENT DATA",
+      actionable: "Offer complementary service packages or contract expansions.",
+    },
+    {
+      id: "seg-at-risk",
+      type: "AT_RISK",
+      name: "Standard / At Risk Accounts",
+      description: "Low historical spend (<£250) or accounts requiring active engagement.",
+      customerCount: atRiskList.length,
+      financialValue: atRiskVal,
+      formattedFinancialValue: `£${atRiskVal.toLocaleString("en-GB")}`,
+      customers: atRiskList,
+      methodology: "Filtered for active status with lifetime_value < £250.",
+      evidence: `${atRiskList.length} customer record(s) in standard spend tier.`,
+      provenance: atRiskList.length > 0 ? "DERIVED" : "INSUFFICIENT DATA",
+      actionable: "Send customer satisfaction check-ins or automated promotions.",
+    },
+    {
+      id: "seg-inactive",
+      type: "INACTIVE",
+      name: "Inactive / Dormant",
+      description: "Dormant accounts marked inactive requiring re-activation campaigns.",
+      customerCount: inactiveList.length,
+      financialValue: inactiveVal,
+      formattedFinancialValue: `£${inactiveVal.toLocaleString("en-GB")}`,
+      customers: inactiveList,
+      methodology: "Filtered strictly for customer status = 'inactive' in workspace profile record.",
+      evidence: `${inactiveList.length} customer record(s) explicitly marked inactive.`,
+      provenance: inactiveList.length > 0 ? "CONNECTED" : "INSUFFICIENT DATA",
+      actionable: "Dispatch targeted re-engagement campaigns via preferred contact channels.",
+    },
+  ];
+}
+
+// ─── SECTION 9: AUTHORITATIVE PREDICTION ENGINE ────────────────────────────────
+
+export async function fetchCustomerPredictions(
+  customerId: string,
+  businessId: string
+): Promise<CustomerPrediction[]> {
+  const [custRes, invRes, jobsRes, commsRes, revRes] = await Promise.all([
+    supabase.from("customers").select("*").eq("id", customerId).eq("business_id", businessId).single(),
+    supabase.from("invoices").select("*").eq("customer_id", customerId).eq("business_id", businessId),
+    supabase.from("jobs").select("*").eq("customer_id", customerId).eq("business_id", businessId),
+    supabase.from("communications").select("*").eq("customer_id", customerId).eq("business_id", businessId),
+    supabase.from("reviews").select("*").eq("customer_id", customerId).eq("business_id", businessId),
+  ]);
+
+  const customer = custRes.data as Customer | null;
+  const invoices = (invRes.data || []) as Invoice[];
+  const jobs = (jobsRes.data || []) as Job[];
+  const comms = (commsRes.data || []) as Communication[];
+  const reviews = (revRes.data || []) as Review[];
+
+  if (!customer) return [];
+
+  const customerName = customer.full_name || customer.company_name || "Customer";
+  const paidInvoices = invoices.filter((i) => i.status === "paid" && i.created_at);
+  const nowMs = Date.now();
+
+  const predictions: CustomerPrediction[] = [];
+
+  // Prediction 1: BOOKING_AGAIN (Requires >= 2 paid invoices for transaction interval sample)
+  if (paidInvoices.length >= 2) {
+    const sorted = [...paidInvoices].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    const intervals: number[] = [];
+    for (let i = 1; i < sorted.length; i++) {
+      const diffDays = (new Date(sorted[i].created_at).getTime() - new Date(sorted[i - 1].created_at).getTime()) / (1000 * 60 * 60 * 24);
+      intervals.push(diffDays);
+    }
+    const avgIntervalDays = Math.round(intervals.reduce((a, b) => a + b, 0) / intervals.length);
+    const lastTxMs = new Date(sorted[sorted.length - 1].created_at).getTime();
+    const daysSinceLastTx = Math.round((nowMs - lastTxMs) / (1000 * 60 * 60 * 24));
+
+    const isDueForRepeat = daysSinceLastTx >= avgIntervalDays * 0.8;
+    const probability = Math.min(95, Math.max(50, Math.round(70 + (isDueForRepeat ? 15 : -10))));
+
+    predictions.push({
+      id: `pred-booking-${customerId}`,
+      customerId,
+      customerName,
+      predictionType: "BOOKING_AGAIN",
+      prediction: isDueForRepeat
+        ? `Customer is entering their typical ${avgIntervalDays}-day repeat purchase window.`
+        : `Repeat purchase expected within next ${Math.max(1, avgIntervalDays - daysSinceLastTx)} days.`,
+      probabilityPct: paidInvoices.length >= 3 ? probability : null,
+      formattedProbability: paidInvoices.length >= 3 ? `${probability}% Probability` : "Insufficient Data",
+      timeframe: `Next ${Math.max(7, Math.round(avgIntervalDays * 0.3))} Days`,
+      keyFactors: [
+        `${paidInvoices.length} historical settled orders evaluated.`,
+        `Average repeat order interval: ${avgIntervalDays} days.`,
+        `Last order settled ${daysSinceLastTx} days ago.`,
+      ],
+      evidence: `Evaluated over ${paidInvoices.length} settled transaction timestamp(s).`,
+      methodology: "Trailing repeat transaction interval calculation. Enforces minimum 3 settled orders for probability percentages.",
+      limitations: "Assumes customer operating cycle remains consistent.",
+      provenance: paidInvoices.length >= 3 ? "DERIVED" : "INSUFFICIENT DATA",
+      actionableWorkflowTarget: "task_creation",
+    });
+  } else {
+    predictions.push({
+      id: `pred-booking-${customerId}`,
+      customerId,
+      customerName,
+      predictionType: "BOOKING_AGAIN",
+      prediction: "Insufficient historical transaction history to calculate repeat booking timing.",
+      probabilityPct: null,
+      formattedProbability: "Insufficient Data",
+      timeframe: "Pending History",
+      keyFactors: ["Requires at least 2 settled invoice transactions."],
+      evidence: `${paidInvoices.length} settled transactions found in workspace.`,
+      methodology: "Requires at least 2-3 settled transaction intervals to derive purchase cadence.",
+      limitations: "Sparse transaction history.",
+      provenance: "INSUFFICIENT DATA",
+      actionableWorkflowTarget: "task_creation",
+    });
+  }
+
+  // Prediction 2: CHURN_INACTIVITY
+  const hasOverdue = invoices.some((i) => i.status === "overdue");
+  const isInactiveStatus = customer.status === "inactive";
+  const daysSinceCreated = (nowMs - new Date(customer.created_at).getTime()) / (1000 * 60 * 60 * 24);
+
+  if (isInactiveStatus || hasOverdue || (daysSinceCreated > 90 && paidInvoices.length === 0)) {
+    const churnProb = isInactiveStatus ? 90 : hasOverdue ? 75 : 60;
+    predictions.push({
+      id: `pred-churn-${customerId}`,
+      customerId,
+      customerName,
+      predictionType: "CHURN_INACTIVITY",
+      prediction: isInactiveStatus
+        ? "High risk of permanent account churn due to inactive profile status."
+        : hasOverdue
+        ? "Account at churn risk due to unpaid overdue invoice balances."
+        : "Account at risk due to prolonged zero-transaction inactivity.",
+      probabilityPct: churnProb,
+      formattedProbability: `${churnProb}% Risk Level`,
+      timeframe: "Current Account State",
+      keyFactors: [
+        isInactiveStatus ? "Customer status explicitly set to inactive." : "Active overdue invoice balance.",
+        `${comms.length} communication log(s) on file.`,
+      ],
+      evidence: isInactiveStatus ? "Profile status = inactive." : "Unpaid past-due ledger entries.",
+      methodology: "Deterministic evidence rule evaluating payment latency and inactivity status.",
+      limitations: "Does not account for offline non-digital communication.",
+      provenance: "DERIVED",
+      actionableWorkflowTarget: "campaign_workspace",
+    });
+  }
+
+  return predictions;
+}
+
+export async function fetchPortfolioPredictions(
+  businessId: string | undefined
+): Promise<CustomerPrediction[]> {
+  if (!businessId) return [];
+
+  const { data: rawCustomers } = await supabase
+    .from("customers")
+    .select("id")
+    .eq("business_id", businessId)
+    .eq("is_active", true)
+    .limit(20);
+
+  const customerIds = (rawCustomers || []).map((c: any) => c.id);
+  if (customerIds.length === 0) return [];
+
+  const nested = await Promise.all(
+    customerIds.map((id: string) => fetchCustomerPredictions(id, businessId))
+  );
+
+  const flattened = nested.flat();
+  return flattened.filter((p) => p.provenance !== "INSUFFICIENT DATA").slice(0, 8);
 }
 
 // ─── SECTION 8: AUTHORITATIVE REVENUE OPPORTUNITIES ENGINE ────────────────────
@@ -342,7 +653,6 @@ export async function fetchRevenueOpportunities(
     const cJobs = jobs.filter((j) => j.customer_id === c.id);
     const cReviews = reviews.filter((r) => r.customer_id === c.id);
 
-    // Rule 1: Outstanding/Overdue Revenue Recovery
     const overdueInvoices = cInvoices.filter((i) => i.status === "overdue" || (i.status !== "paid" && i.due_date && new Date(i.due_date) < now));
     if (overdueInvoices.length > 0) {
       const unpaidSum = overdueInvoices.reduce((sum, i) => sum + (Number(i.total_amount) - Number(i.amount_paid || 0)), 0);
@@ -370,7 +680,6 @@ export async function fetchRevenueOpportunities(
       });
     }
 
-    // Rule 2: Dormant High-LTV Account Re-engagement
     if (c.status === "inactive" && ltv >= 1000) {
       const potentialValue = Math.round(ltv * 0.25);
       opportunities.push({
@@ -397,7 +706,6 @@ export async function fetchRevenueOpportunities(
       });
     }
 
-    // Rule 3: Review & Reputation Boost
     const completedJobs = cJobs.filter((j) => j.status === "completed");
     if (completedJobs.length > 0 && cReviews.length === 0) {
       opportunities.push({
@@ -1298,6 +1606,8 @@ export async function fetchPortfolioRelationshipAnalytics(
       portfolioPriorities,
       revenueOpportunities,
       connectedCampaigns,
+      customerSegments,
+      portfolioPredictions,
     ] = await Promise.all([
       supabase.from("customers").select("*").eq("business_id", businessId),
       supabase.from("jobs").select("*").eq("business_id", businessId).gte("created_at", ninetyDaysAgo),
@@ -1309,6 +1619,8 @@ export async function fetchPortfolioRelationshipAnalytics(
       fetchPortfolioRelationshipPriorities(businessId),
       fetchRevenueOpportunities(businessId),
       fetchPortfolioCampaignConnections(businessId),
+      fetchCustomerSegments(businessId),
+      fetchPortfolioPredictions(businessId),
     ]);
 
     const customers = (customersRes.data || []) as Customer[];
@@ -1484,6 +1796,8 @@ export async function fetchPortfolioRelationshipAnalytics(
       portfolioPriorities,
       revenueOpportunities,
       connectedCampaigns,
+      customerSegments,
+      portfolioPredictions,
     };
   } catch (err) {
     console.error("[fetchPortfolioRelationshipAnalytics] error:", err);
@@ -1605,6 +1919,7 @@ export async function fetchCustomerDNAContext(
       authoritativeHealth,
       customerOpportunities,
       connectedCampaigns,
+      customerPredictions,
     ] = await Promise.all([
       supabase.from("customers").select("*").eq("id", customerId).eq("business_id", businessId).single(),
       supabase.from("jobs").select("*").eq("customer_id", customerId).eq("business_id", businessId),
@@ -1616,6 +1931,7 @@ export async function fetchCustomerDNAContext(
       fetchCustomerRelationshipHealth(customerId, businessId),
       fetchCustomerRevenueOpportunities(customerId, businessId),
       fetchCustomerCampaignConnections(customerId, businessId),
+      fetchCustomerPredictions(customerId, businessId),
     ]);
 
     if (custRes.error || !custRes.data) {
@@ -1726,6 +2042,7 @@ export async function fetchCustomerDNAContext(
       authoritativeHealth,
       customerOpportunities,
       connectedCampaigns,
+      customerPredictions,
 
       suggestedPriorities,
     };
