@@ -1,30 +1,29 @@
 import { useState, useEffect } from "react";
 import {
   Users,
-  Heart,
   Activity,
-  CircleDollarSign,
-  TrendingUp,
-  AlertCircle,
   Sparkles,
   Search,
-  CheckCircle2,
-  HelpCircle,
   ChevronDown,
   ChevronUp,
-  ArrowRight,
+  Eye,
+  Brain,
+  Clock,
   ShieldCheck,
+  CheckCircle2,
   AlertTriangle,
+  HelpCircle,
 } from "lucide-react";
 import { useBusiness } from "@/hooks/useBusiness";
 import {
   fetchPortfolioRelationshipAnalytics,
+  fetchPortfolioActivityFeed,
   searchPortfolioCustomers,
   type PortfolioRelationshipAnalytics,
-  type AttentionItem,
+  type PortfolioRelationshipPriority,
 } from "@/services/relationshipAnalytics";
+import type { Customer, ActivityLog } from "@/lib/database.types";
 import { appEvents, APP_EVENTS } from "@/lib/events";
-import type { Customer } from "@/lib/database.types";
 import { AIDisclosure } from "@/components/ui/AIDisclosure";
 
 export function PortfolioRelationshipHeader({
@@ -38,6 +37,7 @@ export function PortfolioRelationshipHeader({
   const businessId = business?.id;
 
   const [analytics, setAnalytics] = useState<PortfolioRelationshipAnalytics | null>(null);
+  const [activityFeed, setActivityFeed] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Search state
@@ -47,23 +47,30 @@ export function PortfolioRelationshipHeader({
 
   // Expanded methodology state
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
+  const [expandedPriorityId, setExpandedPriorityId] = useState<string | null>(null);
 
-  const loadAnalytics = () => {
+  const loadData = () => {
     if (!businessId) {
       setLoading(false);
       return;
     }
 
     setLoading(true);
-    fetchPortfolioRelationshipAnalytics(businessId)
-      .then((res) => setAnalytics(res))
+    Promise.all([
+      fetchPortfolioRelationshipAnalytics(businessId),
+      fetchPortfolioActivityFeed(businessId),
+    ])
+      .then(([analyticsRes, activityRes]) => {
+        setAnalytics(analyticsRes);
+        setActivityFeed(activityRes);
+      })
       .catch((err) => console.error("[PortfolioRelationshipHeader] fetch error:", err))
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
-    loadAnalytics();
-    const unsubscribe = appEvents.on(APP_EVENTS.CUSTOMERS_MUTATED, loadAnalytics);
+    loadData();
+    const unsubscribe = appEvents.on(APP_EVENTS.CUSTOMERS_MUTATED, loadData);
     return () => unsubscribe();
   }, [businessId]);
 
@@ -106,11 +113,11 @@ export function PortfolioRelationshipHeader({
     portfolioHealth,
     verifiedRevenue30d,
     predictedRevenue30d,
-    attentionPortfolio,
+    portfolioPriorities,
   } = analytics;
 
   return (
-    <div className="space-y-4 mb-6">
+    <div className="space-y-6 mb-6">
       {/* ─── PORTFOLIO INTELLIGENCE HERO CARD ───────────────────────────────── */}
       <div className="relative overflow-hidden rounded-2xl bg-foreground p-6 text-background shadow-card">
         <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-brand/20 blur-3xl" />
@@ -191,11 +198,11 @@ export function PortfolioRelationshipHeader({
         {/* Banner Status Line */}
         <div className="relative mt-5 flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 rounded-lg bg-background/10 px-3 py-1.5">
-            <span className={`h-2 w-2 rounded-full ${attentionPortfolio.attentionCount > 0 ? "bg-brand animate-pulse" : "bg-emerald-400"}`} />
+            <span className={`h-2 w-2 rounded-full ${portfolioPriorities.length > 0 ? "bg-brand animate-pulse" : "bg-emerald-400"}`} />
             <span className="text-[11.5px] text-background/80">
-              {attentionPortfolio.attentionCount > 0
-                ? `${attentionPortfolio.attentionCount} portfolio action(s) requiring operational attention`
-                : "All workspace relationships up to date"}
+              {portfolioPriorities.length > 0
+                ? `${portfolioPriorities.length} portfolio priority action(s) requiring operational attention`
+                : "No priority actions identified"}
             </span>
           </div>
 
@@ -327,111 +334,121 @@ export function PortfolioRelationshipHeader({
         </div>
       </div>
 
-      {/* ─── METHODOLOGY EXPLANATION PANELS ─────────────────────────────────── */}
-      {expandedSection === "active" && (
-        <div className="rounded-2xl border border-border bg-card p-4 text-xs space-y-2">
-          <div className="font-bold text-foreground">Active Relationship Business Rule Methodology:</div>
-          <p className="text-muted-foreground leading-relaxed">
-            A customer record is classified as an <strong>Active Relationship</strong> if it meets at least one of the following evidence criteria:
-            <br />
-            1. Explicit status of <em>active</em> created or updated within the last 90 days.
-            <br />
-            2. Has a job created or worked in the last 90 days.
-            <br />
-            3. Has an invoice issued, updated, or settled in the last 90 days.
-            <br />
-            4. Has a communication record in the last 90 days.
-          </p>
-        </div>
-      )}
-
-      {expandedSection === "health" && (
-        <div className="rounded-2xl border border-border bg-card p-4 text-xs space-y-2">
-          <div className="font-bold text-foreground">Portfolio Relationship Health Index Methodology:</div>
-          <p className="text-muted-foreground leading-relaxed">
-            Health scores range from 0 to 100 and evaluate active transactional evidence:
-            <br />
-            • Baseline score of 60 for customers with activity.
-            <br />
-            • +10 for active relationship status.
-            <br />
-            • -20 for active overdue invoices.
-            <br />
-            • +15 for settled paid invoices.
-            <br />
-            • +15 for 4★+ review ratings; -25 for 1-2★ ratings.
-            <br />
-            If no job, invoice, or review activity exists in the workspace, the index defaults to <em>INSUFFICIENT DATA</em> rather than fabricating a score.
-          </p>
-        </div>
-      )}
-
-      {expandedSection === "predicted" && (
-        <div className="rounded-2xl border border-border bg-card p-4 text-xs space-y-2">
-          <div className="font-bold text-foreground">30-Day Predicted Revenue Methodology & Protection:</div>
-          <p className="text-muted-foreground leading-relaxed">
-            Predicted revenue computes a trailing monthly payment run rate across active customer records.
-            To avoid overclaiming precision or fabricating predictions on sparse datasets, the system enforces a strict minimum threshold:
-            <strong> At least 3 settled historical invoices</strong> must be present in the workspace.
-            Otherwise, the metric displays <em>INSUFFICIENT DATA</em>. Verified settled payments are strictly separated from forward-looking predictions.
-          </p>
-        </div>
-      )}
-
-      {/* ─── EVIDENCE-BASED ATTENTION / OPPORTUNITY / RISK PORTFOLIO ────────── */}
-      {attentionPortfolio.items.length > 0 && (
-        <div className="rounded-2xl border border-border bg-card shadow-card overflow-hidden">
-          <div className="border-b border-border px-5 py-3.5 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Activity className="h-4 w-4 text-brand" strokeWidth={1.75} />
-              <span className="text-[13.5px] font-semibold tracking-tight text-foreground">
-                Actionable Portfolio Intelligence
-              </span>
-            </div>
-            <div className="flex items-center gap-2 text-[11px] font-semibold">
-              <span className="rounded bg-red-500/10 px-2 py-0.5 text-red-500">
-                {attentionPortfolio.attentionCount} Attention
-              </span>
-              <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-emerald-500">
-                {attentionPortfolio.opportunityCount} Opportunity
-              </span>
-              <span className="rounded bg-amber-500/10 px-2 py-0.5 text-amber-500">
-                {attentionPortfolio.riskCount} Risk
-              </span>
-            </div>
+      {/* ─── SECTION 7: PORTFOLIO RELATIONSHIP PRIORITIES ───────────────────── */}
+      <div className="rounded-2xl border border-border bg-card shadow-card overflow-hidden">
+        <div className="border-b border-border px-5 py-3.5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Activity className="h-4 w-4 text-brand" strokeWidth={1.75} />
+            <span className="text-[13.5px] font-semibold tracking-tight text-foreground">
+              Today's Portfolio Priorities
+            </span>
           </div>
+          <span className="rounded bg-brand/10 px-2 py-0.5 text-[10px] font-bold text-brand uppercase">
+            {portfolioPriorities.length} Priorities
+          </span>
+        </div>
 
+        {portfolioPriorities.length === 0 ? (
+          <div className="p-8 text-center text-xs text-muted-foreground italic">
+            No priority actions identified across your workspace customer portfolio.
+          </div>
+        ) : (
           <div className="divide-y divide-border">
-            {attentionPortfolio.items.map((item, idx) => (
-              <div key={idx} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-secondary/20 transition-colors">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className={`rounded-full px-2 py-0.5 text-[9.5px] font-extrabold uppercase ${
-                      item.type === "ATTENTION"
-                        ? "bg-red-500/10 text-red-500"
-                        : item.type === "OPPORTUNITY"
-                        ? "bg-emerald-500/10 text-emerald-500"
-                        : "bg-amber-500/10 text-amber-500"
-                    }`}>
-                      {item.type}
-                    </span>
-                    <span className="text-[12.5px] font-bold text-foreground">{item.headline}</span>
-                    <span className="text-[11px] text-muted-foreground">— {item.customerName}</span>
-                  </div>
-                  <p className="text-[11.5px] text-muted-foreground">{item.detail}</p>
-                  <p className="text-[10.5px] text-muted-foreground/70 italic">Evidence: {item.evidence}</p>
-                </div>
+            {portfolioPriorities.map((item) => {
+              const isExpanded = expandedPriorityId === item.id;
+              return (
+                <div key={item.id} className="p-4 space-y-2 hover:bg-secondary/20 transition-colors">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`rounded-full px-2 py-0.5 text-[9.5px] font-extrabold uppercase ${
+                          item.type === "ATTENTION"
+                            ? "bg-red-500/10 text-red-500"
+                            : item.type === "OPPORTUNITY"
+                            ? "bg-emerald-500/10 text-emerald-500"
+                            : "bg-amber-500/10 text-amber-500"
+                        }`}>
+                          {item.type}
+                        </span>
+                        <span className="text-[13px] font-bold text-foreground">{item.headline}</span>
+                        <span className="text-[11px] text-muted-foreground">— {item.customerName}</span>
+                      </div>
+                      <p className="text-[11.5px] text-muted-foreground">{item.detail}</p>
+                      <p className="text-[10.5px] text-muted-foreground/70 italic">Evidence: {item.evidence}</p>
+                    </div>
 
-                <div className="shrink-0 flex items-center gap-2">
-                  <span className="rounded bg-secondary px-2 py-0.5 text-[9px] font-extrabold text-muted-foreground uppercase">
-                    {item.provenance}
-                  </span>
+                    <div className="shrink-0 flex items-center gap-2">
+                      <span className="rounded bg-secondary px-2 py-0.5 text-[9px] font-extrabold text-muted-foreground uppercase">
+                        {item.provenance}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedPriorityId(isExpanded ? null : item.id)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:border-foreground/20"
+                      >
+                        <Eye className="h-3 w-3" /> Explain Why
+                        {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Explain Why Panel */}
+                  {isExpanded && (
+                    <div className="mt-2 rounded-xl border border-border bg-secondary/30 p-3.5 space-y-2 text-[11.5px]">
+                      <div className="flex items-start gap-2">
+                        <Brain className="h-3.5 w-3.5 text-brand shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <div className="font-bold text-foreground text-[11px] uppercase tracking-wider">Evidence & Methodological Explanation:</div>
+                          <p className="text-muted-foreground"><strong className="text-foreground">Records Evaluated:</strong> {item.explainWhy.recordsConsidered}</p>
+                          <p className="text-muted-foreground"><strong className="text-foreground">Derived Signal:</strong> {item.explainWhy.derivedSignals}</p>
+                          <p className="text-muted-foreground"><strong className="text-foreground">Why Prioritised:</strong> {item.explainWhy.whyPrioritised}</p>
+                          <p className="text-muted-foreground"><strong className="text-foreground">Recommended Action:</strong> {item.explainWhy.recommendedAction}</p>
+                          <p className="text-muted-foreground/70 italic"><strong className="text-foreground">Limitations:</strong> {item.explainWhy.limitations}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ─── SECTION 7: PORTFOLIO ACTIVITY FEED ───────────────────────────────── */}
+      <div className="rounded-2xl border border-border bg-card shadow-card overflow-hidden">
+        <div className="border-b border-border px-5 py-3.5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-brand" strokeWidth={1.75} />
+            <span className="text-[13.5px] font-semibold tracking-tight text-foreground">
+              Recent Workspace Relationship Activity
+            </span>
+          </div>
+          <span className="text-[11px] text-muted-foreground">Portfolio Ledger</span>
+        </div>
+
+        {activityFeed.length === 0 ? (
+          <div className="p-8 text-center text-xs text-muted-foreground italic">
+            No activity logs recorded across the workspace portfolio yet.
+          </div>
+        ) : (
+          <div className="divide-y divide-border/60">
+            {activityFeed.map((act) => (
+              <div key={act.id} className="p-3.5 flex items-center justify-between text-[12px] hover:bg-secondary/20 transition-colors">
+                <div>
+                  <div className="font-bold text-foreground">{act.description}</div>
+                  <div className="text-[10.5px] text-muted-foreground">
+                    Action: {act.action} • Type: {act.entity_type}
+                  </div>
+                </div>
+                <span className="text-[10.5px] text-muted-foreground shrink-0">
+                  {new Date(act.created_at).toLocaleString("en-GB", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                </span>
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

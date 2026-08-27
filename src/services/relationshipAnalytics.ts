@@ -60,6 +60,30 @@ export interface AttentionItem {
   provenance: "CONNECTED" | "DERIVED" | "AI ANALYSIS";
 }
 
+// ─── SECTION 7: PORTFOLIO RELATIONSHIP PRIORITIES SCHEMAS ──────────────────
+
+export interface PortfolioRelationshipPriority {
+  id: string;
+  customerId: string;
+  customerName: string;
+  type: "ATTENTION" | "OPPORTUNITY" | "RISK";
+  headline: string;
+  detail: string;
+  evidence: string;
+  priorityScore: number;
+  impactText: string | null;
+  confidencePct: number | null;
+  provenance: "CONNECTED" | "DERIVED" | "AI ANALYSIS";
+  explainWhy: {
+    recordsConsidered: string;
+    timePeriod: string;
+    derivedSignals: string;
+    whyPrioritised: string;
+    recommendedAction: string;
+    limitations: string;
+  };
+}
+
 export interface PortfolioRelationshipAnalytics {
   totalCustomers: {
     count: number;
@@ -98,15 +122,16 @@ export interface PortfolioRelationshipAnalytics {
     provenance: "DERIVED" | "AI ANALYSIS";
   };
   authoritativeMetrics: AuthoritativeRelationshipMetrics;
+  portfolioPriorities: PortfolioRelationshipPriority[];
 }
 
 // ─── SECTION 6: AUTHORITATIVE RELATIONSHIP HEALTH SCHEMAS ────────────────────
 
 export interface RelationshipHealthComponent {
   componentName: string;
-  score: number | null; // 0 - 100 or null
+  score: number | null;
   formatted: string;
-  weightPct: number; // e.g. 25
+  weightPct: number;
   label: string;
   evidence: string;
   methodology: string;
@@ -117,17 +142,17 @@ export interface RelationshipHealthComponent {
 export interface CustomerRelationshipHealth {
   customerId: string;
   customerName: string;
-  overallScore: number | null; // 0 - 100 or null
+  overallScore: number | null;
   overallLabel: "EXCELLENT" | "GOOD" | "NEEDS ATTENTION" | "AT RISK" | "INSUFFICIENT DATA";
   hasSufficientData: boolean;
   provenance: "DERIVED" | "INSUFFICIENT DATA";
 
   components: {
-    engagement: RelationshipHealthComponent;  // Weight: 25%
-    satisfaction: RelationshipHealthComponent; // Weight: 20%
-    loyalty: RelationshipHealthComponent;      // Weight: 20%
-    advocacy: RelationshipHealthComponent;     // Weight: 15%
-    growth: RelationshipHealthComponent;       // Weight: 20%
+    engagement: RelationshipHealthComponent;
+    satisfaction: RelationshipHealthComponent;
+    loyalty: RelationshipHealthComponent;
+    advocacy: RelationshipHealthComponent;
+    growth: RelationshipHealthComponent;
   };
 
   explanation: {
@@ -141,7 +166,7 @@ export interface CustomerRelationshipHealth {
 
 export interface PersonalityTraitFactor {
   factorName: string;
-  score: number | null; // 0 - 100 or null
+  score: number | null;
   label: string;
   evidence: string;
   hasSufficientData: boolean;
@@ -224,275 +249,180 @@ export interface CustomerDNAContext {
   }[];
 }
 
-// ─── SECTION 6: AUTHORITATIVE RELATIONSHIP HEALTH ENGINE ──────────────────────
+// ─── HELPER FUNCTIONS ─────────────────────────────────────────────────────────
 
-/**
- * Single Authoritative Source of Truth for Individual Customer Relationship Health.
- * Evaluates 5 core components: Engagement (25%), Satisfaction (20%), Loyalty (20%), Advocacy (15%), Growth (20%).
- * Strictly returns INSUFFICIENT DATA if underlying evidence is inadequate.
- */
-export async function fetchCustomerRelationshipHealth(
-  customerId: string,
-  businessId: string
-): Promise<CustomerRelationshipHealth> {
-  const [custRes, jobsRes, invRes, commsRes, revRes] = await Promise.all([
-    supabase.from("customers").select("*").eq("id", customerId).eq("business_id", businessId).single(),
-    supabase.from("jobs").select("*").eq("customer_id", customerId).eq("business_id", businessId),
-    supabase.from("invoices").select("*").eq("customer_id", customerId).eq("business_id", businessId),
-    supabase.from("communications").select("*").eq("customer_id", customerId).eq("business_id", businessId).order("created_at", { ascending: false }),
-    supabase.from("reviews").select("*").eq("customer_id", customerId).eq("business_id", businessId),
-  ]);
-
-  const customer = custRes.data as Customer | null;
-  const jobs = (jobsRes.data || []) as Job[];
-  const invoices = (invRes.data || []) as Invoice[];
-  const comms = (commsRes.data || []) as Communication[];
-  const reviews = (revRes.data || []) as Review[];
-
-  const customerName = customer?.full_name || customer?.company_name || "Customer";
-  const now = Date.now();
-
-  // 1. ENGAGEMENT SCORE (25%)
-  // Recency & Frequency of activity in last 90 days (jobs, invoices, communications)
-  const activityDatesMs: number[] = [
-    ...jobs.map((j) => new Date(j.created_at).getTime()),
-    ...invoices.map((i) => new Date(i.created_at).getTime()),
-    ...comms.map((c) => new Date(c.created_at).getTime()),
-  ];
-
-  let engagementScore: number | null = null;
-  let engagementLabel = "Insufficient Data";
-  let engagementEvidence = "Requires at least 1 recorded job, invoice, or communication log.";
-  let engagementHasData = false;
-
-  if (activityDatesMs.length > 0) {
-    engagementHasData = true;
-    const mostRecentMs = Math.max(...activityDatesMs);
-    const daysSinceLastActivity = (now - mostRecentMs) / (1000 * 60 * 60 * 24);
-
-    let recencyPoints = 50;
-    if (daysSinceLastActivity <= 14) recencyPoints = 100;
-    else if (daysSinceLastActivity <= 30) recencyPoints = 85;
-    else if (daysSinceLastActivity <= 60) recencyPoints = 65;
-    else if (daysSinceLastActivity <= 90) recencyPoints = 40;
-    else recencyPoints = 20;
-
-    const frequencyPoints = Math.min(100, activityDatesMs.length * 15);
-    engagementScore = Math.round(recencyPoints * 0.6 + frequencyPoints * 0.4);
-    engagementLabel = engagementScore >= 80 ? "High Engagement" : engagementScore >= 50 ? "Moderate Engagement" : "Low Engagement";
-    engagementEvidence = `Last active ${Math.round(daysSinceLastActivity)} day(s) ago with ${activityDatesMs.length} total logged interaction(s).`;
-  }
-
-  const engagementComponent: RelationshipHealthComponent = {
-    componentName: "Engagement",
-    score: engagementScore,
-    formatted: engagementScore !== null ? `${engagementScore} / 100` : "Insufficient Data",
-    weightPct: 25,
-    label: engagementLabel,
-    evidence: engagementEvidence,
-    methodology: "Evaluated 60% on recency of last activity (90-day window) and 40% on interaction volume.",
-    hasSufficientData: engagementHasData,
-    provenance: engagementHasData ? "DERIVED" : "INSUFFICIENT DATA",
-  };
-
-  // 2. SATISFACTION SCORE (20%)
-  // Genuine Review ratings or survey responses. Requires at least 1 verified review rating.
-  let satisfactionScore: number | null = null;
-  let satisfactionLabel = "Insufficient Data";
-  let satisfactionEvidence = "Requires at least 1 customer review or survey response.";
-  let satisfactionHasData = false;
-
-  if (reviews.length > 0) {
-    satisfactionHasData = true;
-    const avgRating = reviews.reduce((sum, r) => sum + (Number(r.rating) || 0), 0) / reviews.length;
-    satisfactionScore = Math.round((avgRating / 5) * 100);
-    satisfactionLabel = satisfactionScore >= 80 ? "Highly Satisfied" : satisfactionScore >= 60 ? "Satisfied" : "Dissatisfied";
-    satisfactionEvidence = `Derived from ${reviews.length} verified review rating(s) (Avg: ${avgRating.toFixed(1)} / 5★).`;
-  }
-
-  const satisfactionComponent: RelationshipHealthComponent = {
-    componentName: "Satisfaction",
-    score: satisfactionScore,
-    formatted: satisfactionScore !== null ? `${satisfactionScore} / 100` : "Insufficient Data",
-    weightPct: 20,
-    label: satisfactionLabel,
-    evidence: satisfactionEvidence,
-    methodology: "Derived directly from customer review ratings. CrediEdgeOS strictly prohibits calculating satisfaction without real review or survey records.",
-    hasSufficientData: satisfactionHasData,
-    provenance: satisfactionHasData ? "CONNECTED" : "INSUFFICIENT DATA",
-  };
-
-  // 3. LOYALTY SCORE (20%)
-  // Tenure (months) + Repeat completed jobs / transactions
-  const createdMs = customer ? new Date(customer.created_at).getTime() : now;
-  const tenureMonths = Math.max(1, (now - createdMs) / (1000 * 60 * 60 * 24 * 30.4));
-  const completedJobsCount = jobs.filter((j) => j.status === "completed").length;
-  const paidInvoicesCount = invoices.filter((i) => i.status === "paid").length;
-  const repeatTransactions = completedJobsCount + paidInvoicesCount;
-
-  let loyaltyScore: number | null = null;
-  let loyaltyLabel = "Insufficient Data";
-  let loyaltyEvidence = "Requires customer tenure and repeat transaction history.";
-  let loyaltyHasData = false;
-
-  if (customer && (repeatTransactions > 0 || tenureMonths >= 1)) {
-    loyaltyHasData = true;
-    const tenurePoints = Math.min(50, Math.round(tenureMonths * 5));
-    const repeatPoints = Math.min(50, repeatTransactions * 15);
-    loyaltyScore = Math.min(100, tenurePoints + repeatPoints);
-    loyaltyLabel = loyaltyScore >= 75 ? "Loyal Account" : loyaltyScore >= 45 ? "Establishing Loyalty" : "New Account";
-    loyaltyEvidence = `${Math.round(tenureMonths)} month(s) account tenure with ${repeatTransactions} repeat transaction(s).`;
-  }
-
-  const loyaltyComponent: RelationshipHealthComponent = {
-    componentName: "Loyalty",
-    score: loyaltyScore,
-    formatted: loyaltyScore !== null ? `${loyaltyScore} / 100` : "Insufficient Data",
-    weightPct: 20,
-    label: loyaltyLabel,
-    evidence: loyaltyEvidence,
-    methodology: "Evaluated 50% on customer tenure and 50% on repeat completed jobs & settled transactions.",
-    hasSufficientData: loyaltyHasData,
-    provenance: loyaltyHasData ? "DERIVED" : "INSUFFICIENT DATA",
-  };
-
-  // 4. ADVOCACY SCORE (15%)
-  // Genuine Referral source OR positive 5★ review history
-  let advocacyScore: number | null = null;
-  let advocacyLabel = "Insufficient Data";
-  let advocacyEvidence = "Requires customer source tracking = 'referral' or 5★ review submission.";
-  let advocacyHasData = false;
-
-  const isReferralSource = customer?.source?.toLowerCase().includes("referral");
-  const has5StarReview = reviews.some((r) => Number(r.rating) === 5);
-
-  if (isReferralSource || has5StarReview) {
-    advocacyHasData = true;
-    advocacyScore = isReferralSource && has5StarReview ? 100 : isReferralSource ? 85 : 90;
-    advocacyLabel = "Active Brand Advocate";
-    advocacyEvidence = isReferralSource && has5StarReview
-      ? "Referred by client & left 5★ review rating."
-      : isReferralSource
-      ? "Acquired via customer referral source."
-      : "Left 5★ review rating in workspace.";
-  }
-
-  const advocacyComponent: RelationshipHealthComponent = {
-    componentName: "Advocacy",
-    score: advocacyScore,
-    formatted: advocacyScore !== null ? `${advocacyScore} / 100` : "Insufficient Data",
-    weightPct: 15,
-    label: advocacyLabel,
-    evidence: advocacyEvidence,
-    methodology: "Requires verified referral source acquisition or 5★ review submission.",
-    hasSufficientData: advocacyHasData,
-    provenance: advocacyHasData ? "CONNECTED" : "INSUFFICIENT DATA",
-  };
-
-  // 5. GROWTH SCORE (20%)
-  // Historical spend expansion / increasing transaction velocity
-  let growthScore: number | null = null;
-  let growthLabel = "Insufficient Data";
-  let growthEvidence = "Requires at least 2 settled historical invoices to measure revenue expansion.";
-  let growthHasData = false;
-
-  const paidInvoices = invoices.filter((i) => i.status === "paid" && i.created_at);
-  if (paidInvoices.length >= 2) {
-    growthHasData = true;
-    const sorted = [...paidInvoices].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-    const firstVal = Number(sorted[0].amount_paid) || Number(sorted[0].total_amount) || 1;
-    const lastVal = Number(sorted[sorted.length - 1].amount_paid) || Number(sorted[sorted.length - 1].total_amount) || 1;
-
-    const growthPct = Math.round(((lastVal - firstVal) / firstVal) * 100);
-    growthScore = Math.min(100, Math.max(20, 60 + Math.round(growthPct * 0.4)));
-    growthLabel = growthScore >= 75 ? "Expanding Account" : growthScore >= 50 ? "Stable Account" : "Contracting Account";
-    growthEvidence = `Invoice transaction value expanded by ${growthPct}% from initial order (£${firstVal}) to latest order (£${lastVal}).`;
-  }
-
-  const growthComponent: RelationshipHealthComponent = {
-    componentName: "Growth",
-    score: growthScore,
-    formatted: growthScore !== null ? `${growthScore} / 100` : "Insufficient Data",
-    weightPct: 20,
-    label: growthLabel,
-    evidence: growthEvidence,
-    methodology: "Calculates historical invoice transaction value expansion across consecutive settled orders.",
-    hasSufficientData: growthHasData,
-    provenance: growthHasData ? "DERIVED" : "INSUFFICIENT DATA",
-  };
-
-  // OVERALL HEALTH SCORE CALCULATION
-  // Weighted combination of available components when core components exist
-  const availableComponents = [
-    engagementComponent,
-    satisfactionComponent,
-    loyaltyComponent,
-    advocacyComponent,
-    growthComponent,
-  ].filter((c) => c.hasSufficientData);
-
-  let overallScore: number | null = null;
-  let overallLabel: CustomerRelationshipHealth["overallLabel"] = "INSUFFICIENT DATA";
-  let overallHasData = false;
-
-  if (engagementHasData || loyaltyHasData) {
-    overallHasData = true;
-    let weightedSum = 0;
-    let weightSum = 0;
-
-    availableComponents.forEach((c) => {
-      if (c.score !== null) {
-        weightedSum += c.score * c.weightPct;
-        weightSum += c.weightPct;
-      }
-    });
-
-    overallScore = weightSum > 0 ? Math.round(weightedSum / weightSum) : 50;
-
-    // Penalty for active overdue balance
-    if (invoices.some((i) => i.status === "overdue")) {
-      overallScore = Math.max(20, overallScore - 15);
-    }
-
-    overallLabel = overallScore >= 80 ? "EXCELLENT" : overallScore >= 65 ? "GOOD" : overallScore >= 45 ? "NEEDS ATTENTION" : "AT RISK";
-  }
-
-  const topStrength = availableComponents.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0]?.componentName || "N/A";
-  const keyOpportunity = [
-    engagementComponent,
-    satisfactionComponent,
-    loyaltyComponent,
-    advocacyComponent,
-    growthComponent,
-  ].find((c) => !c.hasSufficientData || (c.score ?? 100) < 60)?.componentName || "N/A";
-
-  const summaryText = overallHasData
-    ? `${customerName} has an authoritative Relationship Health index of ${overallScore} / 100 (${overallLabel}). Strongest signal: ${topStrength}. Key focus area: ${keyOpportunity}.`
-    : `Insufficient activity history recorded for ${customerName} to compile a defensible Relationship Health score.`;
-
+function getEmptyAuthoritativeMetrics(): AuthoritativeRelationshipMetrics {
   return {
-    customerId,
-    customerName,
-    overallScore,
-    overallLabel,
-    hasSufficientData: overallHasData,
-    provenance: overallHasData ? "DERIVED" : "INSUFFICIENT DATA",
-    components: {
-      engagement: engagementComponent,
-      satisfaction: satisfactionComponent,
-      loyalty: loyaltyComponent,
-      advocacy: advocacyComponent,
-      growth: growthComponent,
-    },
-    explanation: {
-      summary: summaryText,
-      topStrength,
-      keyOpportunity,
-    },
+    totalLtv: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "No workspace revenue records found.", provenance: "INSUFFICIENT DATA" },
+    avgLtv: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "No workspace customer records found.", provenance: "INSUFFICIENT DATA" },
+    retentionRatePct: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "Requires historical customer activity over 90 days.", provenance: "INSUFFICIENT DATA" },
+    npsScore: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "Requires genuine survey responses.", provenance: "INSUFFICIENT DATA" },
+    referralRatePct: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "Requires customer source tracking.", provenance: "INSUFFICIENT DATA" },
+    churnRiskCount: { value: 0, formatted: "0", hasSufficientData: true, methodology: "No customer records evaluated.", provenance: "DERIVED" },
+    churnRiskPct: { value: 0, formatted: "0%", hasSufficientData: true, methodology: "No customer records evaluated.", provenance: "DERIVED" },
+    momLtvChangePct: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "Requires at least 14 daily metric logs.", provenance: "INSUFFICIENT DATA" },
+    momRetentionChangePct: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "Requires at least 14 daily metric logs.", provenance: "INSUFFICIENT DATA" },
   };
 }
 
-// ─── AUTHORITATIVE RELATIONSHIP ANALYTICS (SECTION 2, 3 & 5 ENGINE) ────────────
+function getEmptyPortfolioRelationshipAnalytics(): PortfolioRelationshipAnalytics {
+  return {
+    totalCustomers: { count: 0, provenance: "CONNECTED" },
+    activeRelationships: { count: 0, activePct: null, methodology: "No active workspace customer relationships recorded.", provenance: "DERIVED" },
+    portfolioHealth: { score: null, label: "INSUFFICIENT DATA", reasoning: "No customer activity recorded in workspace.", provenance: "INSUFFICIENT DATA" },
+    verifiedRevenue30d: { amount: 0, formatted: "£0", invoiceCount: 0, provenance: "CONNECTED" },
+    predictedRevenue30d: { amount: null, formatted: "Insufficient Data", methodology: "Requires at least 3 historical settled invoices to derive velocity predictions.", hasSufficientData: false, provenance: "INSUFFICIENT DATA" },
+    attentionPortfolio: { attentionCount: 0, opportunityCount: 0, riskCount: 0, items: [], provenance: "DERIVED" },
+    authoritativeMetrics: getEmptyAuthoritativeMetrics(),
+    portfolioPriorities: [],
+  };
+}
+
+// ─── SECTION 7: AUTHORITATIVE PORTFOLIO PRIORITIES ENGINE ────────────────────
+
+export async function fetchPortfolioRelationshipPriorities(
+  businessId: string | undefined
+): Promise<PortfolioRelationshipPriority[]> {
+  if (!businessId) return [];
+
+  const now = new Date();
+
+  const [customersRes, invoicesRes, jobsRes, commsRes, reviewsRes] = await Promise.all([
+    supabase.from("customers").select("*").eq("business_id", businessId),
+    supabase.from("invoices").select("*").eq("business_id", businessId),
+    supabase.from("jobs").select("*").eq("business_id", businessId),
+    supabase.from("communications").select("*").eq("business_id", businessId),
+    supabase.from("reviews").select("*").eq("business_id", businessId),
+  ]);
+
+  const customers = (customersRes.data || []) as Customer[];
+  const invoices = (invoicesRes.data || []) as Invoice[];
+  const jobs = (jobsRes.data || []) as Job[];
+  const comms = (commsRes.data || []) as Communication[];
+  const reviews = (reviewsRes.data || []) as Review[];
+
+  if (customers.length === 0) return [];
+
+  const priorities: PortfolioRelationshipPriority[] = [];
+
+  customers.forEach((c) => {
+    const customerName = c.full_name || c.company_name || "Customer";
+    const ltv = Number(c.lifetime_value) || 0;
+    const cInvoices = invoices.filter((i) => i.customer_id === c.id);
+    const cJobs = jobs.filter((j) => j.customer_id === c.id);
+    const cComms = comms.filter((cm) => cm.customer_id === c.id);
+    const cReviews = reviews.filter((r) => r.customer_id === c.id);
+
+    const overdueInvoices = cInvoices.filter((i) => i.status === "overdue" || (i.status !== "paid" && i.due_date && new Date(i.due_date) < now));
+    if (overdueInvoices.length > 0) {
+      const unpaidBalance = overdueInvoices.reduce((sum, i) => sum + (Number(i.total_amount) - Number(i.amount_paid || 0)), 0);
+      const score = Math.min(100, Math.max(70, Math.round(50 + Math.min(30, unpaidBalance / 500) + overdueInvoices.length * 5)));
+
+      priorities.push({
+        id: `prio-overdue-${c.id}`,
+        customerId: c.id,
+        customerName,
+        type: "ATTENTION",
+        headline: `Chase £${unpaidBalance.toLocaleString("en-GB")} overdue invoice balance`,
+        detail: `${overdueInvoices.length} invoice(s) passed due date without full settlement.`,
+        evidence: `Verified ${overdueInvoices.length} overdue invoice(s) in workspace ledger.`,
+        priorityScore: score,
+        impactText: `£${unpaidBalance.toLocaleString("en-GB")} Cash Collection`,
+        confidencePct: 95,
+        provenance: "CONNECTED",
+        explainWhy: {
+          recordsConsidered: `${cInvoices.length} invoice(s) evaluated for ${customerName}.`,
+          timePeriod: "Current overdue invoices in workspace.",
+          derivedSignals: `Unpaid balance (£${unpaidBalance.toLocaleString("en-GB")}) past payment due date.`,
+          whyPrioritised: `Overdue balances directly impact cash flow and collection velocity.`,
+          recommendedAction: `Send payment reminder or contact accounts payable.`,
+          limitations: "Assumes invoice status has not been settled via external offline transfer.",
+        },
+      });
+    }
+
+    const completedJobs = cJobs.filter((j) => j.status === "completed");
+    if (ltv >= 500 && completedJobs.length > 0 && cReviews.length === 0) {
+      const score = Math.min(95, Math.max(60, Math.round(40 + Math.min(35, ltv / 500))));
+      priorities.push({
+        id: `prio-review-${c.id}`,
+        customerId: c.id,
+        customerName,
+        type: "OPPORTUNITY",
+        headline: `Request 5★ review & testimonial from ${customerName}`,
+        detail: `High-value client (£${ltv.toLocaleString("en-GB")} LTV) with ${completedJobs.length} completed job(s) and zero recorded reviews.`,
+        evidence: `${completedJobs.length} completed job(s) verified with 0 reviews on file.`,
+        priorityScore: score,
+        impactText: "Reputation & Brand Boost",
+        confidencePct: 88,
+        provenance: "DERIVED",
+        explainWhy: {
+          recordsConsidered: `${completedJobs.length} completed job(s) and ${cReviews.length} review(s).`,
+          timePeriod: "Historical job completion logs.",
+          derivedSignals: "High customer lifetime value with unmonetised testimonial potential.",
+          whyPrioritised: "Satisfied high-value clients are prime candidates for Google reviews.",
+          recommendedAction: `Send automated review request via ${c.preferred_contact_method || 'email'}.`,
+          limitations: "Requires customer willingness to post external review.",
+        },
+      });
+    }
+
+    if (c.status === "inactive" && ltv >= 1000) {
+      const score = Math.min(90, Math.max(65, Math.round(50 + Math.min(30, ltv / 1000))));
+      priorities.push({
+        id: `prio-dormant-${c.id}`,
+        customerId: c.id,
+        customerName,
+        type: "RISK",
+        headline: `Re-engage dormant high-value account (£${ltv.toLocaleString("en-GB")} LTV)`,
+        detail: `Profile is marked inactive despite £${ltv.toLocaleString("en-GB")} historical lifetime value.`,
+        evidence: `Status set to inactive in workspace customer record.`,
+        priorityScore: score,
+        impactText: `£${Math.round(ltv * 0.2).toLocaleString("en-GB")} Potential Re-activation`,
+        confidencePct: 82,
+        provenance: "AI ANALYSIS",
+        explainWhy: {
+          recordsConsidered: `Customer profile status and £${ltv.toLocaleString("en-GB")} historical LTV.`,
+          timePeriod: "Historical relationship lifetime.",
+          derivedSignals: "Dormant status on high historical revenue contributor.",
+          whyPrioritised: "Re-activating dormant clients is 5x cheaper than acquiring new leads.",
+          recommendedAction: "Dispatch personalized re-engagement offer or account review call.",
+          limitations: "Client may have moved or changed core operational suppliers.",
+        },
+      });
+    }
+  });
+
+  priorities.sort((a, b) => b.priorityScore - a.priorityScore);
+  return priorities.slice(0, 10);
+}
+
+export async function fetchPortfolioActivityFeed(
+  businessId: string | undefined
+): Promise<ActivityLog[]> {
+  if (!businessId) return [];
+
+  try {
+    const { data, error: err } = await supabase
+      .from("activity_logs")
+      .select("*")
+      .eq("business_id", businessId)
+      .order("created_at", { ascending: false })
+      .limit(15);
+
+    if (err) {
+      console.error("[fetchPortfolioActivityFeed] error:", err);
+      return [];
+    }
+
+    return (data || []) as ActivityLog[];
+  } catch (err) {
+    console.error("[fetchPortfolioActivityFeed] error:", err);
+    return [];
+  }
+}
+
+// ─── AUTHORITATIVE RELATIONSHIP ANALYTICS ─────────────────────────────────────
 
 export async function fetchAuthoritativeRelationshipMetrics(
   businessId: string | undefined
@@ -503,7 +433,6 @@ export async function fetchAuthoritativeRelationshipMetrics(
 
   try {
     const now = new Date();
-    const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString();
 
     const [
       customersRes,
@@ -693,26 +622,258 @@ export async function fetchAuthoritativeRelationshipMetrics(
   }
 }
 
-function getEmptyAuthoritativeMetrics(): AuthoritativeRelationshipMetrics {
+// ─── SECTION 6: AUTHORITATIVE RELATIONSHIP HEALTH ENGINE ──────────────────────
+
+export async function fetchCustomerRelationshipHealth(
+  customerId: string,
+  businessId: string
+): Promise<CustomerRelationshipHealth> {
+  const [custRes, jobsRes, invRes, commsRes, revRes] = await Promise.all([
+    supabase.from("customers").select("*").eq("id", customerId).eq("business_id", businessId).single(),
+    supabase.from("jobs").select("*").eq("customer_id", customerId).eq("business_id", businessId),
+    supabase.from("invoices").select("*").eq("customer_id", customerId).eq("business_id", businessId),
+    supabase.from("communications").select("*").eq("customer_id", customerId).eq("business_id", businessId).order("created_at", { ascending: false }),
+    supabase.from("reviews").select("*").eq("customer_id", customerId).eq("business_id", businessId),
+  ]);
+
+  const customer = custRes.data as Customer | null;
+  const jobs = (jobsRes.data || []) as Job[];
+  const invoices = (invRes.data || []) as Invoice[];
+  const comms = (commsRes.data || []) as Communication[];
+  const reviews = (revRes.data || []) as Review[];
+
+  const customerName = customer?.full_name || customer?.company_name || "Customer";
+  const now = Date.now();
+
+  const activityDatesMs: number[] = [
+    ...jobs.map((j) => new Date(j.created_at).getTime()),
+    ...invoices.map((i) => new Date(i.created_at).getTime()),
+    ...comms.map((c) => new Date(c.created_at).getTime()),
+  ];
+
+  let engagementScore: number | null = null;
+  let engagementLabel = "Insufficient Data";
+  let engagementEvidence = "Requires at least 1 recorded job, invoice, or communication log.";
+  let engagementHasData = false;
+
+  if (activityDatesMs.length > 0) {
+    engagementHasData = true;
+    const mostRecentMs = Math.max(...activityDatesMs);
+    const daysSinceLastActivity = (now - mostRecentMs) / (1000 * 60 * 60 * 24);
+
+    let recencyPoints = 50;
+    if (daysSinceLastActivity <= 14) recencyPoints = 100;
+    else if (daysSinceLastActivity <= 30) recencyPoints = 85;
+    else if (daysSinceLastActivity <= 60) recencyPoints = 65;
+    else if (daysSinceLastActivity <= 90) recencyPoints = 40;
+    else recencyPoints = 20;
+
+    const frequencyPoints = Math.min(100, activityDatesMs.length * 15);
+    engagementScore = Math.round(recencyPoints * 0.6 + frequencyPoints * 0.4);
+    engagementLabel = engagementScore >= 80 ? "High Engagement" : engagementScore >= 50 ? "Moderate Engagement" : "Low Engagement";
+    engagementEvidence = `Last active ${Math.round(daysSinceLastActivity)} day(s) ago with ${activityDatesMs.length} total logged interaction(s).`;
+  }
+
+  const engagementComponent: RelationshipHealthComponent = {
+    componentName: "Engagement",
+    score: engagementScore,
+    formatted: engagementScore !== null ? `${engagementScore} / 100` : "Insufficient Data",
+    weightPct: 25,
+    label: engagementLabel,
+    evidence: engagementEvidence,
+    methodology: "Evaluated 60% on recency of last activity (90-day window) and 40% on interaction volume.",
+    hasSufficientData: engagementHasData,
+    provenance: engagementHasData ? "DERIVED" : "INSUFFICIENT DATA",
+  };
+
+  let satisfactionScore: number | null = null;
+  let satisfactionLabel = "Insufficient Data";
+  let satisfactionEvidence = "Requires at least 1 customer review or survey response.";
+  let satisfactionHasData = false;
+
+  if (reviews.length > 0) {
+    satisfactionHasData = true;
+    const avgRating = reviews.reduce((sum, r) => sum + (Number(r.rating) || 0), 0) / reviews.length;
+    satisfactionScore = Math.round((avgRating / 5) * 100);
+    satisfactionLabel = satisfactionScore >= 80 ? "Highly Satisfied" : satisfactionScore >= 60 ? "Satisfied" : "Dissatisfied";
+    satisfactionEvidence = `Derived from ${reviews.length} verified review rating(s) (Avg: ${avgRating.toFixed(1)} / 5★).`;
+  }
+
+  const satisfactionComponent: RelationshipHealthComponent = {
+    componentName: "Satisfaction",
+    score: satisfactionScore,
+    formatted: satisfactionScore !== null ? `${satisfactionScore} / 100` : "Insufficient Data",
+    weightPct: 20,
+    label: satisfactionLabel,
+    evidence: satisfactionEvidence,
+    methodology: "Derived directly from customer review ratings. CrediEdgeOS strictly prohibits calculating satisfaction without real review or survey records.",
+    hasSufficientData: satisfactionHasData,
+    provenance: satisfactionHasData ? "CONNECTED" : "INSUFFICIENT DATA",
+  };
+
+  const createdMs = customer ? new Date(customer.created_at).getTime() : now;
+  const tenureMonths = Math.max(1, (now - createdMs) / (1000 * 60 * 60 * 24 * 30.4));
+  const completedJobsCount = jobs.filter((j) => j.status === "completed").length;
+  const paidInvoicesCount = invoices.filter((i) => i.status === "paid").length;
+  const repeatTransactions = completedJobsCount + paidInvoicesCount;
+
+  let loyaltyScore: number | null = null;
+  let loyaltyLabel = "Insufficient Data";
+  let loyaltyEvidence = "Requires customer tenure and repeat transaction history.";
+  let loyaltyHasData = false;
+
+  if (customer && (repeatTransactions > 0 || tenureMonths >= 1)) {
+    loyaltyHasData = true;
+    const tenurePoints = Math.min(50, Math.round(tenureMonths * 5));
+    const repeatPoints = Math.min(50, repeatTransactions * 15);
+    loyaltyScore = Math.min(100, tenurePoints + repeatPoints);
+    loyaltyLabel = loyaltyScore >= 75 ? "Loyal Account" : loyaltyScore >= 45 ? "Establishing Loyalty" : "New Account";
+    loyaltyEvidence = `${Math.round(tenureMonths)} month(s) account tenure with ${repeatTransactions} repeat transaction(s).`;
+  }
+
+  const loyaltyComponent: RelationshipHealthComponent = {
+    componentName: "Loyalty",
+    score: loyaltyScore,
+    formatted: loyaltyScore !== null ? `${loyaltyScore} / 100` : "Insufficient Data",
+    weightPct: 20,
+    label: loyaltyLabel,
+    evidence: loyaltyEvidence,
+    methodology: "Evaluated 50% on customer tenure and 50% on repeat completed jobs & settled transactions.",
+    hasSufficientData: loyaltyHasData,
+    provenance: loyaltyHasData ? "DERIVED" : "INSUFFICIENT DATA",
+  };
+
+  let advocacyScore: number | null = null;
+  let advocacyLabel = "Insufficient Data";
+  let advocacyEvidence = "Requires customer source tracking = 'referral' or 5★ review submission.";
+  let advocacyHasData = false;
+
+  const isReferralSource = customer?.source?.toLowerCase().includes("referral");
+  const has5StarReview = reviews.some((r) => Number(r.rating) === 5);
+
+  if (isReferralSource || has5StarReview) {
+    advocacyHasData = true;
+    advocacyScore = isReferralSource && has5StarReview ? 100 : isReferralSource ? 85 : 90;
+    advocacyLabel = "Active Brand Advocate";
+    advocacyEvidence = isReferralSource && has5StarReview
+      ? "Referred by client & left 5★ review rating."
+      : isReferralSource
+      ? "Acquired via customer referral source."
+      : "Left 5★ review rating in workspace.";
+  }
+
+  const advocacyComponent: RelationshipHealthComponent = {
+    componentName: "Advocacy",
+    score: advocacyScore,
+    formatted: advocacyScore !== null ? `${advocacyScore} / 100` : "Insufficient Data",
+    weightPct: 15,
+    label: advocacyLabel,
+    evidence: advocacyEvidence,
+    methodology: "Requires verified referral source acquisition or 5★ review submission.",
+    hasSufficientData: advocacyHasData,
+    provenance: advocacyHasData ? "CONNECTED" : "INSUFFICIENT DATA",
+  };
+
+  let growthScore: number | null = null;
+  let growthLabel = "Insufficient Data";
+  let growthEvidence = "Requires at least 2 settled historical invoices to measure revenue expansion.";
+  let growthHasData = false;
+
+  const paidInvoices = invoices.filter((i) => i.status === "paid" && i.created_at);
+  if (paidInvoices.length >= 2) {
+    growthHasData = true;
+    const sorted = [...paidInvoices].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    const firstVal = Number(sorted[0].amount_paid) || Number(sorted[0].total_amount) || 1;
+    const lastVal = Number(sorted[sorted.length - 1].amount_paid) || Number(sorted[sorted.length - 1].total_amount) || 1;
+
+    const growthPct = Math.round(((lastVal - firstVal) / firstVal) * 100);
+    growthScore = Math.min(100, Math.max(20, 60 + Math.round(growthPct * 0.4)));
+    growthLabel = growthScore >= 75 ? "Expanding Account" : growthScore >= 50 ? "Stable Account" : "Contracting Account";
+    growthEvidence = `Invoice transaction value expanded by ${growthPct}% from initial order (£${firstVal}) to latest order (£${lastVal}).`;
+  }
+
+  const growthComponent: RelationshipHealthComponent = {
+    componentName: "Growth",
+    score: growthScore,
+    formatted: growthScore !== null ? `${growthScore} / 100` : "Insufficient Data",
+    weightPct: 20,
+    label: growthLabel,
+    evidence: growthEvidence,
+    methodology: "Calculates historical invoice transaction value expansion across consecutive settled orders.",
+    hasSufficientData: growthHasData,
+    provenance: growthHasData ? "DERIVED" : "INSUFFICIENT DATA",
+  };
+
+  const availableComponents = [
+    engagementComponent,
+    satisfactionComponent,
+    loyaltyComponent,
+    advocacyComponent,
+    growthComponent,
+  ].filter((c) => c.hasSufficientData);
+
+  let overallScore: number | null = null;
+  let overallLabel: CustomerRelationshipHealth["overallLabel"] = "INSUFFICIENT DATA";
+  let overallHasData = false;
+
+  if (engagementHasData || loyaltyHasData) {
+    overallHasData = true;
+    let weightedSum = 0;
+    let weightSum = 0;
+
+    availableComponents.forEach((c) => {
+      if (c.score !== null) {
+        weightedSum += c.score * c.weightPct;
+        weightSum += c.weightPct;
+      }
+    });
+
+    overallScore = weightSum > 0 ? Math.round(weightedSum / weightSum) : 50;
+
+    if (invoices.some((i) => i.status === "overdue")) {
+      overallScore = Math.max(20, overallScore - 15);
+    }
+
+    overallLabel = overallScore >= 80 ? "EXCELLENT" : overallScore >= 65 ? "GOOD" : overallScore >= 45 ? "NEEDS ATTENTION" : "AT RISK";
+  }
+
+  const topStrength = availableComponents.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0]?.componentName || "N/A";
+  const keyOpportunity = [
+    engagementComponent,
+    satisfactionComponent,
+    loyaltyComponent,
+    advocacyComponent,
+    growthComponent,
+  ].find((c) => !c.hasSufficientData || (c.score ?? 100) < 60)?.componentName || "N/A";
+
+  const summaryText = overallHasData
+    ? `${customerName} has an authoritative Relationship Health index of ${overallScore} / 100 (${overallLabel}). Strongest signal: ${topStrength}. Key focus area: ${keyOpportunity}.`
+    : `Insufficient activity history recorded for ${customerName} to compile a defensible Relationship Health score.`;
+
   return {
-    totalLtv: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "No workspace revenue records found.", provenance: "INSUFFICIENT DATA" },
-    avgLtv: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "No workspace customer records found.", provenance: "INSUFFICIENT DATA" },
-    retentionRatePct: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "Requires historical customer activity over 90 days.", provenance: "INSUFFICIENT DATA" },
-    npsScore: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "Requires genuine survey responses.", provenance: "INSUFFICIENT DATA" },
-    referralRatePct: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "Requires customer source tracking.", provenance: "INSUFFICIENT DATA" },
-    churnRiskCount: { value: 0, formatted: "0", hasSufficientData: true, methodology: "No customer records evaluated.", provenance: "DERIVED" },
-    churnRiskPct: { value: 0, formatted: "0%", hasSufficientData: true, methodology: "No customer records evaluated.", provenance: "DERIVED" },
-    momLtvChangePct: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "Requires at least 14 daily metric logs.", provenance: "INSUFFICIENT DATA" },
-    momRetentionChangePct: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "Requires at least 14 daily metric logs.", provenance: "INSUFFICIENT DATA" },
+    customerId,
+    customerName,
+    overallScore,
+    overallLabel,
+    hasSufficientData: overallHasData,
+    provenance: overallHasData ? "DERIVED" : "INSUFFICIENT DATA",
+    components: {
+      engagement: engagementComponent,
+      satisfaction: satisfactionComponent,
+      loyalty: loyaltyComponent,
+      advocacy: advocacyComponent,
+      growth: growthComponent,
+    },
+    explanation: {
+      summary: summaryText,
+      topStrength,
+      keyOpportunity,
+    },
   };
 }
 
 // ─── SECTION 5: AUTHORITATIVE CUSTOMER INTELLIGENCE DNA ENGINE ───────────────
 
-/**
- * Derives individual Customer Intelligence DNA (Personality, Communication, Buying DNA)
- * strictly from genuine database records for the selected customer. Zero mock data.
- */
 export async function fetchCustomerIntelligenceDNA(
   customerId: string,
   businessId: string
@@ -733,7 +894,6 @@ export async function fetchCustomerIntelligenceDNA(
 
   const customerName = customer?.full_name || customer?.company_name || "Customer";
 
-  // 1. BUYING DNA (DERIVED / INSUFFICIENT DATA)
   const paidInvoices = invoices.filter((i) => i.status === "paid");
   const totalSettledTransactions = paidInvoices.length;
 
@@ -777,7 +937,6 @@ export async function fetchCustomerIntelligenceDNA(
     evidence: `Evaluated over ${invoices.length} total invoice(s) and ${paidInvoices.length} settled transaction(s).`,
   };
 
-  // 2. COMMUNICATION DNA (DERIVED / INSUFFICIENT DATA)
   const totalInteractions = comms.length;
   const channelCounts: Record<string, number> = {};
   comms.forEach((c) => {
@@ -820,7 +979,6 @@ export async function fetchCustomerIntelligenceDNA(
     evidence: `${totalInteractions} communication log(s) recorded in workspace.`,
   };
 
-  // 3. AI PERSONALITY PROFILE (DERIVED / AI ANALYSIS / INSUFFICIENT DATA)
   const totalEvidenceCount = invoices.length + comms.length + jobs.length + reviews.length;
   const hasSufficientData = totalEvidenceCount >= 2;
 
@@ -855,7 +1013,6 @@ export async function fetchCustomerIntelligenceDNA(
     ? `Based on ${totalEvidenceCount} workspace activity logs, ${customerName} exhibits a ${decisionSpeed.label.toLowerCase()} decision style with ${priceSensitivity.label.toLowerCase()} preferences.`
     : "Insufficient customer interaction history to compile a defensible personality profile.";
 
-  // 4. ACTIONABLE GROUNDED RECOMMENDATIONS
   const recommendations: CustomerIntelligenceDNA["actionableRecommendations"] = [];
 
   if (invoices.some((i) => i.status === "overdue")) {
@@ -906,6 +1063,8 @@ export async function fetchCustomerIntelligenceDNA(
   };
 }
 
+// ─── PORTFOLIO RELATIONSHIP ANALYTICS ─────────────────────────────────────────
+
 export async function fetchPortfolioRelationshipAnalytics(
   businessId: string | undefined
 ): Promise<PortfolioRelationshipAnalytics> {
@@ -926,6 +1085,7 @@ export async function fetchPortfolioRelationshipAnalytics(
       recentReviewsRes,
       paymentsRes,
       authoritativeMetrics,
+      portfolioPriorities,
     ] = await Promise.all([
       supabase.from("customers").select("*").eq("business_id", businessId),
       supabase.from("jobs").select("*").eq("business_id", businessId).gte("created_at", ninetyDaysAgo),
@@ -934,6 +1094,7 @@ export async function fetchPortfolioRelationshipAnalytics(
       supabase.from("reviews").select("*").eq("business_id", businessId),
       supabase.from("payments").select("*").eq("business_id", businessId).gte("payment_date", thirtyDaysAgo),
       fetchAuthoritativeRelationshipMetrics(businessId),
+      fetchPortfolioRelationshipPriorities(businessId),
     ]);
 
     const customers = (customersRes.data || []) as Customer[];
@@ -1065,54 +1226,15 @@ export async function fetchPortfolioRelationshipAnalytics(
       };
     }
 
-    const items: AttentionItem[] = [];
-
-    customers.forEach((c) => {
-      const name = c.full_name || `${c.first_name || ""} ${c.last_name || ""}`.trim() || "Customer";
-      const cInvoices = invoices.filter((i) => i.customer_id === c.id);
-      const cJobs = jobs.filter((j) => j.customer_id === c.id);
-      const cReviews = reviews.filter((r) => r.customer_id === c.id);
-
-      const overdueInvoices = cInvoices.filter((i) => i.status === "overdue" || (i.status !== "paid" && i.due_date && new Date(i.due_date) < now));
-      if (overdueInvoices.length > 0) {
-        const unpaidSum = overdueInvoices.reduce((sum, i) => sum + (Number(i.total_amount) - Number(i.amount_paid || 0)), 0);
-        items.push({
-          customerId: c.id,
-          customerName: name,
-          type: "ATTENTION",
-          headline: `Overdue Invoice Balance (£${unpaidSum.toLocaleString("en-GB")})`,
-          detail: `${overdueInvoices.length} invoice(s) passed due date without full settlement.`,
-          evidence: `Invoices #${overdueInvoices.map((i) => i.invoice_number || i.id.slice(0, 6)).join(", ")} recorded in workspace.`,
-          provenance: "CONNECTED",
-        });
-      }
-
-      const ltv = Number(c.lifetime_value) || 0;
-      const completedJobs = cJobs.filter((j) => j.status === "completed");
-      if (ltv >= 500 && completedJobs.length > 0 && cReviews.length === 0) {
-        items.push({
-          customerId: c.id,
-          customerName: name,
-          type: "OPPORTUNITY",
-          headline: "Review & Testimonial Request",
-          detail: `High-value client (£${ltv.toLocaleString("en-GB")} LTV) with ${completedJobs.length} completed job(s) and no review.`,
-          evidence: `Completed job record verified with 0 reviews on file.`,
-          provenance: "DERIVED",
-        });
-      }
-
-      if (c.status === "inactive" && ltv > 0) {
-        items.push({
-          customerId: c.id,
-          customerName: name,
-          type: "RISK",
-          headline: "Dormant High-LTV Relationship",
-          detail: `Customer marked inactive with £${ltv.toLocaleString("en-GB")} past LTV.`,
-          evidence: `Status set to inactive in workspace customer record.`,
-          provenance: "DERIVED",
-        });
-      }
-    });
+    const items: AttentionItem[] = portfolioPriorities.map((p) => ({
+      customerId: p.customerId,
+      customerName: p.customerName,
+      type: p.type,
+      headline: p.headline,
+      detail: p.detail,
+      evidence: p.evidence,
+      provenance: p.provenance,
+    }));
 
     const attentionCount = items.filter((i) => i.type === "ATTENTION").length;
     const opportunityCount = items.filter((i) => i.type === "OPPORTUNITY").length;
@@ -1145,23 +1267,12 @@ export async function fetchPortfolioRelationshipAnalytics(
         provenance: items.some((i) => i.provenance === "AI ANALYSIS") ? "AI ANALYSIS" : "DERIVED",
       },
       authoritativeMetrics,
+      portfolioPriorities,
     };
   } catch (err) {
     console.error("[fetchPortfolioRelationshipAnalytics] error:", err);
     return getEmptyPortfolioRelationshipAnalytics();
   }
-}
-
-function getEmptyPortfolioRelationshipAnalytics(): PortfolioRelationshipAnalytics {
-  return {
-    totalCustomers: { count: 0, provenance: "CONNECTED" },
-    activeRelationships: { count: 0, activePct: null, methodology: "No active workspace customer relationships recorded.", provenance: "DERIVED" },
-    portfolioHealth: { score: null, label: "INSUFFICIENT DATA", reasoning: "No customer activity recorded in workspace.", provenance: "INSUFFICIENT DATA" },
-    verifiedRevenue30d: { amount: 0, formatted: "£0", invoiceCount: 0, provenance: "CONNECTED" },
-    predictedRevenue30d: { amount: null, formatted: "Insufficient Data", methodology: "Requires at least 3 historical settled invoices to derive velocity predictions.", hasSufficientData: false, provenance: "INSUFFICIENT DATA" },
-    attentionPortfolio: { attentionCount: 0, opportunityCount: 0, riskCount: 0, items: [], provenance: "DERIVED" },
-    authoritativeMetrics: getEmptyAuthoritativeMetrics(),
-  };
 }
 
 export async function searchPortfolioCustomers(
