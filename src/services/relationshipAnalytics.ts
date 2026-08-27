@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import type { Customer, Job, Invoice, Review, Communication, ActivityLog } from "@/lib/database.types";
+import { fetchCampaigns, type CalculatedCampaign } from "./campaigns";
 
 export interface MetricValue<T> {
   value: T | null;
@@ -58,6 +59,31 @@ export interface AttentionItem {
   detail: string;
   evidence: string;
   provenance: "CONNECTED" | "DERIVED" | "AI ANALYSIS";
+}
+
+// ─── SECTION 8: REVENUE OPPORTUNITIES SCHEMAS ─────────────────────────────────
+
+export interface RevenueOpportunity {
+  id: string;
+  customerId: string;
+  customerName: string;
+  opportunityType: "REVENUE_RECOVERY" | "RE_ENGAGEMENT" | "REPUTATION_BOOST" | "UPSELL_EXPANSION";
+  headline: string;
+  detail: string;
+  estimatedValue: number | null; // null if insufficient financial evidence
+  formattedEstimatedValue: string;
+  timeframe: string;
+  confidencePct: number | null; // null if sample size inadequate
+  evidence: string;
+  explainWhy: {
+    recordsConsidered: string;
+    timePeriod: string;
+    methodology: string;
+    whyActionable: string;
+    limitations: string;
+  };
+  provenance: "CONNECTED" | "DERIVED" | "AI ANALYSIS" | "INSUFFICIENT DATA";
+  actionableWorkflowTarget: "customer_profile" | "task_creation" | "campaign_workspace" | "invoice_workflow";
 }
 
 // ─── SECTION 7: PORTFOLIO RELATIONSHIP PRIORITIES SCHEMAS ──────────────────
@@ -123,6 +149,8 @@ export interface PortfolioRelationshipAnalytics {
   };
   authoritativeMetrics: AuthoritativeRelationshipMetrics;
   portfolioPriorities: PortfolioRelationshipPriority[];
+  revenueOpportunities: RevenueOpportunity[];
+  connectedCampaigns: CalculatedCampaign[];
 }
 
 // ─── SECTION 6: AUTHORITATIVE RELATIONSHIP HEALTH SCHEMAS ────────────────────
@@ -239,6 +267,8 @@ export interface CustomerDNAContext {
 
   intelligenceDna: CustomerIntelligenceDNA;
   authoritativeHealth: CustomerRelationshipHealth;
+  customerOpportunities: RevenueOpportunity[];
+  connectedCampaigns: CalculatedCampaign[];
 
   suggestedPriorities: {
     action: string;
@@ -275,7 +305,188 @@ function getEmptyPortfolioRelationshipAnalytics(): PortfolioRelationshipAnalytic
     attentionPortfolio: { attentionCount: 0, opportunityCount: 0, riskCount: 0, items: [], provenance: "DERIVED" },
     authoritativeMetrics: getEmptyAuthoritativeMetrics(),
     portfolioPriorities: [],
+    revenueOpportunities: [],
+    connectedCampaigns: [],
   };
+}
+
+// ─── SECTION 8: AUTHORITATIVE REVENUE OPPORTUNITIES ENGINE ────────────────────
+
+export async function fetchRevenueOpportunities(
+  businessId: string | undefined
+): Promise<RevenueOpportunity[]> {
+  if (!businessId) return [];
+
+  const now = new Date();
+
+  const [customersRes, invoicesRes, jobsRes, reviewsRes] = await Promise.all([
+    supabase.from("customers").select("*").eq("business_id", businessId),
+    supabase.from("invoices").select("*").eq("business_id", businessId),
+    supabase.from("jobs").select("*").eq("business_id", businessId),
+    supabase.from("reviews").select("*").eq("business_id", businessId),
+  ]);
+
+  const customers = (customersRes.data || []) as Customer[];
+  const invoices = (invoicesRes.data || []) as Invoice[];
+  const jobs = (jobsRes.data || []) as Job[];
+  const reviews = (reviewsRes.data || []) as Review[];
+
+  if (customers.length === 0) return [];
+
+  const opportunities: RevenueOpportunity[] = [];
+
+  customers.forEach((c) => {
+    const customerName = c.full_name || c.company_name || "Customer";
+    const ltv = Number(c.lifetime_value) || 0;
+    const cInvoices = invoices.filter((i) => i.customer_id === c.id);
+    const cJobs = jobs.filter((j) => j.customer_id === c.id);
+    const cReviews = reviews.filter((r) => r.customer_id === c.id);
+
+    // Rule 1: Outstanding/Overdue Revenue Recovery
+    const overdueInvoices = cInvoices.filter((i) => i.status === "overdue" || (i.status !== "paid" && i.due_date && new Date(i.due_date) < now));
+    if (overdueInvoices.length > 0) {
+      const unpaidSum = overdueInvoices.reduce((sum, i) => sum + (Number(i.total_amount) - Number(i.amount_paid || 0)), 0);
+      opportunities.push({
+        id: `opp-recovery-${c.id}`,
+        customerId: c.id,
+        customerName,
+        opportunityType: "REVENUE_RECOVERY",
+        headline: `Recover £${unpaidSum.toLocaleString("en-GB")} in overdue invoice balance`,
+        detail: `${overdueInvoices.length} open invoice(s) passed due date without settlement.`,
+        estimatedValue: unpaidSum,
+        formattedEstimatedValue: `£${unpaidSum.toLocaleString("en-GB")}`,
+        timeframe: "Immediate (Overdue)",
+        confidencePct: 95,
+        evidence: `Verified ${overdueInvoices.length} overdue invoice ledger entries.`,
+        explainWhy: {
+          recordsConsidered: `${cInvoices.length} invoice(s) for ${customerName}.`,
+          timePeriod: "Current unpaid ledger.",
+          methodology: "Direct sum of (total_amount - amount_paid) on past-due invoices.",
+          whyActionable: "Collectable revenue already billed for work completed.",
+          limitations: "Assumes invoice status has not been settled offline.",
+        },
+        provenance: "CONNECTED",
+        actionableWorkflowTarget: "invoice_workflow",
+      });
+    }
+
+    // Rule 2: Dormant High-LTV Account Re-engagement
+    if (c.status === "inactive" && ltv >= 1000) {
+      const potentialValue = Math.round(ltv * 0.25);
+      opportunities.push({
+        id: `opp-reengage-${c.id}`,
+        customerId: c.id,
+        customerName,
+        opportunityType: "RE_ENGAGEMENT",
+        headline: `Re-activate £${ltv.toLocaleString("en-GB")} historical LTV relationship`,
+        detail: `Dormant client profile with strong past spending history.`,
+        estimatedValue: potentialValue,
+        formattedEstimatedValue: `£${potentialValue.toLocaleString("en-GB")} Est. Re-activation`,
+        timeframe: "Next 30 Days",
+        confidencePct: 80,
+        evidence: `Historical £${ltv.toLocaleString("en-GB")} LTV recorded in customer profile.`,
+        explainWhy: {
+          recordsConsidered: `Customer record status and lifetime_value.`,
+          timePeriod: "Historical relationship lifetime.",
+          methodology: "Calculates 25% re-activation run-rate of historical account LTV.",
+          whyActionable: "High past LTV indicates proven product/service demand.",
+          limitations: "Requires client willingness to resume operations.",
+        },
+        provenance: "DERIVED",
+        actionableWorkflowTarget: "campaign_workspace",
+      });
+    }
+
+    // Rule 3: Review & Reputation Boost
+    const completedJobs = cJobs.filter((j) => j.status === "completed");
+    if (completedJobs.length > 0 && cReviews.length === 0) {
+      opportunities.push({
+        id: `opp-reputation-${c.id}`,
+        customerId: c.id,
+        customerName,
+        opportunityType: "REPUTATION_BOOST",
+        headline: `Request Google review & testimonial from ${customerName}`,
+        detail: `${completedJobs.length} job(s) completed with zero reviews on record.`,
+        estimatedValue: null,
+        formattedEstimatedValue: "Insufficient Data",
+        timeframe: "Next 14 Days",
+        confidencePct: 88,
+        evidence: `Completed job record verified with 0 customer reviews on file.`,
+        explainWhy: {
+          recordsConsidered: `${completedJobs.length} completed job(s) and 0 reviews.`,
+          timePeriod: "Recent job completion history.",
+          methodology: "Direct link between unmonetised completed work and review collection.",
+          whyActionable: "Satisfied clients boost organic SEO and trust conversions.",
+          limitations: "Monetary value of review cannot be derived without conversion tracking.",
+        },
+        provenance: "DERIVED",
+        actionableWorkflowTarget: "task_creation",
+      });
+    }
+  });
+
+  return opportunities.slice(0, 10);
+}
+
+export async function fetchCustomerRevenueOpportunities(
+  customerId: string,
+  businessId: string
+): Promise<RevenueOpportunity[]> {
+  const allOpps = await fetchRevenueOpportunities(businessId);
+  return allOpps.filter((o) => o.customerId === customerId);
+}
+
+// ─── CAMPAIGN CONNECTION ENGINE ───────────────────────────────────────────────
+
+export async function fetchPortfolioCampaignConnections(
+  businessId: string | undefined
+): Promise<CalculatedCampaign[]> {
+  const overview = await fetchCampaigns(businessId);
+  return overview.activeCampaigns;
+}
+
+export async function fetchCustomerCampaignConnections(
+  customerId: string,
+  businessId: string | undefined
+): Promise<CalculatedCampaign[]> {
+  if (!businessId) return [];
+  const overview = await fetchCampaigns(businessId);
+  return overview.activeCampaigns.filter((c) => c.customer_id === customerId);
+}
+
+export async function associateCustomerWithCampaign(
+  customerId: string,
+  campaignId: string,
+  businessId: string
+): Promise<boolean> {
+  try {
+    const { error } = await (supabase.from as any)("campaigns")
+      .update({
+        customer_id: customerId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", campaignId)
+      .eq("business_id", businessId);
+
+    if (error) {
+      console.error("[associateCustomerWithCampaign] error:", error);
+      return false;
+    }
+
+    await supabase.from("activity_logs").insert({
+      business_id: businessId,
+      customer_id: customerId,
+      entity_type: "campaign",
+      entity_id: campaignId,
+      action: "linked",
+      description: `Associated customer with campaign #${campaignId.slice(0, 8)}`,
+    });
+
+    return true;
+  } catch (err) {
+    console.error("[associateCustomerWithCampaign] error:", err);
+    return false;
+  }
 }
 
 // ─── SECTION 7: AUTHORITATIVE PORTFOLIO PRIORITIES ENGINE ────────────────────
@@ -310,7 +521,6 @@ export async function fetchPortfolioRelationshipPriorities(
     const ltv = Number(c.lifetime_value) || 0;
     const cInvoices = invoices.filter((i) => i.customer_id === c.id);
     const cJobs = jobs.filter((j) => j.customer_id === c.id);
-    const cComms = comms.filter((cm) => cm.customer_id === c.id);
     const cReviews = reviews.filter((r) => r.customer_id === c.id);
 
     const overdueInvoices = cInvoices.filter((i) => i.status === "overdue" || (i.status !== "paid" && i.due_date && new Date(i.due_date) < now));
@@ -1086,6 +1296,8 @@ export async function fetchPortfolioRelationshipAnalytics(
       paymentsRes,
       authoritativeMetrics,
       portfolioPriorities,
+      revenueOpportunities,
+      connectedCampaigns,
     ] = await Promise.all([
       supabase.from("customers").select("*").eq("business_id", businessId),
       supabase.from("jobs").select("*").eq("business_id", businessId).gte("created_at", ninetyDaysAgo),
@@ -1095,6 +1307,8 @@ export async function fetchPortfolioRelationshipAnalytics(
       supabase.from("payments").select("*").eq("business_id", businessId).gte("payment_date", thirtyDaysAgo),
       fetchAuthoritativeRelationshipMetrics(businessId),
       fetchPortfolioRelationshipPriorities(businessId),
+      fetchRevenueOpportunities(businessId),
+      fetchPortfolioCampaignConnections(businessId),
     ]);
 
     const customers = (customersRes.data || []) as Customer[];
@@ -1268,6 +1482,8 @@ export async function fetchPortfolioRelationshipAnalytics(
       },
       authoritativeMetrics,
       portfolioPriorities,
+      revenueOpportunities,
+      connectedCampaigns,
     };
   } catch (err) {
     console.error("[fetchPortfolioRelationshipAnalytics] error:", err);
@@ -1378,7 +1594,18 @@ export async function fetchCustomerDNAContext(
   businessId: string
 ): Promise<CustomerDNAContext | null> {
   try {
-    const [custRes, jobsRes, invRes, revRes, commsRes, activityRes, intelligenceDna, authoritativeHealth] = await Promise.all([
+    const [
+      custRes,
+      jobsRes,
+      invRes,
+      revRes,
+      commsRes,
+      activityRes,
+      intelligenceDna,
+      authoritativeHealth,
+      customerOpportunities,
+      connectedCampaigns,
+    ] = await Promise.all([
       supabase.from("customers").select("*").eq("id", customerId).eq("business_id", businessId).single(),
       supabase.from("jobs").select("*").eq("customer_id", customerId).eq("business_id", businessId),
       supabase.from("invoices").select("*").eq("customer_id", customerId).eq("business_id", businessId),
@@ -1387,6 +1614,8 @@ export async function fetchCustomerDNAContext(
       supabase.from("activity_logs").select("*").eq("customer_id", customerId).eq("business_id", businessId).order("created_at", { ascending: false }).limit(10),
       fetchCustomerIntelligenceDNA(customerId, businessId),
       fetchCustomerRelationshipHealth(customerId, businessId),
+      fetchCustomerRevenueOpportunities(customerId, businessId),
+      fetchCustomerCampaignConnections(customerId, businessId),
     ]);
 
     if (custRes.error || !custRes.data) {
@@ -1495,6 +1724,8 @@ export async function fetchCustomerDNAContext(
 
       intelligenceDna,
       authoritativeHealth,
+      customerOpportunities,
+      connectedCampaigns,
 
       suggestedPriorities,
     };

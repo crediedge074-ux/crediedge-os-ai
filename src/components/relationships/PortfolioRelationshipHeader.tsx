@@ -13,18 +13,26 @@ import {
   CheckCircle2,
   AlertTriangle,
   HelpCircle,
+  TrendingUp,
+  Target,
+  ArrowRight,
+  Plus,
 } from "lucide-react";
 import { useBusiness } from "@/hooks/useBusiness";
 import {
   fetchPortfolioRelationshipAnalytics,
   fetchPortfolioActivityFeed,
   searchPortfolioCustomers,
+  associateCustomerWithCampaign,
   type PortfolioRelationshipAnalytics,
   type PortfolioRelationshipPriority,
+  type RevenueOpportunity,
 } from "@/services/relationshipAnalytics";
 import type { Customer, ActivityLog } from "@/lib/database.types";
 import { appEvents, APP_EVENTS } from "@/lib/events";
 import { AIDisclosure } from "@/components/ui/AIDisclosure";
+import { useNavigate } from "@tanstack/react-router";
+import { toast } from "sonner";
 
 export function PortfolioRelationshipHeader({
   onSelectCustomer,
@@ -35,6 +43,7 @@ export function PortfolioRelationshipHeader({
 }) {
   const { business } = useBusiness();
   const businessId = business?.id;
+  const navigate = useNavigate();
 
   const [analytics, setAnalytics] = useState<PortfolioRelationshipAnalytics | null>(null);
   const [activityFeed, setActivityFeed] = useState<ActivityLog[]>([]);
@@ -48,6 +57,7 @@ export function PortfolioRelationshipHeader({
   // Expanded methodology state
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [expandedPriorityId, setExpandedPriorityId] = useState<string | null>(null);
+  const [expandedOpportunityId, setExpandedOpportunityId] = useState<string | null>(null);
 
   const loadData = () => {
     if (!businessId) {
@@ -114,7 +124,21 @@ export function PortfolioRelationshipHeader({
     verifiedRevenue30d,
     predictedRevenue30d,
     portfolioPriorities,
+    revenueOpportunities,
+    connectedCampaigns,
   } = analytics;
+
+  const handleActNow = (opp: RevenueOpportunity) => {
+    if (opp.actionableWorkflowTarget === "invoice_workflow") {
+      navigate({ to: "/finance" });
+    } else if (opp.actionableWorkflowTarget === "task_creation") {
+      navigate({ to: "/tasks" });
+    } else if (opp.actionableWorkflowTarget === "campaign_workspace") {
+      navigate({ to: "/tasks" });
+    } else {
+      toast.info(`Opening profile for ${opp.customerName}`);
+    }
+  };
 
   return (
     <div className="space-y-6 mb-6">
@@ -332,6 +356,129 @@ export function PortfolioRelationshipHeader({
             {expandedSection === "predicted" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
           </button>
         </div>
+      </div>
+
+      {/* ─── SECTION 8: REVENUE OPPORTUNITIES ─────────────────────────────────── */}
+      <div className="rounded-2xl border border-border bg-card shadow-card overflow-hidden">
+        <div className="border-b border-border px-5 py-3.5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-emerald-500" strokeWidth={1.75} />
+            <span className="text-[13.5px] font-semibold tracking-tight text-foreground">
+              Portfolio Revenue Opportunities
+            </span>
+          </div>
+          <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600 uppercase">
+            {revenueOpportunities.length} Identified
+          </span>
+        </div>
+
+        {revenueOpportunities.length === 0 ? (
+          <div className="p-8 text-center text-xs text-muted-foreground italic">
+            No revenue opportunities identified across workspace portfolio.
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {revenueOpportunities.map((opp) => {
+              const isExpanded = expandedOpportunityId === opp.id;
+              return (
+                <div key={opp.id} className="p-4 space-y-2 hover:bg-secondary/20 transition-colors">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9.5px] font-extrabold text-emerald-600 uppercase">
+                          {opp.opportunityType.replace("_", " ")}
+                        </span>
+                        <span className="text-[13px] font-bold text-foreground">{opp.headline}</span>
+                        <span className="text-[11px] text-muted-foreground">— {opp.customerName}</span>
+                      </div>
+                      <p className="text-[11.5px] text-muted-foreground">{opp.detail}</p>
+                      <p className="text-[10.5px] text-muted-foreground/70 italic">Evidence: {opp.evidence}</p>
+                    </div>
+
+                    <div className="shrink-0 flex items-center gap-2">
+                      <span className="rounded bg-secondary px-2 py-0.5 text-[9px] font-extrabold text-muted-foreground uppercase">
+                        {opp.provenance}
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() => setExpandedOpportunityId(isExpanded ? null : opp.id)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:border-foreground/20"
+                      >
+                        <Eye className="h-3 w-3" /> Why?
+                        {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleActNow(opp)}
+                        className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1 text-[11px] font-bold text-white hover:bg-emerald-700 shadow-xs"
+                      >
+                        Act Now <ArrowRight className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Why / Methodology Drawer */}
+                  {isExpanded && (
+                    <div className="mt-2 rounded-xl border border-border bg-secondary/30 p-3.5 space-y-1.5 text-[11.5px]">
+                      <div className="font-bold text-foreground text-[11px] uppercase tracking-wider">Opportunity Methodology:</div>
+                      <p className="text-muted-foreground"><strong className="text-foreground">Records Considered:</strong> {opp.explainWhy.recordsConsidered}</p>
+                      <p className="text-muted-foreground"><strong className="text-foreground">Methodology:</strong> {opp.explainWhy.methodology}</p>
+                      <p className="text-muted-foreground"><strong className="text-foreground">Why Actionable:</strong> {opp.explainWhy.whyActionable}</p>
+                      <p className="text-muted-foreground/70 italic"><strong className="text-foreground">Limitations:</strong> {opp.explainWhy.limitations}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ─── SECTION 8: PORTFOLIO CAMPAIGN CONNECTION ─────────────────────────── */}
+      <div className="rounded-2xl border border-border bg-card shadow-card overflow-hidden">
+        <div className="border-b border-border px-5 py-3.5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Target className="h-4 w-4 text-brand" strokeWidth={1.75} />
+            <span className="text-[13.5px] font-semibold tracking-tight text-foreground">
+              Connected Workspace Campaigns
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate({ to: "/tasks" })}
+            className="flex items-center gap-1 text-[11px] font-semibold text-brand hover:underline"
+          >
+            Manage Campaigns <ArrowRight className="h-3 w-3" />
+          </button>
+        </div>
+
+        {connectedCampaigns.length === 0 ? (
+          <div className="p-8 text-center text-xs text-muted-foreground italic">
+            No active campaigns connected in workspace.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4">
+            {connectedCampaigns.map((camp) => (
+              <div
+                key={camp.id}
+                onClick={() => navigate({ to: "/tasks" })}
+                className="group cursor-pointer rounded-xl border border-border bg-secondary/20 p-3.5 space-y-2 hover:border-brand transition-all"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-[12.5px] text-foreground group-hover:text-brand transition-colors">{camp.name}</span>
+                  <span className="rounded bg-brand/10 px-1.5 py-0.2 text-[9px] font-extrabold text-brand uppercase">{camp.type}</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground line-clamp-2">{camp.description || "Active portfolio campaign workstream."}</p>
+                <div className="flex items-center justify-between text-[10.5px] font-semibold text-foreground pt-1 border-t border-border/40">
+                  <span>Target: £{camp.target_value.toLocaleString("en-GB")}</span>
+                  <span>{camp.progressPct}% complete</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ─── SECTION 7: PORTFOLIO RELATIONSHIP PRIORITIES ───────────────────── */}

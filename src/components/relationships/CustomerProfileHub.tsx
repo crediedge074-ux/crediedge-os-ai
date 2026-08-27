@@ -28,9 +28,11 @@ import {
   TrendingUp,
   Sparkles,
   HelpCircle,
+  Target,
 } from "lucide-react";
 import type { Customer } from "@/lib/database.types";
 import type { CustomerDNAContext } from "@/services/relationshipAnalytics";
+import { associateCustomerWithCampaign } from "@/services/relationshipAnalytics";
 import { supabase } from "@/lib/supabase";
 import { appEvents, APP_EVENTS } from "@/lib/events";
 import { AIDisclosure } from "@/components/ui/AIDisclosure";
@@ -46,7 +48,7 @@ interface CustomerProfileHubProps {
   onRefresh: () => void;
 }
 
-type ProfileTab = "overview" | "intelligence" | "jobs" | "invoices" | "comms" | "reviews" | "notes";
+type ProfileTab = "overview" | "opportunities" | "intelligence" | "jobs" | "invoices" | "comms" | "reviews" | "notes";
 
 export function CustomerProfileHub({
   customer,
@@ -61,8 +63,9 @@ export function CustomerProfileHub({
   const name = customer.full_name || `${customer.first_name || ""} ${customer.last_name || ""}`.trim() || "Customer";
   const initials = name.slice(0, 2).toUpperCase();
 
-  // Methodology drawers
-  const [expandedSection, setExpandedSection] = useState<string | null>(null);
+  // Campaign linking state
+  const [selectedCampaignId, setSelectedCampaignId] = useState("");
+  const [linkingCampaign, setLinkingCampaign] = useState(false);
 
   // Quick note creation
   const [noteText, setNoteText] = useState("");
@@ -72,6 +75,28 @@ export function CustomerProfileHub({
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDueDate, setTaskDueDate] = useState("");
   const [addingTask, setSavingTask] = useState(false);
+
+  const handleLinkCampaign = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCampaignId || !businessId) return;
+    setLinkingCampaign(true);
+
+    try {
+      const ok = await associateCustomerWithCampaign(customer.id, selectedCampaignId, businessId);
+      if (ok) {
+        toast.success("Customer associated with campaign successfully.");
+        setSelectedCampaignId("");
+        appEvents.emit(APP_EVENTS.CUSTOMERS_MUTATED);
+        onRefresh();
+      } else {
+        toast.error("Failed to link customer to campaign.");
+      }
+    } catch (err: any) {
+      toast.error(`Error linking campaign: ${err?.message || String(err)}`);
+    } finally {
+      setLinkingCampaign(false);
+    }
+  };
 
   const handleAddNote = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,6 +157,8 @@ export function CustomerProfileHub({
   };
 
   const intel = context?.intelligenceDna;
+  const opps = context?.customerOpportunities || [];
+  const campaigns = context?.connectedCampaigns || [];
 
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden bg-card">
@@ -198,6 +225,7 @@ export function CustomerProfileHub({
       <div className="flex items-center gap-1 border-b border-border bg-secondary/20 px-5 overflow-x-auto text-[12px] font-semibold">
         {[
           { id: "overview", label: "Overview", icon: CircleDollarSign },
+          { id: "opportunities", label: `Opportunities (${opps.length})`, icon: TrendingUp },
           { id: "intelligence", label: "Customer Intelligence DNA", icon: Brain },
           { id: "jobs", label: `Jobs (${context?.connectedJobs.length ?? 0})`, icon: Briefcase },
           { id: "invoices", label: `Invoices (${context?.connectedInvoices.length ?? 0})`, icon: FileText },
@@ -271,6 +299,57 @@ export function CustomerProfileHub({
               </div>
             </div>
 
+            {/* Campaign Connection Block */}
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-soft space-y-3">
+              <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                <div className="flex items-center gap-2">
+                  <Target className="h-4 w-4 text-brand" />
+                  <span className="text-[13.5px] font-bold text-foreground">Associated Campaigns ({campaigns.length})</span>
+                </div>
+              </div>
+
+              {campaigns.length === 0 ? (
+                <div className="text-xs text-muted-foreground italic">No active campaigns linked to this customer account.</div>
+              ) : (
+                <div className="divide-y divide-border border border-border rounded-xl">
+                  {campaigns.map((camp) => (
+                    <div key={camp.id} className="p-3 flex items-center justify-between text-xs">
+                      <div>
+                        <div className="font-bold text-foreground">{camp.name}</div>
+                        <div className="text-[10.5px] text-muted-foreground">Target: £{camp.target_value.toLocaleString("en-GB")}</div>
+                      </div>
+                      <span className="rounded bg-brand/10 px-2 py-0.5 text-[10px] font-bold text-brand uppercase">{camp.status}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Add Customer to Campaign Form */}
+              {context && context.connectedCampaigns && (
+                <form onSubmit={handleLinkCampaign} className="pt-2 flex items-center gap-2">
+                  <select
+                    value={selectedCampaignId}
+                    onChange={(e) => setSelectedCampaignId(e.target.value)}
+                    className="h-9 flex-1 rounded-xl border border-border bg-secondary/30 px-3 text-[12px] text-foreground focus:outline-none"
+                  >
+                    <option value="">Select workspace campaign to associate...</option>
+                    {context.connectedCampaigns.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.type})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="submit"
+                    disabled={linkingCampaign || !selectedCampaignId}
+                    className="h-9 rounded-xl bg-brand px-3.5 text-[11.5px] font-semibold text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
+                  >
+                    {linkingCampaign ? "Linking..." : "Link Campaign"}
+                  </button>
+                </form>
+              )}
+            </div>
+
             {/* Quick Action Forms: Append Note & Create Task */}
             <div className="grid gap-4 sm:grid-cols-2">
               <form onSubmit={handleAddNote} className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-3">
@@ -317,6 +396,38 @@ export function CustomerProfileHub({
                 </div>
               </form>
             </div>
+          </div>
+        ) : activeTab === "opportunities" && context ? (
+          /* ─── SECTION 8: REVENUE OPPORTUNITIES TAB ───────────────────────── */
+          <div className="space-y-4">
+            <AIDisclosure />
+            <h3 className="text-[13.5px] font-bold text-foreground">Customer Revenue Opportunities ({opps.length})</h3>
+
+            {opps.length === 0 ? (
+              <div className="p-8 text-center text-xs text-muted-foreground italic">
+                No revenue opportunities identified for this customer record.
+              </div>
+            ) : (
+              <div className="divide-y divide-border border border-border rounded-2xl bg-card">
+                {opps.map((opp) => (
+                  <div key={opp.id} className="p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-[9.5px] font-extrabold text-emerald-600 uppercase">
+                          {opp.opportunityType.replace("_", " ")}
+                        </span>
+                        <span className="font-bold text-[13px] text-foreground">{opp.headline}</span>
+                      </div>
+                      <span className="rounded bg-secondary px-2 py-0.5 text-[9px] font-extrabold text-muted-foreground uppercase">
+                        {opp.provenance}
+                      </span>
+                    </div>
+                    <p className="text-[11.5px] text-muted-foreground">{opp.detail}</p>
+                    <p className="text-[10.5px] text-muted-foreground/70 italic">Evidence: {opp.evidence}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ) : activeTab === "intelligence" && intel ? (
           /* ─── SECTION 5: CUSTOMER INTELLIGENCE DNA TAB ────────────────────── */
