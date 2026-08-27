@@ -2735,18 +2735,69 @@ export async function fetchCustomerDNAContext(
   }
 }
 
+export async function checkBusinessDNAWaitlistStatus(
+  businessId: string | undefined,
+  userId: string | undefined
+): Promise<boolean> {
+  if (!businessId) return false;
+
+  try {
+    let query = supabase
+      .from("activity_logs")
+      .select("id")
+      .eq("business_id", businessId)
+      .eq("entity_type", "business_dna")
+      .eq("action", "waitlist_joined");
+
+    if (userId) {
+      query = query.eq("actor_id", userId);
+    }
+
+    const { data, error } = await query.limit(1);
+
+    if (error) {
+      console.error("[checkBusinessDNAWaitlistStatus] error:", error);
+      return false;
+    }
+
+    return (data || []).length > 0;
+  } catch (err) {
+    console.error("[checkBusinessDNAWaitlistStatus] error:", err);
+    return false;
+  }
+}
+
 export async function joinBusinessDNAWaitlist(
   businessId: string,
   userId: string | undefined
 ): Promise<boolean> {
+  if (!businessId) return false;
+
   try {
-    await supabase.from("activity_logs").insert({
+    const alreadyJoined = await checkBusinessDNAWaitlistStatus(businessId, userId);
+    if (alreadyJoined) {
+      return true;
+    }
+
+    const { error } = await supabase.from("activity_logs").insert({
       business_id: businessId,
       entity_type: "business_dna",
       action: "waitlist_joined",
       description: `Workspace joined the Business DNA™ intelligence preview waitlist`,
       actor_id: userId || null,
+      metadata: {
+        timestamp: new Date().toISOString(),
+        user_id: userId || null,
+        business_id: businessId,
+        source: "business_dna_preview",
+      },
     });
+
+    if (error) {
+      console.error("[joinBusinessDNAWaitlist] error:", error);
+      return false;
+    }
+
     return true;
   } catch (err) {
     console.error("[joinBusinessDNAWaitlist] error:", err);

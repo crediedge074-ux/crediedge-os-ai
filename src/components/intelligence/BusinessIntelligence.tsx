@@ -1,5 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "@tanstack/react-router";
+import { useBusiness } from "@/hooks/useBusiness";
+import { useAuthContext } from "@/contexts/AuthContext";
+import {
+  checkBusinessDNAWaitlistStatus,
+  joinBusinessDNAWaitlist,
+} from "@/services/relationshipAnalytics";
 import {
   Brain, TrendingUp, TrendingDown, Sparkles, Zap, Target, Shield,
   ChevronDown, ChevronRight, ArrowRight, Eye, Clock, Lightbulb,
@@ -996,11 +1002,86 @@ function IntelligenceChat() {
   );
 }
 
+// ─── BUSINESS DNA WAITLIST BANNER ─────────────────────────────────────────────
+
+function BusinessDNAWaitlistBanner() {
+  const { business } = useBusiness();
+  const { user } = useAuthContext();
+  const businessId = business?.id;
+  const userId = user?.id;
+
+  const [joined, setJoined] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [joining, setJoining] = useState(false);
+
+  useEffect(() => {
+    if (!businessId) {
+      setLoading(false);
+      return;
+    }
+    checkBusinessDNAWaitlistStatus(businessId, userId)
+      .then((status) => setJoined(status))
+      .catch((err) => console.error("Waitlist check error:", err))
+      .finally(() => setLoading(false));
+  }, [businessId, userId]);
+
+  const handleJoin = async () => {
+    if (!businessId) return;
+    setJoining(true);
+    try {
+      const ok = await joinBusinessDNAWaitlist(businessId, userId);
+      if (ok) setJoined(true);
+    } catch (err) {
+      console.error("Waitlist error:", err);
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  return (
+    <div className="relative overflow-hidden rounded-2xl border border-dashed border-brand/30 bg-gradient-to-r from-brand/5 to-transparent p-6 shadow-soft">
+      <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-brand/10 blur-3xl" />
+      <div className="relative flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div className="mb-1 flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-brand" strokeWidth={1.75} />
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-brand">Coming Soon</span>
+          </div>
+          <h3 className="text-[18px] font-bold tracking-tight text-foreground">Business DNA™ Unified Intelligence Layer</h3>
+          <p className="mt-1 max-w-xl text-[12.5px] leading-relaxed text-muted-foreground">
+            Business DNA™ will eventually serve as the central unified intelligence engine across CrediEdgeOS, evaluating cross-module patterns across Relationship DNA™, Campaign execution, financial velocity, and reviews.
+          </p>
+        </div>
+
+        {loading ? (
+          <div className="h-10 w-36 animate-pulse rounded-xl bg-secondary" />
+        ) : joined ? (
+          <span className="inline-flex items-center gap-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 px-5 py-2.5 text-[12.5px] font-extrabold text-emerald-600">
+            <CheckCircle2 className="h-4 w-4" /> You're on the waitlist
+          </span>
+        ) : (
+          <button
+            type="button"
+            disabled={joining}
+            onClick={handleJoin}
+            className="shrink-0 rounded-xl bg-brand px-5 py-2.5 text-[12.5px] font-extrabold text-white shadow-sm hover:opacity-90 disabled:opacity-50 transition-opacity"
+          >
+            {joining ? "Registering..." : "Join Waitlist"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── ROOT EXPORT ──────────────────────────────────────────────────────────────
 
 export function BusinessIntelligence() {
   return (
     <div className="space-y-6">
+      {/* 0. Business DNA Waitlist Banner */}
+      <BusinessDNAWaitlistBanner />
+
       {/* 1. Hero */}
       <Hero />
 

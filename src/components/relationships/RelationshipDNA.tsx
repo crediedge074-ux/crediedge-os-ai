@@ -41,6 +41,7 @@ import {
   fetchPortfolioSegments,
   fetchCustomerDNAContext,
   joinBusinessDNAWaitlist,
+  checkBusinessDNAWaitlistStatus,
   type PortfolioKPIs,
   type PortfolioSegment,
   type CustomerDNAContext,
@@ -642,14 +643,28 @@ function PortfolioSegmentsCard({ segments }: { segments: PortfolioSegment[] }) {
 
 function BusinessDnaWaitlistCard({ businessId, userId }: { businessId: string | undefined; userId?: string | null }) {
   const [joined, setJoined] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
+
+  useEffect(() => {
+    if (!businessId) {
+      setLoading(false);
+      return;
+    }
+    checkBusinessDNAWaitlistStatus(businessId, userId || undefined)
+      .then((status) => setJoined(status))
+      .catch((err) => console.error("Waitlist status check error:", err))
+      .finally(() => setLoading(false));
+  }, [businessId, userId]);
 
   const handleJoin = async () => {
     if (!businessId) return;
     setJoining(true);
     try {
-      await joinBusinessDNAWaitlist(businessId, userId || undefined);
-      setJoined(true);
+      const ok = await joinBusinessDNAWaitlist(businessId, userId || undefined);
+      if (ok) {
+        setJoined(true);
+      }
     } catch (err) {
       console.error("Waitlist error:", err);
     } finally {
@@ -672,18 +687,20 @@ function BusinessDnaWaitlistCard({ businessId, userId }: { businessId: string | 
           </p>
         </div>
 
-        {joined ? (
+        {loading ? (
+          <div className="h-9 w-32 animate-pulse rounded-xl bg-secondary" />
+        ) : joined ? (
           <span className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 px-4 py-2 text-[12px] font-extrabold text-emerald-600">
-            <CheckCircle2 className="h-4 w-4" /> Registered on Workspace Waitlist
+            <CheckCircle2 className="h-4 w-4" /> You're on the waitlist
           </span>
         ) : (
           <button
             type="button"
             disabled={joining}
             onClick={handleJoin}
-            className="shrink-0 rounded-xl bg-brand px-4 py-2.5 text-[12px] font-extrabold text-white shadow-sm hover:opacity-90 disabled:opacity-50"
+            className="shrink-0 rounded-xl bg-brand px-4 py-2.5 text-[12px] font-extrabold text-white shadow-sm hover:opacity-90 disabled:opacity-50 transition-opacity"
           >
-            {joining ? "Registering..." : "Join Business DNA™ Waitlist"}
+            {joining ? "Registering..." : "Join Waitlist"}
           </button>
         )}
       </div>
