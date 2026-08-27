@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { fetchAuthoritativeRelationshipMetrics } from "./relationshipAnalytics";
 
 export interface CategoryScore {
   name: string;
@@ -110,19 +111,22 @@ export async function fetchCrediEdgeScore(
       opsScore = Math.min(100, Math.max(30, Math.round((totalCompleted / totalOps) * 100)));
     }
 
-    // 5. Marketing & CRM Activity (Weight: 15%) - Active Customers & CRM Engagement
+    // 5. Marketing & CRM Activity (Weight: 15%) - Consumes Authoritative Relationship Metrics
+    const relMetrics = await fetchAuthoritativeRelationshipMetrics(businessId);
+
+    let mktgScore = 70;
+    let mktgHasData = false;
+
     const { data: customers } = await supabase
       .from("customers")
       .select("id, status")
       .eq("business_id", businessId)
       .eq("is_active", true);
 
-    let mktgScore = 70;
-    let mktgHasData = false;
-
     if (customers && customers.length > 0) {
       mktgHasData = true;
-      mktgScore = Math.min(100, Math.max(40, Math.round(50 + Math.min(50, customers.length * 5))));
+      const retentionBonus = relMetrics.retentionRatePct.value ? Math.round(relMetrics.retentionRatePct.value * 0.3) : 15;
+      mktgScore = Math.min(100, Math.max(40, Math.round(35 + Math.min(35, customers.length * 5) + retentionBonus)));
     }
 
     const hasSufficientData = financeHasData || commsHasData || cxHasData || opsHasData || mktgHasData;

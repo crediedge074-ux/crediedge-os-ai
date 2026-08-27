@@ -29,10 +29,16 @@ import {
   Sparkles,
   HelpCircle,
   Target,
+  Eye,
+  Trash2,
 } from "lucide-react";
 import type { Customer } from "@/lib/database.types";
 import type { CustomerDNAContext } from "@/services/relationshipAnalytics";
-import { associateCustomerWithCampaign } from "@/services/relationshipAnalytics";
+import {
+  associateCustomerWithCampaign,
+  addConfirmedCustomerMemory,
+  deleteCustomerMemory,
+} from "@/services/relationshipAnalytics";
 import { supabase } from "@/lib/supabase";
 import { appEvents, APP_EVENTS } from "@/lib/events";
 import { AIDisclosure } from "@/components/ui/AIDisclosure";
@@ -48,7 +54,7 @@ interface CustomerProfileHubProps {
   onRefresh: () => void;
 }
 
-type ProfileTab = "overview" | "predictions" | "opportunities" | "intelligence" | "jobs" | "invoices" | "comms" | "reviews" | "notes";
+type ProfileTab = "overview" | "predictions" | "opportunities" | "intelligence" | "memories" | "jobs" | "invoices" | "comms" | "reviews" | "notes";
 
 export function CustomerProfileHub({
   customer,
@@ -160,6 +166,48 @@ export function CustomerProfileHub({
   const opps = context?.customerOpportunities || [];
   const campaigns = context?.connectedCampaigns || [];
   const preds = context?.customerPredictions || [];
+  const memories = context?.aiMemories || [];
+
+  // Memory creation state
+  const [newMemoryStatement, setNewMemoryStatement] = useState("");
+  const [savingMemory, setSavingMemory] = useState(false);
+  const [expandedMemoryId, setExpandedMemoryId] = useState<string | null>(null);
+
+  const handleAddMemory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMemoryStatement.trim() || !businessId) return;
+    setSavingMemory(true);
+
+    try {
+      const ok = await addConfirmedCustomerMemory(businessId, customer.id, newMemoryStatement.trim());
+      if (ok) {
+        toast.success("Confirmed preference saved to AI Memory.");
+        setNewMemoryStatement("");
+        appEvents.emit(APP_EVENTS.CUSTOMERS_MUTATED);
+        onRefresh();
+      } else {
+        toast.error("Failed to save memory item.");
+      }
+    } catch (err: any) {
+      toast.error(`Error saving memory: ${err?.message || String(err)}`);
+    } finally {
+      setSavingMemory(false);
+    }
+  };
+
+  const handleDeleteMemory = async (memoryId: string) => {
+    if (!businessId) return;
+    try {
+      const ok = await deleteCustomerMemory(memoryId, businessId);
+      if (ok) {
+        toast.success("Memory item removed.");
+        appEvents.emit(APP_EVENTS.CUSTOMERS_MUTATED);
+        onRefresh();
+      }
+    } catch (err: any) {
+      toast.error(`Error deleting memory: ${err?.message || String(err)}`);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden bg-card">
@@ -229,6 +277,7 @@ export function CustomerProfileHub({
           { id: "predictions", label: `AI Predictions (${preds.length})`, icon: Zap },
           { id: "opportunities", label: `Opportunities (${opps.length})`, icon: TrendingUp },
           { id: "intelligence", label: "Customer Intelligence DNA", icon: Brain },
+          { id: "memories", label: `AI Memory (${context?.aiMemories?.length ?? 0})`, icon: Brain },
           { id: "jobs", label: `Jobs (${context?.connectedJobs.length ?? 0})`, icon: Briefcase },
           { id: "invoices", label: `Invoices (${context?.connectedInvoices.length ?? 0})`, icon: FileText },
           { id: "comms", label: `Communications (${context?.connectedComms.length ?? 0})`, icon: MessageSquare },
@@ -600,6 +649,107 @@ export function CustomerProfileHub({
                   <div className="text-[10.5px] text-muted-foreground">{intel.buyingDna.paymentPromptness.methodology}</div>
                 </div>
               </div>
+            </div>
+          </div>
+        ) : activeTab === "memories" ? (
+          /* ─── SECTION 10: CUSTOMER AI MEMORY TAB ──────────────────────────── */
+          <div className="space-y-6">
+            <AIDisclosure />
+
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-soft space-y-4">
+              <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                <div className="flex items-center gap-2">
+                  <Brain className="h-4 w-4 text-brand" />
+                  <h3 className="text-[14px] font-bold text-foreground">Customer AI Memory Architecture</h3>
+                </div>
+                <span className="rounded bg-brand/10 px-2 py-0.5 text-[9.5px] font-extrabold text-brand uppercase">
+                  CONFIRMED • OBSERVED • AI INTERPRETATION
+                </span>
+              </div>
+
+              {/* Add Confirmed Memory Form */}
+              <form onSubmit={handleAddMemory} className="flex gap-2">
+                <input
+                  type="text"
+                  value={newMemoryStatement}
+                  onChange={(e) => setNewMemoryStatement(e.target.value)}
+                  placeholder="Record explicit confirmed customer preference (e.g. Prefers morning appointments)..."
+                  className="flex-1 rounded-xl border border-border bg-secondary/30 px-3.5 py-2 text-[12px] text-foreground focus:outline-none focus:ring-1 focus:ring-brand"
+                />
+                <button
+                  type="submit"
+                  disabled={savingMemory || !newMemoryStatement.trim()}
+                  className="rounded-xl bg-brand px-4 py-2 text-[11.5px] font-semibold text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
+                >
+                  {savingMemory ? "Saving..." : "Add Confirmed Memory"}
+                </button>
+              </form>
+
+              {/* Memory List */}
+              {memories.length === 0 ? (
+                <div className="p-8 text-center text-xs text-muted-foreground italic">
+                  No memory records found for this customer profile.
+                </div>
+              ) : (
+                <div className="divide-y divide-border border border-border rounded-xl bg-card">
+                  {memories.map((mem) => {
+                    const isExpanded = expandedMemoryId === mem.id;
+                    return (
+                      <div key={mem.id} className="p-4 space-y-2">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className={`rounded px-2 py-0.5 text-[9px] font-extrabold uppercase ${
+                                mem.memoryType === "CONFIRMED"
+                                  ? "bg-emerald-500/10 text-emerald-600"
+                                  : mem.memoryType === "OBSERVED"
+                                  ? "bg-blue-500/10 text-blue-500"
+                                  : "bg-purple-500/10 text-purple-500"
+                              }`}>
+                                {mem.memoryType}
+                              </span>
+                              <span className="font-bold text-[13px] text-foreground">{mem.statement}</span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground">{mem.explanation}</p>
+                          </div>
+
+                          <div className="shrink-0 flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedMemoryId(isExpanded ? null : mem.id)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
+                            >
+                              <Eye className="h-3 w-3" /> Why do we know this?
+                              {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                            </button>
+
+                            {mem.isPersistentInDb && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteMemory(mem.id)}
+                                className="p-1 rounded-lg text-muted-foreground hover:text-red-500"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Evidence Panel Drawer */}
+                        {isExpanded && (
+                          <div className="mt-2 rounded-xl border border-border bg-secondary/30 p-3.5 space-y-1.5 text-[11.5px]">
+                            <div className="font-bold text-foreground text-[11px] uppercase tracking-wider">Grounding Evidence & Provenance:</div>
+                            <p className="text-muted-foreground"><strong className="text-foreground">Why Do We Know This:</strong> {mem.whyDoWeKnowThis}</p>
+                            <p className="text-muted-foreground"><strong className="text-foreground">Supporting Records:</strong> {mem.supportingRecords.join(", ") || "Workspace profile ledger"}</p>
+                            <p className="text-muted-foreground"><strong className="text-foreground">Timeframe:</strong> {mem.timeframe || "Profile Lifetime"}</p>
+                            <p className="text-muted-foreground"><strong className="text-foreground">Provenance:</strong> {mem.provenance}</p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         ) : activeTab === "jobs" && context ? (

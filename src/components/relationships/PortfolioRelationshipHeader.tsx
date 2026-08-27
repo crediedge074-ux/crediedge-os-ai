@@ -18,6 +18,7 @@ import {
   ArrowRight,
   Plus,
   Zap,
+  Calendar,
 } from "lucide-react";
 import { useBusiness } from "@/hooks/useBusiness";
 import {
@@ -25,10 +26,9 @@ import {
   fetchPortfolioActivityFeed,
   searchPortfolioCustomers,
   type PortfolioRelationshipAnalytics,
-  type PortfolioRelationshipPriority,
   type RevenueOpportunity,
   type CustomerSegment,
-  type CustomerPrediction,
+  type RelationshipTimePeriod,
 } from "@/services/relationshipAnalytics";
 import type { Customer, ActivityLog } from "@/lib/database.types";
 import { appEvents, APP_EVENTS } from "@/lib/events";
@@ -49,6 +49,7 @@ export function PortfolioRelationshipHeader({
   const businessId = business?.id;
   const navigate = useNavigate();
 
+  const [selectedPeriod, setSelectedPeriod] = useState<RelationshipTimePeriod>("THIS_MONTH");
   const [analytics, setAnalytics] = useState<PortfolioRelationshipAnalytics | null>(null);
   const [activityFeed, setActivityFeed] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,8 +59,7 @@ export function PortfolioRelationshipHeader({
   const [searchResults, setSearchResults] = useState<Customer[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
-  // Expanded methodology state
-  const [expandedSection, setExpandedSection] = useState<string | null>(null);
+  // Expanded methodology drawers
   const [expandedPriorityId, setExpandedPriorityId] = useState<string | null>(null);
   const [expandedOpportunityId, setExpandedOpportunityId] = useState<string | null>(null);
   const [expandedPredictionId, setExpandedPredictionId] = useState<string | null>(null);
@@ -72,7 +72,7 @@ export function PortfolioRelationshipHeader({
 
     setLoading(true);
     Promise.all([
-      fetchPortfolioRelationshipAnalytics(businessId),
+      fetchPortfolioRelationshipAnalytics(businessId, selectedPeriod),
       fetchPortfolioActivityFeed(businessId),
     ])
       .then(([analyticsRes, activityRes]) => {
@@ -87,7 +87,7 @@ export function PortfolioRelationshipHeader({
     loadData();
     const unsubscribe = appEvents.on(APP_EVENTS.CUSTOMERS_MUTATED, loadData);
     return () => unsubscribe();
-  }, [businessId]);
+  }, [businessId, selectedPeriod]);
 
   useEffect(() => {
     if (!businessId || !searchQuery.trim()) {
@@ -109,7 +109,7 @@ export function PortfolioRelationshipHeader({
 
   if (loading) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-4 mb-6">
         <div className="h-44 animate-pulse rounded-2xl bg-secondary" />
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
@@ -133,6 +133,8 @@ export function PortfolioRelationshipHeader({
     connectedCampaigns,
     customerSegments,
     portfolioPredictions,
+    relationshipAnalytics,
+    relationshipImpact,
   } = analytics;
 
   const handleActNow = (opp: RevenueOpportunity) => {
@@ -156,15 +158,33 @@ export function PortfolioRelationshipHeader({
 
         <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-background/10 px-3 py-1 text-[10.5px] font-semibold uppercase tracking-wider">
-              <Sparkles className="h-3 w-3 text-brand" />
-              Portfolio Relationship Intelligence
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-background/10 px-3 py-1 text-[10.5px] font-semibold uppercase tracking-wider text-background">
+                <Sparkles className="h-3 w-3 text-brand" />
+                Portfolio Relationship Intelligence
+              </span>
+
+              {/* Functional Time Period Selector */}
+              <div className="inline-flex items-center gap-1.5 rounded-xl border border-background/20 bg-background/10 px-2.5 py-1 text-[11px] text-background">
+                <Calendar className="h-3 w-3 text-brand" />
+                <select
+                  value={selectedPeriod}
+                  onChange={(e) => setSelectedPeriod(e.target.value as RelationshipTimePeriod)}
+                  className="bg-transparent font-bold text-background focus:outline-none cursor-pointer"
+                >
+                  <option value="THIS_MONTH" className="bg-foreground text-background">This Month (MTD)</option>
+                  <option value="LAST_MONTH" className="bg-foreground text-background">Last Month</option>
+                  <option value="THIS_YEAR" className="bg-foreground text-background">This Year (YTD)</option>
+                  <option value="PREVIOUS_YEAR" className="bg-foreground text-background">Previous Year</option>
+                </select>
+              </div>
             </div>
+
             <h1 className="text-[22px] font-bold leading-tight tracking-tight text-background">
               Workspace Customer Portfolio
             </h1>
             <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-background/70">
-              Evaluates relationship health, verified 30-day settlement velocity, and active engagement metrics across your entire workspace.
+              Evaluates relationship health, verified settlement velocity, and active engagement metrics for <strong className="text-background">{relationshipAnalytics?.periodLabel || 'This Month'}</strong> across your workspace.
             </p>
           </div>
 
@@ -232,136 +252,127 @@ export function PortfolioRelationshipHeader({
             <span className={`h-2 w-2 rounded-full ${portfolioPriorities.length > 0 ? "bg-brand animate-pulse" : "bg-emerald-400"}`} />
             <span className="text-[11.5px] text-background/80">
               {portfolioPriorities.length > 0
-                ? `${portfolioPriorities.length} portfolio priority action(s) requiring operational attention`
+                ? `${portfolioPriorities.length} priority action(s) requiring attention in ${relationshipAnalytics?.periodLabel}`
                 : "No priority actions identified"}
             </span>
           </div>
 
-          <div className="flex items-center gap-2 rounded-lg bg-background/10 px-3 py-1.5">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            <span className="text-[11.5px] text-background/80">
-              {activeRelationships.activePct !== null
-                ? `${activeRelationships.activePct}% active relationship ratio (${activeRelationships.count} active / ${totalCustomers.count} total)`
-                : "No customer records"}
-            </span>
-          </div>
+          {relationshipAnalytics?.comparison.hasSufficientData && (
+            <div className="flex items-center gap-2 rounded-lg bg-background/10 px-3 py-1.5">
+              <span className="h-2 w-2 rounded-full bg-blue-400" />
+              <span className="text-[11.5px] text-background/80">
+                Revenue velocity {relationshipAnalytics.comparison.vsSamePeriodLastMonth} ({relationshipAnalytics.comparisonLabel})
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
       <AIDisclosure />
 
-      {/* ─── 4 CORE PORTFOLIO METRIC CARDS ───────────────────────────────────── */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Card 1: Total Customers & Active Ratio */}
-        <div className="flex flex-col justify-between rounded-2xl border border-border bg-card p-4 shadow-soft">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-muted-foreground">Total Portfolio</span>
-              <span className="rounded bg-brand/10 px-1.5 py-0.2 text-[8.5px] font-extrabold text-brand uppercase">
-                {totalCustomers.provenance}
-              </span>
-            </div>
-            <div className="mt-2 text-[24px] font-bold tracking-tight text-foreground">
-              {totalCustomers.count} <span className="text-[12px] font-normal text-muted-foreground">customers</span>
-            </div>
-            <div className="mt-1 text-[11px] text-muted-foreground">
-              {activeRelationships.count} active relationships ({activeRelationships.activePct ?? 0}%)
-            </div>
+      {/* ─── SECTION 10: AUTHORITATIVE RELATIONSHIP ANALYTICS (4 CARDS) ───────── */}
+      <div className="rounded-2xl border border-border bg-card p-5 shadow-soft space-y-3">
+        <div className="flex items-center justify-between border-b border-border/60 pb-3">
+          <div className="flex items-center gap-2">
+            <Activity className="h-4 w-4 text-brand" />
+            <h3 className="text-[14px] font-bold text-foreground">
+              Relationship Analytics — {relationshipAnalytics?.periodLabel || "This Month"}
+            </h3>
           </div>
-
-          <button
-            type="button"
-            onClick={() => setExpandedSection(expandedSection === "active" ? null : "active")}
-            className="mt-3 flex items-center gap-1 text-[10.5px] font-semibold text-brand hover:underline"
-          >
-            <span>Active rule breakdown</span>
-            {expandedSection === "active" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-          </button>
+          <span className="rounded bg-brand/10 px-2 py-0.5 text-[9.5px] font-extrabold text-brand uppercase">
+            AUTHORITATIVE ENGINE
+          </span>
         </div>
 
-        {/* Card 2: Relationship Health Index */}
-        <div className="flex flex-col justify-between rounded-2xl border border-border bg-card p-4 shadow-soft">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-muted-foreground">Portfolio Health Index</span>
-              <span className={`rounded px-1.5 py-0.2 text-[8.5px] font-extrabold uppercase ${
-                portfolioHealth.provenance === "INSUFFICIENT DATA"
-                  ? "bg-secondary text-muted-foreground"
-                  : "bg-emerald-500/10 text-emerald-500"
-              }`}>
-                {portfolioHealth.provenance}
-              </span>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl border border-border bg-secondary/20 p-3.5 space-y-1">
+            <div className="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
+              <span>Avg Days Between Visits</span>
+              <span className="font-extrabold text-foreground uppercase">{relationshipAnalytics?.avgDaysBetweenVisits.provenance}</span>
             </div>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-[24px] font-bold tracking-tight text-foreground">
-                {portfolioHealth.score !== null ? `${portfolioHealth.score} / 100` : "N/A"}
-              </span>
-              <span className="text-[11px] font-bold text-brand uppercase">{portfolioHealth.label}</span>
-            </div>
-            <div className="mt-1 text-[11px] text-muted-foreground truncate">
-              {portfolioHealth.reasoning}
-            </div>
+            <div className="text-[20px] font-extrabold text-foreground">{relationshipAnalytics?.avgDaysBetweenVisits.formatted}</div>
+            <p className="text-[10.5px] text-muted-foreground line-clamp-2">{relationshipAnalytics?.avgDaysBetweenVisits.methodology}</p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setExpandedSection(expandedSection === "health" ? null : "health")}
-            className="mt-3 flex items-center gap-1 text-[10.5px] font-semibold text-brand hover:underline"
-          >
-            <span>Health calculation rule</span>
-            {expandedSection === "health" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-          </button>
-        </div>
-
-        {/* Card 3: Verified Revenue (30 Days) */}
-        <div className="flex flex-col justify-between rounded-2xl border border-border bg-card p-4 shadow-soft">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-muted-foreground">Verified Settlement (30d)</span>
-              <span className="rounded bg-emerald-500/10 px-1.5 py-0.2 text-[8.5px] font-extrabold text-emerald-600 uppercase">
-                {verifiedRevenue30d.provenance}
-              </span>
+          <div className="rounded-xl border border-border bg-secondary/20 p-3.5 space-y-1">
+            <div className="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
+              <span>Reactivation Success Rate</span>
+              <span className="font-extrabold text-foreground uppercase">{relationshipAnalytics?.reactivationSuccessRate.provenance}</span>
             </div>
-            <div className="mt-2 text-[24px] font-bold tracking-tight text-foreground">
-              {verifiedRevenue30d.formatted}
-            </div>
-            <div className="mt-1 text-[11px] text-muted-foreground">
-              From {verifiedRevenue30d.invoiceCount} settled payment logs in last 30 days
-            </div>
+            <div className="text-[20px] font-extrabold text-foreground">{relationshipAnalytics?.reactivationSuccessRate.formatted}</div>
+            <p className="text-[10.5px] text-muted-foreground line-clamp-2">{relationshipAnalytics?.reactivationSuccessRate.methodology}</p>
           </div>
 
-          <div className="mt-3 text-[10.5px] text-muted-foreground/80 italic">
-            Settled bank records
+          <div className="rounded-xl border border-border bg-secondary/20 p-3.5 space-y-1">
+            <div className="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
+              <span>Upsell Conversion Rate</span>
+              <span className="font-extrabold text-muted-foreground uppercase">{relationshipAnalytics?.upsellConversionRate.provenance}</span>
+            </div>
+            <div className="text-[20px] font-extrabold text-foreground">{relationshipAnalytics?.upsellConversionRate.formatted}</div>
+            <p className="text-[10.5px] text-muted-foreground line-clamp-2">{relationshipAnalytics?.upsellConversionRate.methodology}</p>
+          </div>
+
+          <div className="rounded-xl border border-border bg-secondary/20 p-3.5 space-y-1">
+            <div className="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
+              <span>Referral Conversion Rate</span>
+              <span className="font-extrabold text-foreground uppercase">{relationshipAnalytics?.referralConversionRate.provenance}</span>
+            </div>
+            <div className="text-[20px] font-extrabold text-foreground">{relationshipAnalytics?.referralConversionRate.formatted}</div>
+            <p className="text-[10.5px] text-muted-foreground line-clamp-2">{relationshipAnalytics?.referralConversionRate.methodology}</p>
           </div>
         </div>
+      </div>
 
-        {/* Card 4: Predicted Revenue (30 Days) */}
-        <div className="flex flex-col justify-between rounded-2xl border border-border bg-card p-4 shadow-soft">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-muted-foreground">Predicted Collection (30d)</span>
-              <span className={`rounded px-1.5 py-0.2 text-[8.5px] font-extrabold uppercase ${
-                predictedRevenue30d.hasSufficientData ? "bg-blue-500/10 text-blue-500" : "bg-secondary text-muted-foreground"
-              }`}>
-                {predictedRevenue30d.provenance}
-              </span>
+      {/* ─── SECTION 10: AUTHORITATIVE RELATIONSHIP IMPACT (4 CARDS) ─────────── */}
+      <div className="rounded-2xl border border-border bg-card p-5 shadow-soft space-y-3">
+        <div className="flex items-center justify-between border-b border-border/60 pb-3">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-emerald-500" />
+            <h3 className="text-[14px] font-bold text-foreground">
+              Relationship Commercial Impact — {relationshipImpact?.periodLabel || "This Month"}
+            </h3>
+          </div>
+          <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-[9.5px] font-extrabold text-emerald-600 uppercase">
+            EVIDENCE-BASED ATTRIBUTION
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl border border-border bg-secondary/20 p-3.5 space-y-1">
+            <div className="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
+              <span>Repeat Customer Revenue</span>
+              <span className="font-extrabold text-foreground uppercase">{relationshipImpact?.repeatCustomerRevenue.provenance}</span>
             </div>
-            <div className="mt-2 text-[24px] font-bold tracking-tight text-foreground">
-              {predictedRevenue30d.formatted}
-            </div>
-            <div className="mt-1 text-[11px] text-muted-foreground truncate">
-              {predictedRevenue30d.methodology}
-            </div>
+            <div className="text-[20px] font-extrabold text-emerald-600">{relationshipImpact?.repeatCustomerRevenue.formatted}</div>
+            <p className="text-[10.5px] text-muted-foreground line-clamp-2">{relationshipImpact?.repeatCustomerRevenue.methodology}</p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setExpandedSection(expandedSection === "predicted" ? null : "predicted")}
-            className="mt-3 flex items-center gap-1 text-[10.5px] font-semibold text-brand hover:underline"
-          >
-            <span>Prediction requirement</span>
-            {expandedSection === "predicted" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-          </button>
+          <div className="rounded-xl border border-border bg-secondary/20 p-3.5 space-y-1">
+            <div className="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
+              <span>Referral Source Revenue</span>
+              <span className="font-extrabold text-foreground uppercase">{relationshipImpact?.referralRevenue.provenance}</span>
+            </div>
+            <div className="text-[20px] font-extrabold text-emerald-600">{relationshipImpact?.referralRevenue.formatted}</div>
+            <p className="text-[10.5px] text-muted-foreground line-clamp-2">{relationshipImpact?.referralRevenue.methodology}</p>
+          </div>
+
+          <div className="rounded-xl border border-border bg-secondary/20 p-3.5 space-y-1">
+            <div className="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
+              <span>Upsell Revenue</span>
+              <span className="font-extrabold text-muted-foreground uppercase">{relationshipImpact?.upsellRevenue.provenance}</span>
+            </div>
+            <div className="text-[20px] font-extrabold text-foreground">{relationshipImpact?.upsellRevenue.formatted}</div>
+            <p className="text-[10.5px] text-muted-foreground line-clamp-2">{relationshipImpact?.upsellRevenue.methodology}</p>
+          </div>
+
+          <div className="rounded-xl border border-border bg-secondary/20 p-3.5 space-y-1">
+            <div className="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
+              <span>Churn Prevented (Est)</span>
+              <span className="font-extrabold text-amber-500 uppercase">{relationshipImpact?.churnPrevented.provenance}</span>
+            </div>
+            <div className="text-[20px] font-extrabold text-foreground">{relationshipImpact?.churnPrevented.formatted}</div>
+            <p className="text-[10.5px] text-muted-foreground line-clamp-2">{relationshipImpact?.churnPrevented.methodology}</p>
+          </div>
         </div>
       </div>
 
@@ -398,196 +409,6 @@ export function PortfolioRelationshipHeader({
                 <div className="text-[18px] font-extrabold text-foreground">{seg.customerCount} <span className="text-[11px] font-medium text-muted-foreground">clients</span></div>
                 <div className="text-[11px] font-bold text-brand">{seg.formattedFinancialValue}</div>
                 <p className="text-[10.5px] text-muted-foreground line-clamp-2">{seg.description}</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* ─── SECTION 9: AUTHORITATIVE PORTFOLIO PREDICTIONS ──────────────────── */}
-      {portfolioPredictions.length > 0 && (
-        <div className="rounded-2xl border border-border bg-card shadow-card overflow-hidden">
-          <div className="border-b border-border px-5 py-3.5 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Zap className="h-4 w-4 text-brand" strokeWidth={1.75} />
-              <span className="text-[13.5px] font-semibold tracking-tight text-foreground">
-                Authoritative AI Portfolio Predictions
-              </span>
-            </div>
-            <span className="rounded bg-brand/10 px-2 py-0.5 text-[10px] font-bold text-brand uppercase">
-              {portfolioPredictions.length} Predictions
-            </span>
-          </div>
-
-          <div className="divide-y divide-border">
-            {portfolioPredictions.map((pred) => {
-              const isExpanded = expandedPredictionId === pred.id;
-              return (
-                <div key={pred.id} className="p-4 space-y-2 hover:bg-secondary/20 transition-colors">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[9.5px] font-extrabold text-brand uppercase">
-                          {pred.predictionType.replace("_", " ")}
-                        </span>
-                        <span className="text-[13px] font-bold text-foreground">{pred.prediction}</span>
-                        <span className="text-[11px] text-muted-foreground">— {pred.customerName}</span>
-                      </div>
-                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                        <span className="font-bold text-brand">{pred.formattedProbability}</span>
-                        <span>•</span>
-                        <span>{pred.timeframe}</span>
-                      </div>
-                    </div>
-
-                    <div className="shrink-0 flex items-center gap-2">
-                      <span className="rounded bg-secondary px-2 py-0.5 text-[9px] font-extrabold text-muted-foreground uppercase">
-                        {pred.provenance}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setExpandedPredictionId(isExpanded ? null : pred.id)}
-                        className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
-                      >
-                        <Eye className="h-3 w-3" /> Methodology
-                        {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Prediction Methodology Drawer */}
-                  {isExpanded && (
-                    <div className="mt-2 rounded-xl border border-border bg-secondary/30 p-3.5 space-y-1.5 text-[11.5px]">
-                      <div className="font-bold text-foreground text-[11px] uppercase tracking-wider">Prediction Engine Evidence:</div>
-                      <p className="text-muted-foreground"><strong className="text-foreground">Evidence:</strong> {pred.evidence}</p>
-                      <p className="text-muted-foreground"><strong className="text-foreground">Methodology:</strong> {pred.methodology}</p>
-                      <p className="text-muted-foreground/70 italic"><strong className="text-foreground">Limitations:</strong> {pred.limitations}</p>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ─── SECTION 8: REVENUE OPPORTUNITIES ─────────────────────────────────── */}
-      <div className="rounded-2xl border border-border bg-card shadow-card overflow-hidden">
-        <div className="border-b border-border px-5 py-3.5 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-emerald-500" strokeWidth={1.75} />
-            <span className="text-[13.5px] font-semibold tracking-tight text-foreground">
-              Portfolio Revenue Opportunities
-            </span>
-          </div>
-          <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600 uppercase">
-            {revenueOpportunities.length} Identified
-          </span>
-        </div>
-
-        {revenueOpportunities.length === 0 ? (
-          <div className="p-8 text-center text-xs text-muted-foreground italic">
-            No revenue opportunities identified across workspace portfolio.
-          </div>
-        ) : (
-          <div className="divide-y divide-border">
-            {revenueOpportunities.map((opp) => {
-              const isExpanded = expandedOpportunityId === opp.id;
-              return (
-                <div key={opp.id} className="p-4 space-y-2 hover:bg-secondary/20 transition-colors">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9.5px] font-extrabold text-emerald-600 uppercase">
-                          {opp.opportunityType.replace("_", " ")}
-                        </span>
-                        <span className="text-[13px] font-bold text-foreground">{opp.headline}</span>
-                        <span className="text-[11px] text-muted-foreground">— {opp.customerName}</span>
-                      </div>
-                      <p className="text-[11.5px] text-muted-foreground">{opp.detail}</p>
-                      <p className="text-[10.5px] text-muted-foreground/70 italic">Evidence: {opp.evidence}</p>
-                    </div>
-
-                    <div className="shrink-0 flex items-center gap-2">
-                      <span className="rounded bg-secondary px-2 py-0.5 text-[9px] font-extrabold text-muted-foreground uppercase">
-                        {opp.provenance}
-                      </span>
-
-                      <button
-                        type="button"
-                        onClick={() => setExpandedOpportunityId(isExpanded ? null : opp.id)}
-                        className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:border-foreground/20"
-                      >
-                        <Eye className="h-3 w-3" /> Why?
-                        {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleActNow(opp)}
-                        className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1 text-[11px] font-bold text-white hover:bg-emerald-700 shadow-xs"
-                      >
-                        Act Now <ArrowRight className="h-3 w-3" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Why / Methodology Drawer */}
-                  {isExpanded && (
-                    <div className="mt-2 rounded-xl border border-border bg-secondary/30 p-3.5 space-y-1.5 text-[11.5px]">
-                      <div className="font-bold text-foreground text-[11px] uppercase tracking-wider">Opportunity Methodology:</div>
-                      <p className="text-muted-foreground"><strong className="text-foreground">Records Considered:</strong> {opp.explainWhy.recordsConsidered}</p>
-                      <p className="text-muted-foreground"><strong className="text-foreground">Methodology:</strong> {opp.explainWhy.methodology}</p>
-                      <p className="text-muted-foreground"><strong className="text-foreground">Why Actionable:</strong> {opp.explainWhy.whyActionable}</p>
-                      <p className="text-muted-foreground/70 italic"><strong className="text-foreground">Limitations:</strong> {opp.explainWhy.limitations}</p>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* ─── SECTION 8: PORTFOLIO CAMPAIGN CONNECTION ─────────────────────────── */}
-      <div className="rounded-2xl border border-border bg-card shadow-card overflow-hidden">
-        <div className="border-b border-border px-5 py-3.5 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Target className="h-4 w-4 text-brand" strokeWidth={1.75} />
-            <span className="text-[13.5px] font-semibold tracking-tight text-foreground">
-              Connected Workspace Campaigns
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => navigate({ to: "/tasks" })}
-            className="flex items-center gap-1 text-[11px] font-semibold text-brand hover:underline"
-          >
-            Manage Campaigns <ArrowRight className="h-3 w-3" />
-          </button>
-        </div>
-
-        {connectedCampaigns.length === 0 ? (
-          <div className="p-8 text-center text-xs text-muted-foreground italic">
-            No active campaigns connected in workspace.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4">
-            {connectedCampaigns.map((camp) => (
-              <div
-                key={camp.id}
-                onClick={() => navigate({ to: "/tasks" })}
-                className="group cursor-pointer rounded-xl border border-border bg-secondary/20 p-3.5 space-y-2 hover:border-brand transition-all"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-[12.5px] text-foreground group-hover:text-brand transition-colors">{camp.name}</span>
-                  <span className="rounded bg-brand/10 px-1.5 py-0.2 text-[9px] font-extrabold text-brand uppercase">{camp.type}</span>
-                </div>
-                <p className="text-[11px] text-muted-foreground line-clamp-2">{camp.description || "Active portfolio campaign workstream."}</p>
-                <div className="flex items-center justify-between text-[10.5px] font-semibold text-foreground pt-1 border-t border-border/40">
-                  <span>Target: £{camp.target_value.toLocaleString("en-GB")}</span>
-                  <span>{camp.progressPct}% complete</span>
-                </div>
               </div>
             ))}
           </div>

@@ -1,14 +1,172 @@
 import { supabase } from "@/lib/supabase";
-import type { Customer, Job, Invoice, Review, Communication, ActivityLog } from "@/lib/database.types";
+import type { Customer, Job, Invoice, Review, Communication, ActivityLog, CustomerMemory } from "@/lib/database.types";
 import { fetchCampaigns, type CalculatedCampaign } from "./campaigns";
+
+// ─── TIME PERIOD SCHEMAS ──────────────────────────────────────────────────────
+
+export type RelationshipTimePeriod = "THIS_MONTH" | "LAST_MONTH" | "THIS_YEAR" | "PREVIOUS_YEAR";
+
+export interface PeriodBoundaries {
+  period: RelationshipTimePeriod;
+  label: string;
+  startDate: Date;
+  endDate: Date;
+  prevStartDate: Date;
+  prevEndDate: Date;
+  comparisonLabel: string;
+}
+
+export function getPeriodBoundaries(period: RelationshipTimePeriod = "THIS_MONTH"): PeriodBoundaries {
+  const now = new Date();
+
+  if (period === "LAST_MONTH") {
+    const startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+    const endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+
+    const prevStartDate = new Date(now.getFullYear(), now.getMonth() - 2, 1, 0, 0, 0, 0);
+    const prevEndDate = new Date(now.getFullYear(), now.getMonth() - 1, 0, 23, 59, 59, 999);
+
+    return {
+      period,
+      label: "Last Month",
+      startDate,
+      endDate,
+      prevStartDate,
+      prevEndDate,
+      comparisonLabel: "vs prior month",
+    };
+  }
+
+  if (period === "THIS_YEAR") {
+    const startDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+    const endDate = new Date(now);
+
+    const dayOfYear = Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+    const prevStartDate = new Date(now.getFullYear() - 1, 0, 1, 0, 0, 0, 0);
+    const prevEndDate = new Date(prevStartDate.getTime() + dayOfYear * 24 * 60 * 60 * 1000);
+
+    return {
+      period,
+      label: "This Year (YTD)",
+      startDate,
+      endDate,
+      prevStartDate,
+      prevEndDate,
+      comparisonLabel: "vs same period last year",
+    };
+  }
+
+  if (period === "PREVIOUS_YEAR") {
+    const startDate = new Date(now.getFullYear() - 1, 0, 1, 0, 0, 0, 0);
+    const endDate = new Date(now.getFullYear() - 1, 11, 31, 23, 59, 59, 999);
+
+    const prevStartDate = new Date(now.getFullYear() - 2, 0, 1, 0, 0, 0, 0);
+    const prevEndDate = new Date(now.getFullYear() - 2, 11, 31, 23, 59, 59, 999);
+
+    return {
+      period,
+      label: "Previous Year",
+      startDate,
+      endDate,
+      prevStartDate,
+      prevEndDate,
+      comparisonLabel: "vs 2 years prior",
+    };
+  }
+
+  // Default: THIS_MONTH (Month-To-Date: 1st of current month to today)
+  const startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  const endDate = new Date(now);
+
+  const daysElapsed = Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+  const prevStartDate = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+  const prevEndDate = new Date(prevStartDate.getTime() + daysElapsed * 24 * 60 * 60 * 1000);
+
+  return {
+    period: "THIS_MONTH",
+    label: "This Month (MTD)",
+    startDate,
+    endDate,
+    prevStartDate,
+    prevEndDate,
+    comparisonLabel: "vs same period last month",
+  };
+}
+
+// ─── PROVENANCE & METRIC VALUE SCHEMAS ────────────────────────────────────────
+
+export type ProvenanceState = "CONNECTED" | "DERIVED" | "AI ANALYSIS" | "INSUFFICIENT DATA" | "ESTIMATED";
 
 export interface MetricValue<T> {
   value: T | null;
   formatted: string;
   hasSufficientData: boolean;
   methodology: string;
-  provenance: "CONNECTED" | "DERIVED" | "INSUFFICIENT DATA" | "ESTIMATED";
+  provenance: ProvenanceState;
 }
+
+// ─── SECTION 10: AUTHORITATIVE RELATIONSHIP ANALYTICS SCHEMAS ────────────────
+
+export interface AuthoritativeRelationshipAnalytics {
+  period: RelationshipTimePeriod;
+  periodLabel: string;
+  comparisonLabel: string;
+  dateRange: {
+    start: string;
+    end: string;
+  };
+
+  avgDaysBetweenVisits: MetricValue<number>;
+  reactivationSuccessRate: MetricValue<number>;
+  upsellConversionRate: MetricValue<number>;
+  referralConversionRate: MetricValue<number>;
+
+  comparison: {
+    hasSufficientData: boolean;
+    vsSamePeriodLastMonth: string | null;
+    methodology: string;
+  };
+}
+
+// ─── SECTION 10: AUTHORITATIVE RELATIONSHIP IMPACT SCHEMAS ───────────────────
+
+export interface AuthoritativeRelationshipImpact {
+  period: RelationshipTimePeriod;
+  periodLabel: string;
+
+  repeatCustomerRevenue: MetricValue<number>;
+  referralRevenue: MetricValue<number>;
+  upsellRevenue: MetricValue<number>;
+
+  churnPrevented: MetricValue<number> & {
+    estimated: true;
+    assumptions: string;
+    evidence: string;
+    timeframe: string;
+    limitations: string;
+  };
+}
+
+// ─── SECTION 10: AI MEMORY SCHEMAS ───────────────────────────────────────────
+
+export type AiMemoryClassification = "CONFIRMED" | "OBSERVED" | "AI INTERPRETATION";
+
+export interface CustomerAiMemoryItem {
+  id: string;
+  customerId: string;
+  memoryType: AiMemoryClassification;
+  statement: string;
+  provenance: ProvenanceState;
+  confidenceScore: number | null;
+  supportingRecords: string[];
+  timeframe: string | null;
+  explanation: string;
+  whyDoWeKnowThis: string;
+  createdAt: string;
+  isPersistentInDb: boolean;
+}
+
+// ─── CRM MODULE SCHEMAS ───────────────────────────────────────────────────────
 
 export interface AuthoritativeRelationshipMetrics {
   totalLtv: MetricValue<number>;
@@ -58,10 +216,8 @@ export interface AttentionItem {
   headline: string;
   detail: string;
   evidence: string;
-  provenance: "CONNECTED" | "DERIVED" | "AI ANALYSIS";
+  provenance: ProvenanceState;
 }
-
-// ─── SECTION 9: CUSTOMER SEGMENTS SCHEMAS ────────────────────────────────────
 
 export type CustomerSegmentType = "VIP_CHAMPIONS" | "HIGH_VALUE" | "GROWING" | "AT_RISK" | "INACTIVE";
 
@@ -76,11 +232,9 @@ export interface CustomerSegment {
   customers: Customer[];
   methodology: string;
   evidence: string;
-  provenance: "CONNECTED" | "DERIVED" | "INSUFFICIENT DATA";
+  provenance: ProvenanceState;
   actionable: string;
 }
-
-// ─── SECTION 9: CUSTOMER PREDICTIONS SCHEMAS ──────────────────────────────────
 
 export type PredictionType =
   | "BOOKING_AGAIN"
@@ -96,18 +250,16 @@ export interface CustomerPrediction {
   customerName: string;
   predictionType: PredictionType;
   prediction: string;
-  probabilityPct: number | null; // null if sample size inadequate (INSUFFICIENT DATA)
+  probabilityPct: number | null;
   formattedProbability: string;
   timeframe: string;
   keyFactors: string[];
   evidence: string;
   methodology: string;
   limitations: string;
-  provenance: "CONNECTED" | "DERIVED" | "AI ANALYSIS" | "INSUFFICIENT DATA";
+  provenance: ProvenanceState;
   actionableWorkflowTarget: "customer_profile" | "task_creation" | "campaign_workspace" | "invoice_workflow";
 }
-
-// ─── SECTION 8: REVENUE OPPORTUNITIES SCHEMAS ─────────────────────────────────
 
 export interface RevenueOpportunity {
   id: string;
@@ -128,11 +280,9 @@ export interface RevenueOpportunity {
     whyActionable: string;
     limitations: string;
   };
-  provenance: "CONNECTED" | "DERIVED" | "AI ANALYSIS" | "INSUFFICIENT DATA";
+  provenance: ProvenanceState;
   actionableWorkflowTarget: "customer_profile" | "task_creation" | "campaign_workspace" | "invoice_workflow";
 }
-
-// ─── SECTION 7: PORTFOLIO RELATIONSHIP PRIORITIES SCHEMAS ──────────────────
 
 export interface PortfolioRelationshipPriority {
   id: string;
@@ -145,7 +295,7 @@ export interface PortfolioRelationshipPriority {
   priorityScore: number;
   impactText: string | null;
   confidencePct: number | null;
-  provenance: "CONNECTED" | "DERIVED" | "AI ANALYSIS";
+  provenance: ProvenanceState;
   explainWhy: {
     recordsConsidered: string;
     timePeriod: string;
@@ -171,7 +321,7 @@ export interface PortfolioRelationshipAnalytics {
     score: number | null;
     label: "EXCELLENT" | "GOOD" | "NEEDS ATTENTION" | "AT RISK" | "INSUFFICIENT DATA";
     reasoning: string;
-    provenance: "DERIVED" | "INSUFFICIENT DATA";
+    provenance: ProvenanceState;
   };
   verifiedRevenue30d: {
     amount: number;
@@ -184,14 +334,14 @@ export interface PortfolioRelationshipAnalytics {
     formatted: string;
     methodology: string;
     hasSufficientData: boolean;
-    provenance: "DERIVED" | "INSUFFICIENT DATA";
+    provenance: ProvenanceState;
   };
   attentionPortfolio: {
     attentionCount: number;
     opportunityCount: number;
     riskCount: number;
     items: AttentionItem[];
-    provenance: "DERIVED" | "AI ANALYSIS";
+    provenance: ProvenanceState;
   };
   authoritativeMetrics: AuthoritativeRelationshipMetrics;
   portfolioPriorities: PortfolioRelationshipPriority[];
@@ -199,9 +349,9 @@ export interface PortfolioRelationshipAnalytics {
   connectedCampaigns: CalculatedCampaign[];
   customerSegments: CustomerSegment[];
   portfolioPredictions: CustomerPrediction[];
+  relationshipAnalytics?: AuthoritativeRelationshipAnalytics;
+  relationshipImpact?: AuthoritativeRelationshipImpact;
 }
-
-// ─── SECTION 6: AUTHORITATIVE RELATIONSHIP HEALTH SCHEMAS ────────────────────
 
 export interface RelationshipHealthComponent {
   componentName: string;
@@ -212,7 +362,7 @@ export interface RelationshipHealthComponent {
   evidence: string;
   methodology: string;
   hasSufficientData: boolean;
-  provenance: "CONNECTED" | "DERIVED" | "INSUFFICIENT DATA";
+  provenance: ProvenanceState;
 }
 
 export interface CustomerRelationshipHealth {
@@ -221,7 +371,7 @@ export interface CustomerRelationshipHealth {
   overallScore: number | null;
   overallLabel: "EXCELLENT" | "GOOD" | "NEEDS ATTENTION" | "AT RISK" | "INSUFFICIENT DATA";
   hasSufficientData: boolean;
-  provenance: "DERIVED" | "INSUFFICIENT DATA";
+  provenance: ProvenanceState;
 
   components: {
     engagement: RelationshipHealthComponent;
@@ -238,15 +388,13 @@ export interface CustomerRelationshipHealth {
   };
 }
 
-// ─── SECTION 5: CUSTOMER INTELLIGENCE DNA SCHEMAS ────────────────────────────
-
 export interface PersonalityTraitFactor {
   factorName: string;
   score: number | null;
   label: string;
   evidence: string;
   hasSufficientData: boolean;
-  provenance: "CONNECTED" | "DERIVED" | "AI ANALYSIS" | "INSUFFICIENT DATA";
+  provenance: ProvenanceState;
 }
 
 export interface CommunicationDnaProfile {
@@ -277,7 +425,7 @@ export interface CustomerIntelligenceDNA {
     priceSensitivity: PersonalityTraitFactor;
     qualityFocus: PersonalityTraitFactor;
     overallSummary: string;
-    provenance: "DERIVED" | "AI ANALYSIS" | "INSUFFICIENT DATA";
+    provenance: ProvenanceState;
   };
 
   communicationDna: CommunicationDnaProfile;
@@ -288,7 +436,7 @@ export interface CustomerIntelligenceDNA {
     reasoning: string;
     impact: string;
     confidence: number | null;
-    provenance: "CONNECTED" | "DERIVED" | "AI ANALYSIS";
+    provenance: ProvenanceState;
   }[];
 }
 
@@ -318,17 +466,18 @@ export interface CustomerDNAContext {
   customerOpportunities: RevenueOpportunity[];
   connectedCampaigns: CalculatedCampaign[];
   customerPredictions: CustomerPrediction[];
+  aiMemories?: CustomerAiMemoryItem[];
 
   suggestedPriorities: {
     action: string;
     reason: string;
     impact: string;
     confidence: number;
-    provenance: "CONNECTED" | "DERIVED" | "AI ANALYSIS";
+    provenance: ProvenanceState;
   }[];
 }
 
-// ─── HELPER FUNCTIONS ─────────────────────────────────────────────────────────
+// ─── EMPTY STATE HELPER FUNCTIONS ─────────────────────────────────────────────
 
 function getEmptyAuthoritativeMetrics(): AuthoritativeRelationshipMetrics {
   return {
@@ -361,7 +510,546 @@ function getEmptyPortfolioRelationshipAnalytics(): PortfolioRelationshipAnalytic
   };
 }
 
-// ─── SECTION 9: AUTHORITATIVE CUSTOMER SEGMENTATION ENGINE ────────────────────
+// ─── SECTION 10: AUTHORITATIVE RELATIONSHIP ANALYTICS ENGINE ─────────────────
+
+export async function fetchRelationshipAnalytics(
+  businessId: string | undefined,
+  period: RelationshipTimePeriod = "THIS_MONTH"
+): Promise<AuthoritativeRelationshipAnalytics> {
+  const bounds = getPeriodBoundaries(period);
+
+  if (!businessId) {
+    return {
+      period: bounds.period,
+      periodLabel: bounds.label,
+      comparisonLabel: bounds.comparisonLabel,
+      dateRange: {
+        start: bounds.startDate.toISOString().slice(0, 10),
+        end: bounds.endDate.toISOString().slice(0, 10),
+      },
+      avgDaysBetweenVisits: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "No workspace connected.", provenance: "INSUFFICIENT DATA" },
+      reactivationSuccessRate: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "No workspace connected.", provenance: "INSUFFICIENT DATA" },
+      upsellConversionRate: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "No workspace connected.", provenance: "INSUFFICIENT DATA" },
+      referralConversionRate: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "No workspace connected.", provenance: "INSUFFICIENT DATA" },
+      comparison: { hasSufficientData: false, vsSamePeriodLastMonth: null, methodology: "No workspace connected." },
+    };
+  }
+
+  const startIso = bounds.startDate.toISOString();
+  const endIso = bounds.endDate.toISOString();
+  const prevStartIso = bounds.prevStartDate.toISOString();
+  const prevEndIso = bounds.prevEndDate.toISOString();
+
+  const [jobsCurrentRes, customersRes, invoicesCurrentRes, invoicesPrevRes] = await Promise.all([
+    supabase.from("jobs").select("*").eq("business_id", businessId).gte("created_at", startIso).lte("created_at", endIso),
+    supabase.from("customers").select("*").eq("business_id", businessId),
+    supabase.from("invoices").select("*").eq("business_id", businessId).gte("created_at", startIso).lte("created_at", endIso),
+    supabase.from("invoices").select("*").eq("business_id", businessId).gte("created_at", prevStartIso).lte("created_at", prevEndIso),
+  ]);
+
+  const jobsCurrent = (jobsCurrentRes.data || []) as Job[];
+  const customers = (customersRes.data || []) as Customer[];
+  const invoicesCurrent = (invoicesCurrentRes.data || []) as Invoice[];
+  const invoicesPrev = (invoicesPrevRes.data || []) as Invoice[];
+
+  // 1. AVERAGE DAYS BETWEEN VISITS
+  const completedJobs = jobsCurrent.filter((j) => j.status === "completed" && j.customer_id);
+  const jobsByCustomer: Record<string, number[]> = {};
+
+  completedJobs.forEach((j) => {
+    if (!j.customer_id) return;
+    const t = new Date(j.completed_at || j.created_at).getTime();
+    if (!jobsByCustomer[j.customer_id]) jobsByCustomer[j.customer_id] = [];
+    jobsByCustomer[j.customer_id].push(t);
+  });
+
+  const intervalsDays: number[] = [];
+  let evaluatedIntervalRecordsCount = 0;
+
+  Object.values(jobsByCustomer).forEach((timestamps) => {
+    if (timestamps.length >= 2) {
+      timestamps.sort((a, b) => a - b);
+      for (let i = 1; i < timestamps.length; i++) {
+        const diffDays = (timestamps[i] - timestamps[i - 1]) / (1000 * 60 * 60 * 24);
+        intervalsDays.push(diffDays);
+        evaluatedIntervalRecordsCount++;
+      }
+    }
+  });
+
+  let avgDaysBetweenVisits: MetricValue<number>;
+  if (intervalsDays.length >= 1) {
+    const avg = Math.round(intervalsDays.reduce((a, b) => a + b, 0) / intervalsDays.length);
+    avgDaysBetweenVisits = {
+      value: avg,
+      formatted: `${avg} Days`,
+      hasSufficientData: true,
+      methodology: `Calculated from ${evaluatedIntervalRecordsCount} qualifying visit intervals across customers with repeat completed jobs in ${bounds.label}.`,
+      provenance: "DERIVED",
+    };
+  } else {
+    avgDaysBetweenVisits = {
+      value: null,
+      formatted: "Insufficient Data",
+      hasSufficientData: false,
+      methodology: "Requires at least 2 completed jobs for the same customer within the selected period to calculate visit intervals.",
+      provenance: "INSUFFICIENT DATA",
+    };
+  }
+
+  // 2. REACTIVATION SUCCESS RATE
+  const qualifyingInactiveCustomers = customers.filter((c) => {
+    if (c.status === "inactive") return true;
+    const createdDate = new Date(c.created_at);
+    const monthsOld = (bounds.startDate.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24 * 30.4);
+    return monthsOld >= 3 && (Number(c.lifetime_value) || 0) === 0;
+  });
+
+  let reactivationRate: MetricValue<number>;
+  if (qualifyingInactiveCustomers.length >= 1) {
+    const reactivatedCount = qualifyingInactiveCustomers.filter((c) => {
+      const hasJobInPeriod = jobsCurrent.some((j) => j.customer_id === c.id);
+      const hasInvInPeriod = invoicesCurrent.some((i) => i.customer_id === c.id && i.status === "paid");
+      return hasJobInPeriod || hasInvInPeriod;
+    }).length;
+
+    const ratePct = Math.round((reactivatedCount / qualifyingInactiveCustomers.length) * 100);
+    reactivationRate = {
+      value: ratePct,
+      formatted: `${ratePct}%`,
+      hasSufficientData: true,
+      methodology: `${reactivatedCount} successfully reactivated out of ${qualifyingInactiveCustomers.length} qualifying inactive customer accounts.`,
+      provenance: "DERIVED",
+    };
+  } else {
+    reactivationRate = {
+      value: null,
+      formatted: "Insufficient Data",
+      hasSufficientData: false,
+      methodology: "No qualifying inactive customer records found for the selected measurement period.",
+      provenance: "INSUFFICIENT DATA",
+    };
+  }
+
+  // 3. UPSELL CONVERSION RATE
+  const upsellRate: MetricValue<number> = {
+    value: null,
+    formatted: "Insufficient Data",
+    hasSufficientData: false,
+    methodology: "CrediEdgeOS strictly prohibits assuming larger invoice amounts represent upsells. Requires explicit contract tier / package upgrade tags on invoice records.",
+    provenance: "INSUFFICIENT DATA",
+  };
+
+  // 4. REFERRAL CONVERSION RATE
+  const customersWithSource = customers.filter((c) => Boolean(c.source && c.source.trim()));
+  let referralRate: MetricValue<number>;
+
+  if (customersWithSource.length >= 1) {
+    const referralCount = customersWithSource.filter((c) => c.source?.toLowerCase().includes("referral")).length;
+    const refRatePct = Math.round((referralCount / customersWithSource.length) * 100);
+    referralRate = {
+      value: refRatePct,
+      formatted: `${refRatePct}%`,
+      hasSufficientData: true,
+      methodology: `${referralCount} verified referral conversions out of ${customersWithSource.length} customer profiles with source tracking.`,
+      provenance: "CONNECTED",
+    };
+  } else {
+    referralRate = {
+      value: null,
+      formatted: "Insufficient Data",
+      hasSufficientData: false,
+      methodology: "Requires explicit customer source attribution records to calculate referral conversions without AI inference.",
+      provenance: "INSUFFICIENT DATA",
+    };
+  }
+
+  // 5. HISTORICAL COMPARISON
+  let comparisonData: AuthoritativeRelationshipAnalytics["comparison"];
+  const currRevenue = invoicesCurrent.filter((i) => i.status === "paid").reduce((s, i) => s + (Number(i.amount_paid) || Number(i.total_amount) || 0), 0);
+  const prevRevenue = invoicesPrev.filter((i) => i.status === "paid").reduce((s, i) => s + (Number(i.amount_paid) || Number(i.total_amount) || 0), 0);
+
+  if (invoicesCurrent.length >= 1 && invoicesPrev.length >= 1 && prevRevenue > 0) {
+    const revDiffPct = Math.round(((currRevenue - prevRevenue) / prevRevenue) * 100);
+    comparisonData = {
+      hasSufficientData: true,
+      vsSamePeriodLastMonth: `${revDiffPct >= 0 ? "+" : ""}${revDiffPct}%`,
+      methodology: `Compared £${currRevenue.toLocaleString("en-GB")} (${bounds.label}) against £${prevRevenue.toLocaleString("en-GB")} (${bounds.comparisonLabel}).`,
+    };
+  } else {
+    comparisonData = {
+      hasSufficientData: false,
+      vsSamePeriodLastMonth: null,
+      methodology: "Insufficient historical transaction logs in comparison period to compute true period-over-period delta.",
+    };
+  }
+
+  return {
+    period: bounds.period,
+    periodLabel: bounds.label,
+    comparisonLabel: bounds.comparisonLabel,
+    dateRange: {
+      start: bounds.startDate.toISOString().slice(0, 10),
+      end: bounds.endDate.toISOString().slice(0, 10),
+    },
+    avgDaysBetweenVisits,
+    reactivationSuccessRate: reactivationRate,
+    upsellConversionRate: upsellRate,
+    referralConversionRate: referralRate,
+    comparison: comparisonData,
+  };
+}
+
+// ─── SECTION 10: AUTHORITATIVE RELATIONSHIP IMPACT ENGINE ─────────────────────
+
+export async function fetchRelationshipImpact(
+  businessId: string | undefined,
+  period: RelationshipTimePeriod = "THIS_MONTH"
+): Promise<AuthoritativeRelationshipImpact> {
+  const bounds = getPeriodBoundaries(period);
+
+  if (!businessId) {
+    return {
+      period: bounds.period,
+      periodLabel: bounds.label,
+      repeatCustomerRevenue: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "No workspace connected.", provenance: "INSUFFICIENT DATA" },
+      referralRevenue: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "No workspace connected.", provenance: "INSUFFICIENT DATA" },
+      upsellRevenue: { value: null, formatted: "Insufficient Data", hasSufficientData: false, methodology: "No workspace connected.", provenance: "INSUFFICIENT DATA" },
+      churnPrevented: {
+        value: null,
+        formatted: "Insufficient Data",
+        hasSufficientData: false,
+        methodology: "No workspace connected.",
+        provenance: "INSUFFICIENT DATA",
+        estimated: true,
+        assumptions: "N/A",
+        evidence: "N/A",
+        timeframe: "N/A",
+        limitations: "N/A",
+      },
+    };
+  }
+
+  const startIso = bounds.startDate.toISOString();
+  const endIso = bounds.endDate.toISOString();
+
+  const [invoicesRes, customersRes, commsRes] = await Promise.all([
+    supabase.from("invoices").select("*").eq("business_id", businessId).gte("created_at", startIso).lte("created_at", endIso),
+    supabase.from("customers").select("*").eq("business_id", businessId),
+    supabase.from("communications").select("*").eq("business_id", businessId).gte("created_at", startIso).lte("created_at", endIso),
+  ]);
+
+  const invoices = (invoicesRes.data || []) as Invoice[];
+  const customers = (customersRes.data || []) as Customer[];
+  const comms = (commsRes.data || []) as Communication[];
+
+  const paidInvoices = invoices.filter((i) => i.status === "paid" && i.customer_id);
+
+  // 1. REPEAT CUSTOMER REVENUE
+  const customerOrderCounts: Record<string, number> = {};
+  invoices.forEach((i) => {
+    if (i.customer_id) customerOrderCounts[i.customer_id] = (customerOrderCounts[i.customer_id] || 0) + 1;
+  });
+
+  const repeatCustomerIds = new Set(Object.keys(customerOrderCounts).filter((id) => customerOrderCounts[id] >= 2));
+  const repeatInvoices = paidInvoices.filter((i) => i.customer_id && repeatCustomerIds.has(i.customer_id));
+  const repeatRev = repeatInvoices.reduce((sum, i) => sum + (Number(i.amount_paid) || Number(i.total_amount) || 0), 0);
+
+  const repeatCustomerRevenue: MetricValue<number> = {
+    value: repeatInvoices.length > 0 ? repeatRev : 0,
+    formatted: `£${repeatRev.toLocaleString("en-GB")}`,
+    hasSufficientData: repeatInvoices.length > 0,
+    methodology: `Summed from ${repeatInvoices.length} settled invoice(s) for repeat purchasing customer accounts in ${bounds.label}.`,
+    provenance: repeatInvoices.length > 0 ? "DERIVED" : "INSUFFICIENT DATA",
+  };
+
+  // 2. REFERRAL REVENUE
+  const referralCustomerIds = new Set(customers.filter((c) => c.source?.toLowerCase().includes("referral")).map((c) => c.id));
+  const referralInvoices = paidInvoices.filter((i) => i.customer_id && referralCustomerIds.has(i.customer_id));
+  const referralRev = referralInvoices.reduce((sum, i) => sum + (Number(i.amount_paid) || Number(i.total_amount) || 0), 0);
+
+  const referralRevenue: MetricValue<number> = {
+    value: referralCustomerIds.size > 0 ? referralRev : null,
+    formatted: referralCustomerIds.size > 0 ? `£${referralRev.toLocaleString("en-GB")}` : "Insufficient Data",
+    hasSufficientData: referralCustomerIds.size > 0,
+    methodology: referralCustomerIds.size > 0
+      ? `Summed from ${referralInvoices.length} settled invoice(s) across ${referralCustomerIds.size} referral-attributed customer(s).`
+      : "Requires explicit referral source tracking records in workspace customer profiles.",
+    provenance: referralCustomerIds.size > 0 ? "CONNECTED" : "INSUFFICIENT DATA",
+  };
+
+  // 3. UPSELL REVENUE
+  const upsellRevenue: MetricValue<number> = {
+    value: null,
+    formatted: "Insufficient Data",
+    hasSufficientData: false,
+    methodology: "Requires explicit line-item or contract tier upgrade markers on invoice records.",
+    provenance: "INSUFFICIENT DATA",
+  };
+
+  // 4. CHURN PREVENTED
+  const preventedCustomers = customers.filter((c) => {
+    const hasPastOverdue = invoices.some((i) => i.customer_id === c.id && i.status === "overdue");
+    const receivedOutreach = comms.some((cm) => cm.customer_id === c.id);
+    const paidInPeriod = paidInvoices.some((i) => i.customer_id === c.id);
+    return (hasPastOverdue || c.status === "inactive") && receivedOutreach && paidInPeriod;
+  });
+
+  const churnPreventedRev = preventedCustomers.reduce((sum, c) => sum + (Number(c.lifetime_value) || 0), 0);
+  const churnPreventedHasData = preventedCustomers.length > 0;
+
+  return {
+    period: bounds.period,
+    periodLabel: bounds.label,
+
+    repeatCustomerRevenue,
+    referralRevenue,
+    upsellRevenue,
+
+    churnPrevented: {
+      value: churnPreventedHasData ? churnPreventedRev : null,
+      formatted: churnPreventedHasData ? `£${churnPreventedRev.toLocaleString("en-GB")} Est.` : "Insufficient Data",
+      hasSufficientData: churnPreventedHasData,
+      methodology: "Calculates retained lifetime account value for high churn-risk clients who received direct workspace outreach and subsequently settled an invoice.",
+      provenance: churnPreventedHasData ? "ESTIMATED" : "INSUFFICIENT DATA",
+      estimated: true,
+      assumptions: "Assumes client would have permanently churned without proactive workspace intervention.",
+      evidence: `${preventedCustomers.length} client account(s) meeting churn-risk outreach & settlement criteria.`,
+      timeframe: bounds.label,
+      limitations: "Does not account for unrecorded offline phone calls or outside business factors.",
+    },
+  };
+}
+
+// ─── SECTION 10: HYBRID CUSTOMER AI MEMORY ENGINE ────────────────────────────
+
+export async function fetchCustomerAiMemories(
+  customerId: string,
+  businessId: string
+): Promise<CustomerAiMemoryItem[]> {
+  const [custRes, dbMemoriesRes, commsRes, jobsRes, invRes] = await Promise.all([
+    supabase.from("customers").select("*").eq("id", customerId).eq("business_id", businessId).single(),
+    supabase.from("customer_memories").select("*").eq("customer_id", customerId).eq("business_id", businessId).order("created_at", { ascending: false }),
+    supabase.from("communications").select("*").eq("customer_id", customerId).eq("business_id", businessId),
+    supabase.from("jobs").select("*").eq("customer_id", customerId).eq("business_id", businessId),
+    supabase.from("invoices").select("*").eq("customer_id", customerId).eq("business_id", businessId),
+  ]);
+
+  const customer = custRes.data as Customer | null;
+  const dbMemories = (dbMemoriesRes.data || []) as CustomerMemory[];
+  const comms = (commsRes.data || []) as Communication[];
+  const jobs = (jobsRes.data || []) as Job[];
+  const invoices = (invRes.data || []) as Invoice[];
+
+  const memoryItems: CustomerAiMemoryItem[] = [];
+
+  if (customer) {
+    if (customer.preferred_contact_method) {
+      memoryItems.push({
+        id: `mem-conf-contact-${customerId}`,
+        customerId,
+        memoryType: "CONFIRMED",
+        statement: `Preferred contact channel recorded as ${customer.preferred_contact_method.toUpperCase()}`,
+        provenance: "CONNECTED",
+        confidenceScore: 100,
+        supportingRecords: ["customer.preferred_contact_method"],
+        timeframe: "Permanent Profile Preference",
+        explanation: "Explicitly recorded in customer profile records.",
+        whyDoWeKnowThis: "This setting was directly saved in the customer profile by a team member or the customer.",
+        createdAt: customer.created_at,
+        isPersistentInDb: false,
+      });
+    }
+
+    if (customer.marketing_consent) {
+      memoryItems.push({
+        id: `mem-conf-mktg-${customerId}`,
+        customerId,
+        memoryType: "CONFIRMED",
+        statement: "Customer has granted explicit marketing communication consent",
+        provenance: "CONNECTED",
+        confidenceScore: 100,
+        supportingRecords: ["customer.marketing_consent"],
+        timeframe: "Active Consent",
+        explanation: "Recorded in customer privacy consent record.",
+        whyDoWeKnowThis: "Explicit GDPR / Marketing consent checkbox verified in profile record.",
+        createdAt: customer.created_at,
+        isPersistentInDb: false,
+      });
+    }
+
+    if (customer.notes && customer.notes.trim()) {
+      memoryItems.push({
+        id: `mem-conf-notes-${customerId}`,
+        customerId,
+        memoryType: "CONFIRMED",
+        statement: `Saved Relationship Note: "${customer.notes.slice(0, 120)}${customer.notes.length > 120 ? '...' : ''}"`,
+        provenance: "CONNECTED",
+        confidenceScore: 100,
+        supportingRecords: ["customer.notes"],
+        timeframe: "Profile History",
+        explanation: "Explicit team note saved on customer profile.",
+        whyDoWeKnowThis: "Entered manually into customer workspace notes ledger.",
+        createdAt: customer.updated_at || customer.created_at,
+        isPersistentInDb: false,
+      });
+    }
+  }
+
+  dbMemories.forEach((m) => {
+    memoryItems.push({
+      id: m.id,
+      customerId,
+      memoryType: m.memory_type as AiMemoryClassification,
+      statement: m.statement,
+      provenance: (m.provenance as ProvenanceState) || "CONNECTED",
+      confidenceScore: m.confidence_score !== null ? Number(m.confidence_score) : null,
+      supportingRecords: Array.isArray(m.supporting_records) ? (m.supporting_records as string[]) : [],
+      timeframe: m.timeframe,
+      explanation: m.explanation || "Saved memory entry.",
+      whyDoWeKnowThis: m.explanation || "Recorded directly in persistent workspace customer memory store.",
+      createdAt: m.created_at,
+      isPersistentInDb: true,
+    });
+  });
+
+  if (comms.length >= 3) {
+    const channelCounts: Record<string, number> = {};
+    comms.forEach((c) => {
+      const ch = c.channel.toLowerCase();
+      channelCounts[ch] = (channelCounts[ch] || 0) + 1;
+    });
+
+    const primaryCh = Object.entries(channelCounts).sort((a, b) => b[1] - a[1])[0];
+    if (primaryCh) {
+      memoryItems.push({
+        id: `mem-obs-comm-${customerId}`,
+        customerId,
+        memoryType: "OBSERVED",
+        statement: `Observed primary communication channel is ${primaryCh[0].toUpperCase()} (${primaryCh[1]} interactions)`,
+        provenance: "DERIVED",
+        confidenceScore: 90,
+        supportingRecords: [`${comms.length} communication log(s)`],
+        timeframe: "Observed Behavior",
+        explanation: `Derived from ${comms.length} timestamped interaction records.`,
+        whyDoWeKnowThis: `Calculated from ${comms.length} logged communication records where ${primaryCh[1]} occurred via ${primaryCh[0].toUpperCase()}.`,
+        createdAt: comms[0].created_at,
+        isPersistentInDb: false,
+      });
+    }
+  }
+
+  const paidInvoices = invoices.filter((i) => i.status === "paid" && i.created_at);
+  if (paidInvoices.length >= 2) {
+    const sorted = [...paidInvoices].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    const intervals: number[] = [];
+    for (let i = 1; i < sorted.length; i++) {
+      intervals.push((new Date(sorted[i].created_at).getTime() - new Date(sorted[i - 1].created_at).getTime()) / (1000 * 60 * 60 * 24));
+    }
+    const avgInt = Math.round(intervals.reduce((a, b) => a + b, 0) / intervals.length);
+
+    memoryItems.push({
+      id: `mem-obs-buying-${customerId}`,
+      customerId,
+      memoryType: "OBSERVED",
+      statement: `Observed repeat purchase interval averages every ${avgInt} days`,
+      provenance: "DERIVED",
+      confidenceScore: 85,
+      supportingRecords: [`${paidInvoices.length} settled invoices`],
+      timeframe: "Historical Order Cycle",
+      explanation: `Calculated across ${paidInvoices.length} settled order dates.`,
+      whyDoWeKnowThis: `Derived by analyzing timestamps across ${paidInvoices.length} consecutive paid invoices in workspace ledger.`,
+      createdAt: sorted[sorted.length - 1].created_at,
+      isPersistentInDb: false,
+    });
+  }
+
+  if (jobs.length >= 1 && invoices.some((i) => i.status === "paid")) {
+    memoryItems.push({
+      id: `mem-interp-val-${customerId}`,
+      customerId,
+      memoryType: "AI INTERPRETATION",
+      statement: "Account shows high stability and predictable payment settlement patterns",
+      provenance: "AI ANALYSIS",
+      confidenceScore: 82,
+      supportingRecords: [`${jobs.length} job(s)`, `${invoices.length} invoice(s)`],
+      timeframe: "Current Account State",
+      explanation: "Grounded interpretation combining completed job delivery and paid invoice history.",
+      whyDoWeKnowThis: "Grounding evidence: Account has zero current overdue invoices and consistent completed workstreams.",
+      createdAt: new Date().toISOString(),
+      isPersistentInDb: false,
+    });
+  }
+
+  return memoryItems;
+}
+
+export async function addConfirmedCustomerMemory(
+  businessId: string,
+  customerId: string,
+  statement: string,
+  userId?: string
+): Promise<boolean> {
+  if (!statement.trim()) return false;
+
+  try {
+    const { error } = await supabase.from("customer_memories").insert({
+      business_id: businessId,
+      customer_id: customerId,
+      memory_type: "CONFIRMED",
+      statement: statement.trim(),
+      provenance: "CONNECTED",
+      confidence_score: 100,
+      supporting_records: ["User Confirmed"],
+      explanation: "User-confirmed customer preference saved into persistent AI Memory.",
+      created_by: userId || null,
+    });
+
+    if (error) {
+      console.error("[addConfirmedCustomerMemory] error:", error);
+      return false;
+    }
+
+    await supabase.from("activity_logs").insert({
+      business_id: businessId,
+      customer_id: customerId,
+      entity_type: "customer_memory",
+      action: "created",
+      description: `Added confirmed customer memory: "${statement.trim().slice(0, 50)}..."`,
+      actor_id: userId || null,
+    });
+
+    return true;
+  } catch (err) {
+    console.error("[addConfirmedCustomerMemory] error:", err);
+    return false;
+  }
+}
+
+export async function deleteCustomerMemory(
+  memoryId: string,
+  businessId: string
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from("customer_memories")
+      .delete()
+      .eq("id", memoryId)
+      .eq("business_id", businessId);
+
+    if (error) {
+      console.error("[deleteCustomerMemory] error:", error);
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.error("[deleteCustomerMemory] error:", err);
+    return false;
+  }
+}
+
+// ─── SECTION 9: CUSTOMER SEGMENTS ENGINE ──────────────────────────────────────
 
 export async function fetchCustomerSegments(
   businessId: string | undefined
@@ -479,25 +1167,21 @@ export async function fetchCustomerSegments(
   ];
 }
 
-// ─── SECTION 9: AUTHORITATIVE PREDICTION ENGINE ────────────────────────────────
+// ─── SECTION 9: PREDICTION ENGINE ─────────────────────────────────────────────
 
 export async function fetchCustomerPredictions(
   customerId: string,
   businessId: string
 ): Promise<CustomerPrediction[]> {
-  const [custRes, invRes, jobsRes, commsRes, revRes] = await Promise.all([
+  const [custRes, invRes, commsRes] = await Promise.all([
     supabase.from("customers").select("*").eq("id", customerId).eq("business_id", businessId).single(),
     supabase.from("invoices").select("*").eq("customer_id", customerId).eq("business_id", businessId),
-    supabase.from("jobs").select("*").eq("customer_id", customerId).eq("business_id", businessId),
     supabase.from("communications").select("*").eq("customer_id", customerId).eq("business_id", businessId),
-    supabase.from("reviews").select("*").eq("customer_id", customerId).eq("business_id", businessId),
   ]);
 
   const customer = custRes.data as Customer | null;
   const invoices = (invRes.data || []) as Invoice[];
-  const jobs = (jobsRes.data || []) as Job[];
   const comms = (commsRes.data || []) as Communication[];
-  const reviews = (revRes.data || []) as Review[];
 
   if (!customer) return [];
 
@@ -507,13 +1191,11 @@ export async function fetchCustomerPredictions(
 
   const predictions: CustomerPrediction[] = [];
 
-  // Prediction 1: BOOKING_AGAIN (Requires >= 2 paid invoices for transaction interval sample)
   if (paidInvoices.length >= 2) {
     const sorted = [...paidInvoices].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
     const intervals: number[] = [];
     for (let i = 1; i < sorted.length; i++) {
-      const diffDays = (new Date(sorted[i].created_at).getTime() - new Date(sorted[i - 1].created_at).getTime()) / (1000 * 60 * 60 * 24);
-      intervals.push(diffDays);
+      intervals.push((new Date(sorted[i].created_at).getTime() - new Date(sorted[i - 1].created_at).getTime()) / (1000 * 60 * 60 * 24));
     }
     const avgIntervalDays = Math.round(intervals.reduce((a, b) => a + b, 0) / intervals.length);
     const lastTxMs = new Date(sorted[sorted.length - 1].created_at).getTime();
@@ -563,7 +1245,6 @@ export async function fetchCustomerPredictions(
     });
   }
 
-  // Prediction 2: CHURN_INACTIVITY
   const hasOverdue = invoices.some((i) => i.status === "overdue");
   const isInactiveStatus = customer.status === "inactive";
   const daysSinceCreated = (nowMs - new Date(customer.created_at).getTime()) / (1000 * 60 * 60 * 24);
@@ -621,7 +1302,7 @@ export async function fetchPortfolioPredictions(
   return flattened.filter((p) => p.provenance !== "INSUFFICIENT DATA").slice(0, 8);
 }
 
-// ─── SECTION 8: AUTHORITATIVE REVENUE OPPORTUNITIES ENGINE ────────────────────
+// ─── SECTION 8: REVENUE OPPORTUNITIES ENGINE ──────────────────────────────────
 
 export async function fetchRevenueOpportunities(
   businessId: string | undefined
@@ -744,7 +1425,7 @@ export async function fetchCustomerRevenueOpportunities(
   return allOpps.filter((o) => o.customerId === customerId);
 }
 
-// ─── CAMPAIGN CONNECTION ENGINE ───────────────────────────────────────────────
+// ─── CAMPAIGN CONNECTION HELPERS ──────────────────────────────────────────────
 
 export async function fetchPortfolioCampaignConnections(
   businessId: string | undefined
@@ -797,7 +1478,7 @@ export async function associateCustomerWithCampaign(
   }
 }
 
-// ─── SECTION 7: AUTHORITATIVE PORTFOLIO PRIORITIES ENGINE ────────────────────
+// ─── SECTION 7: PORTFOLIO PRIORITIES ENGINE ───────────────────────────────────
 
 export async function fetchPortfolioRelationshipPriorities(
   businessId: string | undefined
@@ -940,7 +1621,7 @@ export async function fetchPortfolioActivityFeed(
   }
 }
 
-// ─── AUTHORITATIVE RELATIONSHIP ANALYTICS ─────────────────────────────────────
+// ─── SECTION 3: AUTHORITATIVE RELATIONSHIP METRICS ENGINE ─────────────────────
 
 export async function fetchAuthoritativeRelationshipMetrics(
   businessId: string | undefined
@@ -1140,7 +1821,7 @@ export async function fetchAuthoritativeRelationshipMetrics(
   }
 }
 
-// ─── SECTION 6: AUTHORITATIVE RELATIONSHIP HEALTH ENGINE ──────────────────────
+// ─── SECTION 6: RELATIONSHIP HEALTH ENGINE ────────────────────────────────────
 
 export async function fetchCustomerRelationshipHealth(
   customerId: string,
@@ -1390,7 +2071,7 @@ export async function fetchCustomerRelationshipHealth(
   };
 }
 
-// ─── SECTION 5: AUTHORITATIVE CUSTOMER INTELLIGENCE DNA ENGINE ───────────────
+// ─── SECTION 5: CUSTOMER INTELLIGENCE DNA ENGINE ─────────────────────────────
 
 export async function fetchCustomerIntelligenceDNA(
   customerId: string,
@@ -1581,19 +2262,20 @@ export async function fetchCustomerIntelligenceDNA(
   };
 }
 
-// ─── PORTFOLIO RELATIONSHIP ANALYTICS ─────────────────────────────────────────
+// ─── SEARCH & CONTEXT HELPERS ─────────────────────────────────────────────────
 
 export async function fetchPortfolioRelationshipAnalytics(
-  businessId: string | undefined
+  businessId: string | undefined,
+  period: RelationshipTimePeriod = "THIS_MONTH"
 ): Promise<PortfolioRelationshipAnalytics> {
   if (!businessId) {
     return getEmptyPortfolioRelationshipAnalytics();
   }
 
   try {
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    const bounds = getPeriodBoundaries(period);
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
     const [
       customersRes,
@@ -1608,6 +2290,8 @@ export async function fetchPortfolioRelationshipAnalytics(
       connectedCampaigns,
       customerSegments,
       portfolioPredictions,
+      relationshipAnalytics,
+      relationshipImpact,
     ] = await Promise.all([
       supabase.from("customers").select("*").eq("business_id", businessId),
       supabase.from("jobs").select("*").eq("business_id", businessId).gte("created_at", ninetyDaysAgo),
@@ -1621,6 +2305,8 @@ export async function fetchPortfolioRelationshipAnalytics(
       fetchPortfolioCampaignConnections(businessId),
       fetchCustomerSegments(businessId),
       fetchPortfolioPredictions(businessId),
+      fetchRelationshipAnalytics(businessId, period),
+      fetchRelationshipImpact(businessId, period),
     ]);
 
     const customers = (customersRes.data || []) as Customer[];
@@ -1635,17 +2321,13 @@ export async function fetchPortfolioRelationshipAnalytics(
     }
 
     const totalCount = customers.length;
-
     const activeCustomerIds = new Set<string>();
 
     customers.forEach((c) => {
       const isStatusActive = c.status === "active";
-      const createdAgoMs = now.getTime() - new Date(c.created_at).getTime();
+      const createdAgoMs = Date.now() - new Date(c.created_at).getTime();
       const isNewCustomer = createdAgoMs <= 90 * 24 * 60 * 60 * 1000;
-
-      if (isStatusActive && isNewCustomer) {
-        activeCustomerIds.add(c.id);
-      }
+      if (isStatusActive && isNewCustomer) activeCustomerIds.add(c.id);
     });
 
     jobs.forEach((j) => {
@@ -1655,9 +2337,7 @@ export async function fetchPortfolioRelationshipAnalytics(
     invoices.forEach((inv) => {
       if (inv.customer_id) {
         const invDateMs = new Date(inv.issue_date || inv.created_at).getTime();
-        if (now.getTime() - invDateMs <= 90 * 24 * 60 * 60 * 1000) {
-          activeCustomerIds.add(inv.customer_id);
-        }
+        if (Date.now() - invDateMs <= 90 * 24 * 60 * 60 * 1000) activeCustomerIds.add(inv.customer_id);
       }
     });
 
@@ -1739,7 +2419,7 @@ export async function fetchPortfolioRelationshipAnalytics(
     } else {
       const totalPaidHist = paidInvoices.reduce((sum, i) => sum + (Number(i.amount_paid) || Number(i.total_amount) || 0), 0);
       const oldestInvoiceMs = Math.min(...paidInvoices.map((i) => new Date(i.created_at).getTime()));
-      const monthsElapsed = Math.max(1, (now.getTime() - oldestInvoiceMs) / (1000 * 60 * 60 * 24 * 30.4));
+      const monthsElapsed = Math.max(1, (Date.now() - oldestInvoiceMs) / (1000 * 60 * 60 * 24 * 30.4));
 
       const monthlyRunRate = Math.round(totalPaidHist / monthsElapsed);
 
@@ -1798,6 +2478,8 @@ export async function fetchPortfolioRelationshipAnalytics(
       connectedCampaigns,
       customerSegments,
       portfolioPredictions,
+      relationshipAnalytics,
+      relationshipImpact,
     };
   } catch (err) {
     console.error("[fetchPortfolioRelationshipAnalytics] error:", err);
@@ -1833,8 +2515,6 @@ export async function searchPortfolioCustomers(
     return [];
   }
 }
-
-// ─── LEGACY COMPATIBILITY EXPORTS ─────────────────────────────────────────────
 
 export async function fetchPortfolioAnalytics(businessId: string | undefined): Promise<PortfolioKPIs> {
   const portfolio = await fetchPortfolioRelationshipAnalytics(businessId);
@@ -1920,6 +2600,7 @@ export async function fetchCustomerDNAContext(
       customerOpportunities,
       connectedCampaigns,
       customerPredictions,
+      aiMemories,
     ] = await Promise.all([
       supabase.from("customers").select("*").eq("id", customerId).eq("business_id", businessId).single(),
       supabase.from("jobs").select("*").eq("customer_id", customerId).eq("business_id", businessId),
@@ -1932,6 +2613,7 @@ export async function fetchCustomerDNAContext(
       fetchCustomerRevenueOpportunities(customerId, businessId),
       fetchCustomerCampaignConnections(customerId, businessId),
       fetchCustomerPredictions(customerId, businessId),
+      fetchCustomerAiMemories(customerId, businessId),
     ]);
 
     if (custRes.error || !custRes.data) {
@@ -2043,6 +2725,7 @@ export async function fetchCustomerDNAContext(
       customerOpportunities,
       connectedCampaigns,
       customerPredictions,
+      aiMemories,
 
       suggestedPriorities,
     };

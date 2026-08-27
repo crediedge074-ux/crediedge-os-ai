@@ -954,6 +954,46 @@ export interface Database {
         };
         Relationships: [];
       };
+      customer_memories: {
+        Row: {
+          id: string;
+          created_at: string;
+          updated_at: string;
+          business_id: string;
+          customer_id: string;
+          memory_type: "CONFIRMED" | "OBSERVED" | "AI INTERPRETATION";
+          statement: string;
+          provenance: string;
+          confidence_score: number | null;
+          supporting_records: Json;
+          timeframe: string | null;
+          explanation: string | null;
+          created_by: string | null;
+        };
+        Insert: {
+          business_id: string;
+          customer_id: string;
+          memory_type: "CONFIRMED" | "OBSERVED" | "AI INTERPRETATION";
+          statement: string;
+          provenance?: string;
+          confidence_score?: number | null;
+          supporting_records?: Json;
+          timeframe?: string | null;
+          explanation?: string | null;
+          created_by?: string | null;
+        };
+        Update: {
+          memory_type?: "CONFIRMED" | "OBSERVED" | "AI INTERPRETATION";
+          statement?: string;
+          provenance?: string;
+          confidence_score?: number | null;
+          supporting_records?: Json;
+          timeframe?: string | null;
+          explanation?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -1017,3 +1057,5 @@ export type Integration = Database["public"]["Tables"]["integrations"]["Row"];
 
 export type AppRelease = Database["public"]["Tables"]["app_releases"]["Row"];
 export type UserReleaseRead = Database["public"]["Tables"]["user_release_reads"]["Row"];
+export type CustomerMemory = Database["public"]["Tables"]["customer_memories"]["Row"];
+export type CustomerMemoryInsert = Database["public"]["Tables"]["customer_memories"]["Insert"];
