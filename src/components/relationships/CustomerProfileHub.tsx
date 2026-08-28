@@ -31,6 +31,8 @@ import {
   Target,
   Eye,
   Trash2,
+  MoreHorizontal,
+  ArrowRight,
 } from "lucide-react";
 import type { Customer } from "@/lib/database.types";
 import type { CustomerDNAContext } from "@/services/relationshipAnalytics";
@@ -54,7 +56,17 @@ interface CustomerProfileHubProps {
   onRefresh: () => void;
 }
 
-type ProfileTab = "overview" | "predictions" | "opportunities" | "intelligence" | "memories" | "jobs" | "invoices" | "comms" | "reviews" | "notes";
+type ProfileTab =
+  | "overview"
+  | "intelligence"
+  | "jobs"
+  | "invoices"
+  | "predictions"
+  | "opportunities"
+  | "memories"
+  | "comms"
+  | "reviews"
+  | "notes";
 
 export function CustomerProfileHub({
   customer,
@@ -66,6 +78,8 @@ export function CustomerProfileHub({
   onRefresh,
 }: CustomerProfileHubProps) {
   const [activeTab, setActiveTab] = useState<ProfileTab>("overview");
+  const [moreDropdownOpen, setMoreDropdownOpen] = useState(false);
+
   const name = customer.full_name || `${customer.first_name || ""} ${customer.last_name || ""}`.trim() || "Customer";
   const initials = name.slice(0, 2).toUpperCase();
 
@@ -81,6 +95,11 @@ export function CustomerProfileHub({
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDueDate, setTaskDueDate] = useState("");
   const [addingTask, setSavingTask] = useState(false);
+
+  // Memory creation state
+  const [newMemoryStatement, setNewMemoryStatement] = useState("");
+  const [savingMemory, setSavingMemory] = useState(false);
+  const [expandedMemoryId, setExpandedMemoryId] = useState<string | null>(null);
 
   const handleLinkCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,7 +141,7 @@ export function CustomerProfileHub({
 
       if (error) throw error;
 
-      toast.success("Relationship note appended successfully.");
+      toast.success("Relationship note saved.");
       setNoteText("");
       appEvents.emit(APP_EVENTS.CUSTOMERS_MUTATED);
       onRefresh();
@@ -150,7 +169,7 @@ export function CustomerProfileHub({
 
       if (error) throw error;
 
-      toast.success("Task created and linked to customer profile.");
+      toast.success("Task created for customer.");
       setTaskTitle("");
       setTaskDueDate("");
       appEvents.emit(APP_EVENTS.TASKS_MUTATED);
@@ -161,17 +180,6 @@ export function CustomerProfileHub({
       setSavingTask(false);
     }
   };
-
-  const intel = context?.intelligenceDna;
-  const opps = context?.customerOpportunities || [];
-  const campaigns = context?.connectedCampaigns || [];
-  const preds = context?.customerPredictions || [];
-  const memories = context?.aiMemories || [];
-
-  // Memory creation state
-  const [newMemoryStatement, setNewMemoryStatement] = useState("");
-  const [savingMemory, setSavingMemory] = useState(false);
-  const [expandedMemoryId, setExpandedMemoryId] = useState<string | null>(null);
 
   const handleAddMemory = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -209,26 +217,51 @@ export function CustomerProfileHub({
     }
   };
 
+  const intel = context?.intelligenceDna;
+  const opps = context?.customerOpportunities || [];
+  const campaigns = context?.connectedCampaigns || [];
+  const preds = context?.customerPredictions || [];
+  const memories = context?.aiMemories || [];
+  const activity = context?.activityTimeline || [];
+
+  const primaryTabs: { id: ProfileTab; label: string; icon: any; count?: number }[] = [
+    { id: "overview", label: "Overview", icon: CircleDollarSign },
+    { id: "intelligence", label: "Intelligence DNA", icon: Brain },
+    { id: "jobs", label: "Jobs", icon: Briefcase, count: context?.connectedJobs.length },
+    { id: "invoices", label: "Invoices", icon: FileText, count: context?.connectedInvoices.length },
+  ];
+
+  const secondaryTabs: { id: ProfileTab; label: string; icon: any; count?: number }[] = [
+    { id: "predictions", label: "AI Predictions", icon: Zap, count: preds.length },
+    { id: "opportunities", label: "Opportunities", icon: TrendingUp, count: opps.length },
+    { id: "memories", label: "AI Memory", icon: Brain, count: memories.length },
+    { id: "comms", label: "Communications", icon: MessageSquare, count: context?.connectedComms.length },
+    { id: "reviews", label: "Reviews", icon: Star, count: context?.connectedReviews.length },
+    { id: "notes", label: "Notes & Consent", icon: FileText },
+  ];
+
+  const isSecondaryActive = secondaryTabs.some((t) => t.id === activeTab);
+
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden bg-card">
       {/* Profile Header Bar */}
-      <div className="flex items-center justify-between border-b border-border p-5 bg-card">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between border-b border-border p-6 bg-card">
+        <div className="flex items-center gap-4">
           <button
             type="button"
             onClick={onBackToList}
-            className="lg:hidden grid h-8 w-8 place-items-center rounded-xl border border-border text-muted-foreground hover:bg-secondary"
+            className="lg:hidden grid h-9 w-9 place-items-center rounded-xl border border-border text-muted-foreground hover:bg-secondary"
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
 
-          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-foreground text-background text-[15px] font-black">
+          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-foreground text-background text-[15px] font-black shadow-soft">
             {initials}
           </div>
 
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-[18px] font-bold tracking-tight text-foreground">{name}</h2>
+              <h2 className="text-[19px] font-bold tracking-tight text-foreground">{name}</h2>
               <span className={`rounded-full px-2.5 py-0.5 text-[9.5px] font-extrabold uppercase ${
                 customer.status === "active" ? "bg-emerald-500/10 text-emerald-500" : "bg-secondary text-muted-foreground"
               }`}>
@@ -241,20 +274,20 @@ export function CustomerProfileHub({
               )}
             </div>
 
-            <div className="mt-1 flex flex-wrap items-center gap-3 text-[11.5px] text-muted-foreground">
+            <div className="mt-1 flex flex-wrap items-center gap-4 text-[12px] text-muted-foreground">
               {customer.email && (
-                <span className="flex items-center gap-1">
-                  <Mail className="h-3 w-3" /> {customer.email}
+                <span className="flex items-center gap-1.5">
+                  <Mail className="h-3.5 w-3.5" /> {customer.email}
                 </span>
               )}
               {customer.phone && (
-                <span className="flex items-center gap-1">
-                  <Phone className="h-3 w-3" /> {customer.phone}
+                <span className="flex items-center gap-1.5">
+                  <Phone className="h-3.5 w-3.5" /> {customer.phone}
                 </span>
               )}
               {customer.city && (
-                <span className="flex items-center gap-1">
-                  <MapPin className="h-3 w-3" /> {customer.city}
+                <span className="flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5" /> {customer.city}
                 </span>
               )}
             </div>
@@ -264,105 +297,194 @@ export function CustomerProfileHub({
         <button
           type="button"
           onClick={onEdit}
-          className="flex items-center gap-1.5 rounded-xl border border-border px-3.5 py-2 text-[12px] font-semibold text-foreground hover:bg-secondary transition-colors"
+          className="flex items-center gap-1.5 rounded-xl border border-border px-4 py-2 text-[12px] font-semibold text-foreground hover:bg-secondary transition-colors"
         >
           <Edit3 className="h-3.5 w-3.5" /> Edit Record
         </button>
       </div>
 
-      {/* Navigation Tabs */}
-      <div className="flex items-center gap-1 border-b border-border bg-secondary/20 px-5 overflow-x-auto text-[12px] font-semibold">
-        {[
-          { id: "overview", label: "Overview", icon: CircleDollarSign },
-          { id: "predictions", label: `AI Predictions (${preds.length})`, icon: Zap },
-          { id: "opportunities", label: `Opportunities (${opps.length})`, icon: TrendingUp },
-          { id: "intelligence", label: "Customer Intelligence DNA", icon: Brain },
-          { id: "memories", label: `AI Memory (${context?.aiMemories?.length ?? 0})`, icon: Brain },
-          { id: "jobs", label: `Jobs (${context?.connectedJobs.length ?? 0})`, icon: Briefcase },
-          { id: "invoices", label: `Invoices (${context?.connectedInvoices.length ?? 0})`, icon: FileText },
-          { id: "comms", label: `Communications (${context?.connectedComms.length ?? 0})`, icon: MessageSquare },
-          { id: "reviews", label: `Reviews (${context?.connectedReviews.length ?? 0})`, icon: Star },
-          { id: "notes", label: "Notes & Consent", icon: FileText },
-        ].map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
+      {/* Responsive Workspace Navigation Bar */}
+      <div className="flex items-center justify-between border-b border-border bg-secondary/15 px-6 text-[12.5px] font-semibold">
+        <div className="flex items-center gap-2">
+          {primaryTabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  setMoreDropdownOpen(false);
+                }}
+                className={`flex items-center gap-2 border-b-2 px-3.5 py-3.5 transition-colors shrink-0 ${
+                  isActive
+                    ? "border-brand text-brand font-bold"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                <span>{tab.label}</span>
+                {tab.count !== undefined && (
+                  <span className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${isActive ? "bg-brand/10 text-brand" : "bg-secondary text-muted-foreground"}`}>
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+
+          {/* More Menu Dropdown */}
+          <div className="relative">
             <button
-              key={tab.id}
               type="button"
-              onClick={() => setActiveTab(tab.id as ProfileTab)}
-              className={`flex items-center gap-1.5 border-b-2 px-3 py-3 transition-colors shrink-0 ${
-                isActive
+              onClick={() => setMoreDropdownOpen(!moreDropdownOpen)}
+              className={`flex items-center gap-1.5 border-b-2 px-3.5 py-3.5 transition-colors ${
+                isSecondaryActive
                   ? "border-brand text-brand font-bold"
                   : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
-              <Icon className="h-3.5 w-3.5" /> {tab.label}
+              <MoreHorizontal className="h-4 w-4" />
+              <span>More</span>
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${moreDropdownOpen ? "rotate-180" : ""}`} />
             </button>
-          );
-        })}
+
+            {moreDropdownOpen && (
+              <div className="absolute left-0 top-12 z-50 min-w-[200px] rounded-xl border border-border bg-card p-1.5 shadow-2xl text-foreground divide-y divide-border/40">
+                {secondaryTabs.map((tab) => {
+                  const Icon = tab.icon;
+                  const isActive = activeTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveTab(tab.id);
+                        setMoreDropdownOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between p-2.5 rounded-lg text-left text-[12px] font-medium transition-colors ${
+                        isActive ? "bg-brand/10 text-brand font-bold" : "hover:bg-secondary/40 text-foreground"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Icon className="h-3.5 w-3.5" />
+                        <span>{tab.label}</span>
+                      </div>
+                      {tab.count !== undefined && (
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase">{tab.count}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Tab Content Panel */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      <div className="flex-1 overflow-y-auto p-8 space-y-8">
         {loadingContext ? (
-          <div className="p-12 text-center text-xs text-muted-foreground italic">
-            Fetching customer profile intelligence...
+          <div className="p-16 text-center text-xs text-muted-foreground italic">
+            Fetching customer profile workspace...
           </div>
         ) : activeTab === "overview" && context ? (
-          <div className="space-y-6">
-            {/* KPI Overview Cards */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="rounded-2xl border border-border bg-card p-4 shadow-soft">
-                <div className="text-[11px] font-medium text-muted-foreground">Lifetime Value</div>
-                <div className="mt-1 text-[22px] font-bold text-foreground">
+          /* ─── CUSTOMER COMMAND CENTRE OVERVIEW ────────────────────────────── */
+          <div className="space-y-8 max-w-5xl">
+            {/* Top KPI Metrics Row (Restrained & De-cluttered) */}
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div className="space-y-1">
+                <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Lifetime Value</div>
+                <div className="text-[24px] font-extrabold text-foreground">
                   £{Number(customer.lifetime_value || 0).toLocaleString("en-GB")}
                 </div>
-                <div className="mt-0.5 text-[10.5px] text-muted-foreground">Workspace collection history</div>
+                <div className="text-[11px] text-muted-foreground">Settled financial history</div>
               </div>
 
-              <div className="rounded-2xl border border-border bg-card p-4 shadow-soft">
+              <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-medium text-muted-foreground">Relationship Health</span>
-                  <span className="rounded bg-brand/10 px-1 py-0.2 text-[8.5px] font-extrabold text-brand uppercase">
+                  <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Relationship Health</span>
+                  <span className="rounded bg-brand/10 px-1.5 py-0.2 text-[8.5px] font-extrabold text-brand uppercase">
                     {context.authoritativeHealth.provenance}
                   </span>
                 </div>
-                <div className="mt-1 text-[22px] font-bold text-foreground">
+                <div className="text-[24px] font-extrabold text-foreground">
                   {context.authoritativeHealth.overallScore !== null ? `${context.authoritativeHealth.overallScore} / 100` : "N/A"}
                   <span className="ml-2 text-[12px] font-bold text-brand uppercase">{context.authoritativeHealth.overallLabel}</span>
                 </div>
-                <div className="mt-0.5 text-[10.5px] text-muted-foreground truncate">{context.authoritativeHealth.explanation.summary}</div>
+                <div className="text-[11px] text-muted-foreground truncate">{context.authoritativeHealth.explanation.summary}</div>
               </div>
 
-              <div className="rounded-2xl border border-border bg-card p-4 shadow-soft">
-                <div className="text-[11px] font-medium text-muted-foreground">Unpaid Balance</div>
-                <div className={`mt-1 text-[22px] font-bold ${context.unpaidBalance > 0 ? "text-red-500" : "text-emerald-500"}`}>
+              <div className="space-y-1">
+                <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Unpaid Balance</div>
+                <div className={`text-[24px] font-extrabold ${context.unpaidBalance > 0 ? "text-red-500" : "text-emerald-500"}`}>
                   £{context.unpaidBalance.toLocaleString("en-GB")}
                 </div>
-                <div className="mt-0.5 text-[10.5px] text-muted-foreground">Active open invoices</div>
+                <div className="text-[11px] text-muted-foreground">Active open invoices</div>
               </div>
 
-              <div className="rounded-2xl border border-border bg-card p-4 shadow-soft">
-                <div className="text-[11px] font-medium text-muted-foreground">Preferred Channel</div>
-                <div className="mt-1 text-[22px] font-bold text-foreground">{context.preferredChannel}</div>
-                <div className="mt-0.5 text-[10.5px] text-muted-foreground">Customer contact rule</div>
+              <div className="space-y-1">
+                <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Preferred Channel</div>
+                <div className="text-[24px] font-extrabold text-foreground">{context.preferredChannel}</div>
+                <div className="text-[11px] text-muted-foreground">Contact rule</div>
               </div>
             </div>
 
-            {/* Campaign Connection Block */}
-            <div className="rounded-2xl border border-border bg-card p-5 shadow-soft space-y-3">
-              <div className="flex items-center justify-between border-b border-border/60 pb-3">
+            <hr className="border-border/60" />
+
+            {/* Compact Recent Activity Preview */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Target className="h-4 w-4 text-brand" />
-                  <span className="text-[13.5px] font-bold text-foreground">Associated Campaigns ({campaigns.length})</span>
+                  <Clock className="h-4 w-4 text-brand" />
+                  <h3 className="text-[14px] font-bold text-foreground">Recent Activity</h3>
                 </div>
+                {activity.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("comms")}
+                    className="flex items-center gap-1 text-[11.5px] font-semibold text-brand hover:underline"
+                  >
+                    View all <ArrowRight className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+
+              {activity.length === 0 ? (
+                <div className="p-4 text-xs text-muted-foreground italic bg-secondary/15 rounded-xl">
+                  No recent customer activity logs recorded.
+                </div>
+              ) : (
+                <div className="divide-y divide-border/50 border border-border/60 rounded-xl bg-card">
+                  {activity.slice(0, 3).map((act) => (
+                    <div key={act.id} className="p-3.5 flex items-center justify-between text-[12px]">
+                      <div>
+                        <div className="font-semibold text-foreground">{act.description}</div>
+                        <div className="text-[10.5px] text-muted-foreground">Action: {act.action}</div>
+                      </div>
+                      <span className="text-[10.5px] text-muted-foreground">
+                        {new Date(act.created_at).toLocaleDateString("en-GB", { month: "short", day: "numeric" })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <hr className="border-border/60" />
+
+            {/* Campaign Association Block */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Target className="h-4 w-4 text-brand" />
+                <h3 className="text-[14px] font-bold text-foreground">Associated Campaigns ({campaigns.length})</h3>
               </div>
 
               {campaigns.length === 0 ? (
                 <div className="text-xs text-muted-foreground italic">No active campaigns linked to this customer account.</div>
               ) : (
-                <div className="divide-y divide-border border border-border rounded-xl">
+                <div className="divide-y divide-border border border-border/60 rounded-xl">
                   {campaigns.map((camp) => (
                     <div key={camp.id} className="p-3 flex items-center justify-between text-xs">
                       <div>
@@ -375,7 +497,6 @@ export function CustomerProfileHub({
                 </div>
               )}
 
-              {/* Add Customer to Campaign Form */}
               {context && context.connectedCampaigns && (
                 <form onSubmit={handleLinkCampaign} className="pt-2 flex items-center gap-2">
                   <select
@@ -401,46 +522,48 @@ export function CustomerProfileHub({
               )}
             </div>
 
-            {/* Quick Action Forms: Append Note & Create Task */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <form onSubmit={handleAddNote} className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-3">
-                <div className="text-[12.5px] font-bold text-foreground">Append Relationship Note</div>
+            <hr className="border-border/60" />
+
+            {/* Quick Actions: Note & Task */}
+            <div className="grid gap-6 sm:grid-cols-2">
+              <form onSubmit={handleAddNote} className="space-y-3">
+                <div className="text-[13px] font-bold text-foreground">Append Relationship Note</div>
                 <textarea
                   value={noteText}
                   onChange={(e) => setNoteText(e.target.value)}
-                  placeholder="Record customer preferences, phone call notes, or follow-up details..."
+                  placeholder="Record customer preferences, call notes, or follow-up details..."
                   rows={2}
-                  className="w-full rounded-xl border border-border bg-card p-2.5 text-[12px] text-foreground focus:outline-none"
+                  className="w-full rounded-xl border border-border bg-card p-3 text-[12px] text-foreground focus:outline-none focus:ring-1 focus:ring-brand"
                 />
                 <button
                   type="submit"
                   disabled={addingNote}
-                  className="rounded-xl bg-brand px-4 py-1.5 text-[11.5px] font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                  className="rounded-xl bg-brand px-4 py-2 text-[11.5px] font-semibold text-white hover:opacity-90 disabled:opacity-50"
                 >
                   {addingNote ? "Saving..." : "Save Note"}
                 </button>
               </form>
 
-              <form onSubmit={handleAddTask} className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-3">
-                <div className="text-[12.5px] font-bold text-foreground">Create Task for Customer</div>
+              <form onSubmit={handleAddTask} className="space-y-3">
+                <div className="text-[13px] font-bold text-foreground">Create Task for Customer</div>
                 <input
                   type="text"
                   value={taskTitle}
                   onChange={(e) => setTaskTitle(e.target.value)}
                   placeholder="e.g. Send updated proposal quote"
-                  className="w-full rounded-xl border border-border bg-card px-3 py-2 text-[12px] text-foreground focus:outline-none"
+                  className="w-full rounded-xl border border-border bg-card px-3.5 py-2 text-[12px] text-foreground focus:outline-none focus:ring-1 focus:ring-brand"
                 />
                 <div className="flex gap-2">
                   <input
                     type="date"
                     value={taskDueDate}
                     onChange={(e) => setTaskDueDate(e.target.value)}
-                    className="flex-1 rounded-xl border border-border bg-card px-3 py-1.5 text-[11.5px] text-foreground focus:outline-none"
+                    className="flex-1 rounded-xl border border-border bg-card px-3 py-2 text-[11.5px] text-foreground focus:outline-none"
                   />
                   <button
                     type="submit"
                     disabled={addingTask}
-                    className="rounded-xl bg-foreground px-4 py-1.5 text-[11.5px] font-semibold text-background hover:bg-foreground/85 disabled:opacity-50"
+                    className="rounded-xl bg-foreground px-4 py-2 text-[11.5px] font-semibold text-background hover:bg-foreground/85 disabled:opacity-50"
                   >
                     {addingTask ? "Saving..." : "Create Task"}
                   </button>
@@ -449,17 +572,16 @@ export function CustomerProfileHub({
             </div>
           </div>
         ) : activeTab === "predictions" && context ? (
-          /* ─── SECTION 9: AI PREDICTIONS TAB ────────────────────────────────── */
-          <div className="space-y-4">
+          <div className="space-y-4 max-w-5xl">
             <AIDisclosure />
-            <h3 className="text-[13.5px] font-bold text-foreground">Customer AI Predictions ({preds.length})</h3>
+            <h3 className="text-[14px] font-bold text-foreground">Customer AI Predictions ({preds.length})</h3>
 
             {preds.length === 0 ? (
-              <div className="p-8 text-center text-xs text-muted-foreground italic">
+              <div className="p-12 text-center text-xs text-muted-foreground italic bg-secondary/10 rounded-2xl">
                 No active predictions available. Requires historical transaction/activity logs.
               </div>
             ) : (
-              <div className="divide-y divide-border border border-border rounded-2xl bg-card">
+              <div className="divide-y divide-border border border-border/60 rounded-2xl bg-card">
                 {preds.map((pred) => (
                   <div key={pred.id} className="p-4 space-y-2">
                     <div className="flex items-center justify-between">
@@ -485,17 +607,16 @@ export function CustomerProfileHub({
             )}
           </div>
         ) : activeTab === "opportunities" && context ? (
-          /* ─── SECTION 8: REVENUE OPPORTUNITIES TAB ───────────────────────── */
-          <div className="space-y-4">
+          <div className="space-y-4 max-w-5xl">
             <AIDisclosure />
-            <h3 className="text-[13.5px] font-bold text-foreground">Customer Revenue Opportunities ({opps.length})</h3>
+            <h3 className="text-[14px] font-bold text-foreground">Customer Revenue Opportunities ({opps.length})</h3>
 
             {opps.length === 0 ? (
-              <div className="p-8 text-center text-xs text-muted-foreground italic">
+              <div className="p-12 text-center text-xs text-muted-foreground italic bg-secondary/10 rounded-2xl">
                 No revenue opportunities identified for this customer record.
               </div>
             ) : (
-              <div className="divide-y divide-border border border-border rounded-2xl bg-card">
+              <div className="divide-y divide-border border border-border/60 rounded-2xl bg-card">
                 {opps.map((opp) => (
                   <div key={opp.id} className="p-4 space-y-2">
                     <div className="flex items-center justify-between">
@@ -517,23 +638,21 @@ export function CustomerProfileHub({
             )}
           </div>
         ) : activeTab === "intelligence" && intel ? (
-          /* ─── SECTION 5: CUSTOMER INTELLIGENCE DNA TAB ────────────────────── */
-          <div className="space-y-6">
+          <div className="space-y-8 max-w-5xl">
             <AIDisclosure />
 
-            {/* ─── AUTHORITATIVE RELATIONSHIP HEALTH BREAKDOWN ─────────────── */}
-            <div className="rounded-2xl border border-border bg-card p-5 shadow-soft space-y-4">
+            <div className="space-y-4">
               <div className="flex items-center justify-between border-b border-border/60 pb-3">
                 <div className="flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-brand" strokeWidth={1.75} />
-                  <span className="text-[14px] font-bold text-foreground">Relationship Health Breakdown</span>
+                  <Activity className="h-4 w-4 text-brand" />
+                  <h3 className="text-[14px] font-bold text-foreground">Relationship Health Breakdown</h3>
                 </div>
                 <span className="rounded bg-brand/10 px-2 py-0.5 text-[9.5px] font-extrabold text-brand uppercase">
                   {context.authoritativeHealth.provenance}
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-5 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
                 {[
                   context.authoritativeHealth.components.engagement,
                   context.authoritativeHealth.components.satisfaction,
@@ -541,28 +660,25 @@ export function CustomerProfileHub({
                   context.authoritativeHealth.components.advocacy,
                   context.authoritativeHealth.components.growth,
                 ].map((comp) => (
-                  <div key={comp.componentName} className="rounded-xl border border-border bg-secondary/20 p-3 space-y-1">
+                  <div key={comp.componentName} className="p-3.5 border border-border/60 rounded-xl space-y-1">
                     <div className="flex items-center justify-between text-[10.5px] font-semibold text-muted-foreground">
-                      <span>{comp.componentName} ({comp.weightPct}%)</span>
+                      <span>{comp.componentName}</span>
                       <span className="font-extrabold text-foreground uppercase">{comp.provenance}</span>
                     </div>
-                    <div className="text-[14px] font-extrabold text-foreground">{comp.formatted}</div>
+                    <div className="text-[15px] font-extrabold text-foreground">{comp.formatted}</div>
                     <div className="text-[10px] text-muted-foreground/80 truncate">{comp.evidence}</div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* AI Personality Profile Card */}
-            <div className="rounded-2xl border border-border bg-card p-5 shadow-soft space-y-4">
+            <div className="space-y-4">
               <div className="flex items-center justify-between border-b border-border/60 pb-3">
                 <div className="flex items-center gap-2">
-                  <Brain className="h-4 w-4 text-brand" strokeWidth={1.75} />
-                  <span className="text-[14px] font-bold text-foreground">AI Personality Profile</span>
+                  <Brain className="h-4 w-4 text-brand" />
+                  <h3 className="text-[14px] font-bold text-foreground">AI Personality Profile</h3>
                 </div>
-                <span className={`rounded px-2 py-0.5 text-[9.5px] font-extrabold uppercase ${
-                  intel.personalityProfile.provenance === "INSUFFICIENT DATA" ? "bg-secondary text-muted-foreground" : "bg-brand/10 text-brand"
-                }`}>
+                <span className="rounded bg-brand/10 px-2 py-0.5 text-[9.5px] font-extrabold text-brand uppercase">
                   {intel.personalityProfile.provenance}
                 </span>
               </div>
@@ -571,9 +687,9 @@ export function CustomerProfileHub({
                 {intel.personalityProfile.overallSummary}
               </p>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
                 {[intel.personalityProfile.decisionSpeed, intel.personalityProfile.priceSensitivity, intel.personalityProfile.qualityFocus].map((trait) => (
-                  <div key={trait.factorName} className="rounded-xl border border-border bg-secondary/20 p-3.5 space-y-1.5">
+                  <div key={trait.factorName} className="p-4 border border-border/60 rounded-xl space-y-1.5">
                     <div className="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
                       <span>{trait.factorName}</span>
                       <span className="font-extrabold text-foreground uppercase">{trait.provenance}</span>
@@ -584,79 +700,12 @@ export function CustomerProfileHub({
                 ))}
               </div>
             </div>
-
-            {/* Communication DNA Card */}
-            <div className="rounded-2xl border border-border bg-card p-5 shadow-soft space-y-4">
-              <div className="flex items-center justify-between border-b border-border/60 pb-3">
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4 text-brand" strokeWidth={1.75} />
-                  <span className="text-[14px] font-bold text-foreground">Communication DNA</span>
-                </div>
-                <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-[9.5px] font-extrabold text-emerald-500 uppercase">
-                  {intel.communicationDna.primaryChannel.provenance}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="rounded-xl border border-border bg-secondary/20 p-3.5 space-y-1">
-                  <div className="text-[11px] font-medium text-muted-foreground">Primary Channel</div>
-                  <div className="text-[15px] font-bold text-foreground">{intel.communicationDna.primaryChannel.formatted}</div>
-                  <div className="text-[10.5px] text-muted-foreground">{intel.communicationDna.primaryChannel.methodology}</div>
-                </div>
-
-                <div className="rounded-xl border border-border bg-secondary/20 p-3.5 space-y-1">
-                  <div className="text-[11px] font-medium text-muted-foreground">Engagement Level</div>
-                  <div className="text-[15px] font-bold text-foreground">{intel.communicationDna.engagementLevel.formatted}</div>
-                  <div className="text-[10.5px] text-muted-foreground">{intel.communicationDna.engagementLevel.methodology}</div>
-                </div>
-
-                <div className="rounded-xl border border-border bg-secondary/20 p-3.5 space-y-1">
-                  <div className="text-[11px] font-medium text-muted-foreground">Response Latency</div>
-                  <div className="text-[15px] font-bold text-foreground">{intel.communicationDna.avgResponseTimeHours.formatted}</div>
-                  <div className="text-[10.5px] text-muted-foreground">{intel.communicationDna.avgResponseTimeHours.methodology}</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Buying DNA Card */}
-            <div className="rounded-2xl border border-border bg-card p-5 shadow-soft space-y-4">
-              <div className="flex items-center justify-between border-b border-border/60 pb-3">
-                <div className="flex items-center gap-2">
-                  <CircleDollarSign className="h-4 w-4 text-brand" strokeWidth={1.75} />
-                  <span className="text-[14px] font-bold text-foreground">Buying DNA</span>
-                </div>
-                <span className="rounded bg-blue-500/10 px-2 py-0.5 text-[9.5px] font-extrabold text-blue-500 uppercase">
-                  {intel.buyingDna.avgTransactionValue.provenance}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="rounded-xl border border-border bg-secondary/20 p-3.5 space-y-1">
-                  <div className="text-[11px] font-medium text-muted-foreground">Avg. Invoice Transaction</div>
-                  <div className="text-[15px] font-bold text-foreground">{intel.buyingDna.avgTransactionValue.formatted}</div>
-                  <div className="text-[10.5px] text-muted-foreground">{intel.buyingDna.avgTransactionValue.methodology}</div>
-                </div>
-
-                <div className="rounded-xl border border-border bg-secondary/20 p-3.5 space-y-1">
-                  <div className="text-[11px] font-medium text-muted-foreground">Account Classification</div>
-                  <div className="text-[15px] font-bold text-foreground">{intel.buyingDna.spendCategory.formatted}</div>
-                  <div className="text-[10.5px] text-muted-foreground">{intel.buyingDna.spendCategory.methodology}</div>
-                </div>
-
-                <div className="rounded-xl border border-border bg-secondary/20 p-3.5 space-y-1">
-                  <div className="text-[11px] font-medium text-muted-foreground">Payment Settlement</div>
-                  <div className="text-[15px] font-bold text-foreground">{intel.buyingDna.paymentPromptness.formatted}</div>
-                  <div className="text-[10.5px] text-muted-foreground">{intel.buyingDna.paymentPromptness.methodology}</div>
-                </div>
-              </div>
-            </div>
           </div>
         ) : activeTab === "memories" ? (
-          /* ─── SECTION 10: CUSTOMER AI MEMORY TAB ──────────────────────────── */
-          <div className="space-y-6">
+          <div className="space-y-6 max-w-5xl">
             <AIDisclosure />
 
-            <div className="rounded-2xl border border-border bg-card p-5 shadow-soft space-y-4">
+            <div className="space-y-4">
               <div className="flex items-center justify-between border-b border-border/60 pb-3">
                 <div className="flex items-center gap-2">
                   <Brain className="h-4 w-4 text-brand" />
@@ -667,14 +716,13 @@ export function CustomerProfileHub({
                 </span>
               </div>
 
-              {/* Add Confirmed Memory Form */}
               <form onSubmit={handleAddMemory} className="flex gap-2">
                 <input
                   type="text"
                   value={newMemoryStatement}
                   onChange={(e) => setNewMemoryStatement(e.target.value)}
                   placeholder="Record explicit confirmed customer preference (e.g. Prefers morning appointments)..."
-                  className="flex-1 rounded-xl border border-border bg-secondary/30 px-3.5 py-2 text-[12px] text-foreground focus:outline-none focus:ring-1 focus:ring-brand"
+                  className="flex-1 rounded-xl border border-border bg-secondary/20 px-3.5 py-2 text-[12px] text-foreground focus:outline-none"
                 />
                 <button
                   type="submit"
@@ -685,13 +733,12 @@ export function CustomerProfileHub({
                 </button>
               </form>
 
-              {/* Memory List */}
               {memories.length === 0 ? (
-                <div className="p-8 text-center text-xs text-muted-foreground italic">
+                <div className="p-12 text-center text-xs text-muted-foreground italic bg-secondary/10 rounded-2xl">
                   No memory records found for this customer profile.
                 </div>
               ) : (
-                <div className="divide-y divide-border border border-border rounded-xl bg-card">
+                <div className="divide-y divide-border border border-border/60 rounded-xl bg-card">
                   {memories.map((mem) => {
                     const isExpanded = expandedMemoryId === mem.id;
                     return (
@@ -701,7 +748,7 @@ export function CustomerProfileHub({
                             <div className="flex items-center gap-2">
                               <span className={`rounded px-2 py-0.5 text-[9px] font-extrabold uppercase ${
                                 mem.memoryType === "CONFIRMED"
-                                  ? "bg-emerald-500/10 text-emerald-600"
+                                  ? "bg-emerald-500/10 text-emerald-600 font-bold"
                                   : mem.memoryType === "OBSERVED"
                                   ? "bg-blue-500/10 text-blue-500"
                                   : "bg-purple-500/10 text-purple-500"
@@ -735,9 +782,8 @@ export function CustomerProfileHub({
                           </div>
                         </div>
 
-                        {/* Evidence Panel Drawer */}
                         {isExpanded && (
-                          <div className="mt-2 rounded-xl border border-border bg-secondary/30 p-3.5 space-y-1.5 text-[11.5px]">
+                          <div className="mt-2 rounded-xl border border-border bg-secondary/20 p-3.5 space-y-1.5 text-[11.5px]">
                             <div className="font-bold text-foreground text-[11px] uppercase tracking-wider">Grounding Evidence & Provenance:</div>
                             <p className="text-muted-foreground"><strong className="text-foreground">Why Do We Know This:</strong> {mem.whyDoWeKnowThis}</p>
                             <p className="text-muted-foreground"><strong className="text-foreground">Supporting Records:</strong> {mem.supportingRecords.join(", ") || "Workspace profile ledger"}</p>
@@ -753,12 +799,14 @@ export function CustomerProfileHub({
             </div>
           </div>
         ) : activeTab === "jobs" && context ? (
-          <div className="space-y-3">
-            <h3 className="text-[13px] font-bold text-foreground">Connected Jobs ({context.connectedJobs.length})</h3>
+          <div className="space-y-4 max-w-5xl">
+            <h3 className="text-[14px] font-bold text-foreground">Connected Jobs ({context.connectedJobs.length})</h3>
             {context.connectedJobs.length === 0 ? (
-              <div className="p-8 text-center text-xs text-muted-foreground">No jobs linked to this customer record yet.</div>
+              <div className="p-12 text-center text-xs text-muted-foreground italic bg-secondary/10 rounded-2xl">
+                No jobs linked yet. Jobs will appear here once connected to this customer.
+              </div>
             ) : (
-              <div className="divide-y divide-border border border-border rounded-2xl bg-card">
+              <div className="divide-y divide-border border border-border/60 rounded-2xl bg-card">
                 {context.connectedJobs.map((j) => (
                   <div key={j.id} className="p-4 flex items-center justify-between text-[12.5px]">
                     <div>
@@ -772,12 +820,14 @@ export function CustomerProfileHub({
             )}
           </div>
         ) : activeTab === "invoices" && context ? (
-          <div className="space-y-3">
-            <h3 className="text-[13px] font-bold text-foreground">Connected Invoices ({context.connectedInvoices.length})</h3>
+          <div className="space-y-4 max-w-5xl">
+            <h3 className="text-[14px] font-bold text-foreground">Connected Invoices ({context.connectedInvoices.length})</h3>
             {context.connectedInvoices.length === 0 ? (
-              <div className="p-8 text-center text-xs text-muted-foreground">No invoices linked to this customer record yet.</div>
+              <div className="p-12 text-center text-xs text-muted-foreground italic bg-secondary/10 rounded-2xl">
+                No invoices linked yet. Invoice activity will appear here once transactions are connected.
+              </div>
             ) : (
-              <div className="divide-y divide-border border border-border rounded-2xl bg-card">
+              <div className="divide-y divide-border border border-border/60 rounded-2xl bg-card">
                 {context.connectedInvoices.map((inv) => (
                   <div key={inv.id} className="p-4 flex items-center justify-between text-[12.5px]">
                     <div>
@@ -794,12 +844,14 @@ export function CustomerProfileHub({
             )}
           </div>
         ) : activeTab === "comms" && context ? (
-          <div className="space-y-3">
-            <h3 className="text-[13px] font-bold text-foreground">Communication Log ({context.connectedComms.length})</h3>
+          <div className="space-y-4 max-w-5xl">
+            <h3 className="text-[14px] font-bold text-foreground">Communication Log ({context.connectedComms.length})</h3>
             {context.connectedComms.length === 0 ? (
-              <div className="p-8 text-center text-xs text-muted-foreground">No communication records logged for this customer.</div>
+              <div className="p-12 text-center text-xs text-muted-foreground italic bg-secondary/10 rounded-2xl">
+                No communication history yet. Recorded customer interactions will appear here.
+              </div>
             ) : (
-              <div className="divide-y divide-border border border-border rounded-2xl bg-card">
+              <div className="divide-y divide-border border border-border/60 rounded-2xl bg-card">
                 {context.connectedComms.map((cm) => (
                   <div key={cm.id} className="p-4 space-y-1 text-[12px]">
                     <div className="flex items-center justify-between">
@@ -813,17 +865,17 @@ export function CustomerProfileHub({
             )}
           </div>
         ) : activeTab === "notes" ? (
-          <div className="space-y-4 text-xs">
-            <div className="rounded-2xl border border-border bg-card p-4 space-y-2">
-              <div className="font-bold text-foreground">Historical Notes</div>
-              <p className="whitespace-pre-wrap text-muted-foreground leading-relaxed">
+          <div className="space-y-6 text-xs max-w-5xl">
+            <div className="p-5 border border-border/60 rounded-2xl space-y-2">
+              <div className="font-bold text-foreground text-[13px]">Historical Notes</div>
+              <p className="whitespace-pre-wrap text-muted-foreground leading-relaxed text-[12px]">
                 {customer.notes || "No notes recorded for this customer profile."}
               </p>
             </div>
 
-            <div className="rounded-2xl border border-border bg-card p-4 space-y-2">
-              <div className="font-bold text-foreground">Consent & Privacy Status</div>
-              <div className="flex flex-col gap-1.5 text-muted-foreground">
+            <div className="p-5 border border-border/60 rounded-2xl space-y-2">
+              <div className="font-bold text-foreground text-[13px]">Consent & Privacy Status</div>
+              <div className="flex flex-col gap-2 text-muted-foreground text-[12px]">
                 <span className="flex items-center gap-2">
                   <ShieldCheck className={customer.gdpr_consent ? "text-emerald-500" : "text-muted-foreground"} />
                   GDPR Consent: {customer.gdpr_consent ? "Given" : "Not recorded"}

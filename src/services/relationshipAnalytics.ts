@@ -2015,7 +2015,9 @@ export async function fetchCustomerRelationshipHealth(
   let overallLabel: CustomerRelationshipHealth["overallLabel"] = "INSUFFICIENT DATA";
   let overallHasData = false;
 
-  if (engagementHasData || loyaltyHasData) {
+  const totalActivityCount = activityDatesMs.length + reviews.length + paidInvoices.length;
+
+  if (totalActivityCount >= 1 && availableComponents.length >= 1) {
     overallHasData = true;
     let weightedSum = 0;
     let weightSum = 0;
@@ -2027,13 +2029,23 @@ export async function fetchCustomerRelationshipHealth(
       }
     });
 
-    overallScore = weightSum > 0 ? Math.round(weightedSum / weightSum) : 50;
+    if (weightSum > 0) {
+      overallScore = Math.round(weightedSum / weightSum);
 
-    if (invoices.some((i) => i.status === "overdue")) {
-      overallScore = Math.max(20, overallScore - 15);
+      if (invoices.some((i) => i.status === "overdue")) {
+        overallScore = Math.max(20, overallScore - 15);
+      }
+
+      overallLabel = overallScore >= 80 ? "EXCELLENT" : overallScore >= 65 ? "GOOD" : overallScore >= 45 ? "NEEDS ATTENTION" : "AT RISK";
+    } else {
+      overallHasData = false;
+      overallScore = null;
+      overallLabel = "INSUFFICIENT DATA";
     }
-
-    overallLabel = overallScore >= 80 ? "EXCELLENT" : overallScore >= 65 ? "GOOD" : overallScore >= 45 ? "NEEDS ATTENTION" : "AT RISK";
+  } else {
+    overallHasData = false;
+    overallScore = null;
+    overallLabel = "INSUFFICIENT DATA";
   }
 
   const topStrength = availableComponents.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0]?.componentName || "N/A";
