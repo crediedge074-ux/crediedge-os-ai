@@ -433,37 +433,37 @@ export function CustomerProfileHub({
 
             <hr className="border-border/60" />
 
-            {/* Compact Recent Activity Preview */}
-            <div className="space-y-3">
+            {/* Compact Recent Activity Preview (<250px height) */}
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-brand" />
-                  <h3 className="text-[14px] font-bold text-foreground">Recent Activity</h3>
+                <div className="flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-brand" />
+                  <h3 className="text-[13.5px] font-bold text-foreground">Recent Activity</h3>
                 </div>
                 {activity.length > 0 && (
                   <button
                     type="button"
                     onClick={() => setActiveTab("comms")}
-                    className="flex items-center gap-1 text-[11.5px] font-semibold text-brand hover:underline"
+                    className="flex items-center gap-1 text-[11px] font-semibold text-brand hover:underline"
                   >
-                    View all <ArrowRight className="h-3 w-3" />
+                    View all →
                   </button>
                 )}
               </div>
 
               {activity.length === 0 ? (
-                <div className="p-4 text-xs text-muted-foreground italic bg-secondary/15 rounded-xl">
-                  No recent customer activity logs recorded.
+                <div className="p-3 text-[11.5px] text-muted-foreground italic bg-secondary/15 rounded-lg">
+                  No recent activity logged for this customer.
                 </div>
               ) : (
-                <div className="divide-y divide-border/50 border border-border/60 rounded-xl bg-card">
+                <div className="divide-y divide-border/40 border border-border/50 rounded-lg bg-card">
                   {activity.slice(0, 3).map((act) => (
-                    <div key={act.id} className="p-3.5 flex items-center justify-between text-[12px]">
-                      <div>
-                        <div className="font-semibold text-foreground">{act.description}</div>
-                        <div className="text-[10.5px] text-muted-foreground">Action: {act.action}</div>
+                    <div key={act.id} className="px-3 py-2 flex items-center justify-between text-[11.5px]">
+                      <div className="min-w-0 flex-1 pr-3">
+                        <div className="font-medium text-foreground truncate">{act.description}</div>
+                        <div className="text-[10px] text-muted-foreground">{act.action}</div>
                       </div>
-                      <span className="text-[10.5px] text-muted-foreground">
+                      <span className="text-[10px] text-muted-foreground shrink-0 font-medium">
                         {new Date(act.created_at).toLocaleDateString("en-GB", { month: "short", day: "numeric" })}
                       </span>
                     </div>
