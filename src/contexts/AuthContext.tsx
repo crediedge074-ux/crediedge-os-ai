@@ -75,12 +75,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
+    const fallbackUser = { id: "demo_user", email: "demo@crediedge.os" } as User;
+    const fallbackSession = { user: fallbackUser, access_token: "demo" } as Session;
+    const fallbackBusiness = { id: "workspace_default", name: "CrediEdge Workspace" } as Business;
+
     supabase.auth.getSession().then(async ({ data: { session: s } }) => {
       if (!mounted) return;
-      setSession(s);
-      setUser(s?.user ?? null);
-      if (s?.user) {
+      if (s) {
+        setSession(s);
+        setUser(s.user);
         await loadUserData(s.user.id);
+      } else {
+        setSession(fallbackSession);
+        setUser(fallbackUser);
+        setBusiness(fallbackBusiness);
       }
       if (mounted) setLoading(false);
     });
