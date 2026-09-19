@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AppLayout } from "@/components/ui/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -10,6 +11,7 @@ export const Route = createFileRoute("/reviews")({
 
 function ReviewsPage() {
   const navigate = useNavigate();
+  const [showRequestModal, setShowRequestModal] = useState(false);
 
   return (
     <AppLayout>
@@ -20,18 +22,17 @@ function ReviewsPage() {
         action={{
           label: "Request Reviews",
           icon: Star,
-          onClick: () => {
-            const btns = Array.from(document.querySelectorAll<HTMLButtonElement>("button"));
-            const target = btns.find((b) => b.textContent?.includes("Request Reviews") && b.closest("main"));
-            if (target) target.click();
-          },
+          onClick: () => setShowRequestModal(true),
         }}
         secondaryAction={{
           label: "Connect Platform",
           onClick: () => navigate({ to: "/integrations" }),
         }}
       />
-      <ReputationDNA />
+      <ReputationDNA
+        showRequestModalExternal={showRequestModal}
+        setShowRequestModalExternal={setShowRequestModal}
+      />
     </AppLayout>
   );
 }

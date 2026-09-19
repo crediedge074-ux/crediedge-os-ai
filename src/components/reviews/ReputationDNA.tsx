@@ -174,7 +174,16 @@ function ReputationDNAHero({ analytics }: { analytics: ReviewAnalyticsResult }) 
 
 // ─── ROOT COMPONENT ───────────────────────────────────────────────────────────
 
-export function ReputationDNA() {
+export interface ReputationDNAProps {
+  onRequestReview?: () => void;
+  showRequestModalExternal?: boolean;
+  setShowRequestModalExternal?: (show: boolean) => void;
+}
+
+export function ReputationDNA({
+  showRequestModalExternal,
+  setShowRequestModalExternal,
+}: ReputationDNAProps = {}) {
   const navigate = useNavigate();
   const { business, user, session, loading: authLoading } = useAuthContext();
   const businessId = business?.id;
@@ -184,7 +193,11 @@ export function ReputationDNA() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [replyText, setReplyText] = useState("");
-  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [showRequestModalInternal, setShowRequestModalInternal] = useState(false);
+
+  const showRequestModal = showRequestModalExternal ?? showRequestModalInternal;
+  const setShowRequestModal = setShowRequestModalExternal ?? setShowRequestModalInternal;
+
   const [selectedCustomerForRequest, setSelectedCustomerForRequest] = useState("");
   const [requestSending, setRequestSending] = useState(false);
   const [showCampaignModal, setShowCampaignModal] = useState(false);
