@@ -710,22 +710,28 @@ function AnalyticsAndScore({
           <span className="text-[13.5px] font-semibold text-foreground">Communication Score™</span>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center gap-6">
-          <ScoreRing score={analytics.communicationScore || 0} />
+        {analytics.communicationScore !== null ? (
+          <div className="flex flex-col sm:flex-row items-center gap-6">
+            <ScoreRing score={analytics.communicationScore} />
 
-          <div className="flex-1 space-y-3 w-full">
-            {analytics.scoreBreakdown.map((sb) => (
-              <div key={sb.label} className="space-y-1">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-medium text-foreground">{sb.label}</span>
-                  <span className="font-bold text-foreground">{sb.score}/100</span>
+            <div className="flex-1 space-y-3 w-full">
+              {analytics.scoreBreakdown.map((sb) => (
+                <div key={sb.label} className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-medium text-foreground">{sb.label}</span>
+                    <span className="font-bold text-foreground">{sb.score}/100</span>
+                  </div>
+                  <ProgressBar value={sb.score} color={sb.color} />
+                  <span className="text-[10px] text-muted-foreground">{sb.description}</span>
                 </div>
-                <ProgressBar value={sb.score} color={sb.color} />
-                <span className="text-[10px] text-muted-foreground">{sb.description}</span>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 text-center text-xs text-muted-foreground">
+            INSUFFICIENT DATA — Communication Score™ requires at least 3 communication records.
+          </div>
+        )}
 
         <div className="mt-4">
           <AIDisclosure
@@ -771,16 +777,22 @@ function AnalyticsAndScore({
 // ─── ROOT COMPONENT ───────────────────────────────────────────────────────────
 
 export function CommunicationIntelligence() {
-  const { business } = useAuthContext();
-  const businessId = business?.id || "workspace_default";
+  const { business, user, session, loading: authLoading } = useAuthContext();
+  const businessId = business?.id;
 
   const [communications, setCommunications] = useState<Communication[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [queryError, setQueryError] = useState<string | null>(null);
 
   const loadData = async () => {
+    if (!businessId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
+    setQueryError(null);
     try {
       const [comms, custs] = await Promise.all([
         getCommunications(businessId),
@@ -791,23 +803,72 @@ export function CommunicationIntelligence() {
       if (comms.length > 0 && !selectedId) {
         setSelectedId(comms[0].id);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error loading communications workspace:", err);
+      setQueryError(err?.message || "Failed to query workspace communications.");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData();
-  }, [businessId]);
+    if (!authLoading) {
+      if (businessId) {
+        loadData();
+      } else {
+        setLoading(false);
+      }
+    }
+  }, [businessId, authLoading]);
 
   const analytics = calculateCommunicationAnalytics(communications);
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="rounded-2xl border border-border bg-card p-8 text-center text-xs text-muted-foreground">
         Loading verified workspace communication data...
+      </div>
+    );
+  }
+
+  if (!user || !session) {
+    return (
+      <div className="rounded-2xl border border-dashed border-border bg-card p-8 text-center">
+        <Brain className="mx-auto h-8 w-8 text-muted-foreground/50 mb-2" />
+        <h3 className="text-sm font-semibold text-foreground">Authentication Required</h3>
+        <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
+          Please log in to access your business workspace communications and intelligence.
+        </p>
+      </div>
+    );
+  }
+
+  if (!businessId) {
+    return (
+      <div className="rounded-2xl border border-dashed border-border bg-card p-8 text-center">
+        <Brain className="mx-auto h-8 w-8 text-muted-foreground/50 mb-2" />
+        <h3 className="text-sm font-semibold text-foreground">Workspace Scope Unavailable</h3>
+        <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
+          No business workspace membership found for your authenticated account.
+        </p>
+      </div>
+    );
+  }
+
+  if (queryError) {
+    return (
+      <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-8 text-center">
+        <Zap className="mx-auto h-8 w-8 text-amber-500 mb-2" />
+        <h3 className="text-sm font-semibold text-foreground">Communication Query Error</h3>
+        <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
+          {queryError}
+        </p>
+        <button
+          onClick={loadData}
+          className="mt-4 rounded-xl bg-brand px-4 py-2 text-xs font-semibold text-white shadow-sm"
+        >
+          Retry Query
+        </button>
       </div>
     );
   }

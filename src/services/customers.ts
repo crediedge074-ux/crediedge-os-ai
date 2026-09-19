@@ -144,23 +144,15 @@ const DEMO_CUSTOMERS: Omit<CustomerInsert, "business_id">[] = [
 ];
 
 export async function getCustomers(businessId: string): Promise<Customer[]> {
-  try {
-    const { data, error } = await supabase
-      .from("customers")
-      .select("*")
-      .eq("business_id", businessId)
-      .eq("is_active", true)
-      .order("full_name", { ascending: true });
+  const { data, error } = await supabase
+    .from("customers")
+    .select("*")
+    .eq("business_id", businessId)
+    .eq("is_active", true)
+    .order("full_name", { ascending: true });
 
-    if (error) {
-      console.error("Error fetching customers:", error);
-      return [];
-    }
-    return data ?? [];
-  } catch (err) {
-    console.error("Failed to fetch customers:", err);
-    return [];
-  }
+  if (error) throw error;
+  return data ?? [];
 }
 
 export async function getCustomer(id: string): Promise<Customer | null> {
