@@ -675,6 +675,39 @@ export interface Database {
         };
         Relationships: [];
       };
+      communication_templates: {
+        Row: {
+          id: string;
+          business_id: string | null;
+          title: string;
+          category: string;
+          channel: string;
+          subject: string | null;
+          body: string;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          business_id?: string | null;
+          title: string;
+          category?: string;
+          channel?: string;
+          subject?: string | null;
+          body: string;
+          is_active?: boolean;
+        };
+        Update: {
+          title?: string;
+          category?: string;
+          channel?: string;
+          subject?: string | null;
+          body?: string;
+          is_active?: boolean;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
