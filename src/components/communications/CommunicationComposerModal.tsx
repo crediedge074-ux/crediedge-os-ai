@@ -157,18 +157,23 @@ export function CommunicationComposerModal({
     }
   };
 
-  const handleAiAction = (action: 'suggest' | 'improve' | 'professional' | 'shorten' | 'expand') => {
+  const handleAiAction = async (action: 'suggest' | 'improve' | 'professional' | 'shorten' | 'expand') => {
     const custName = selectedCustomer
       ? `${selectedCustomer.first_name} ${selectedCustomer.last_name}`.trim()
       : "Customer";
 
-    const result = generateAICommunicationDraft({
+    const result = await generateAICommunicationDraft({
       action,
       channel,
       currentBody: body,
       customerName: custName,
       subject,
     });
+
+    if (result.error) {
+      setErrorMessage(result.error);
+      return;
+    }
 
     if (result.subject) setSubject(result.subject);
     setBody(result.body);
@@ -186,12 +191,24 @@ export function CommunicationComposerModal({
     setErrorMessage(null);
 
     try {
+      // Include CC/BCC into the recorded body metadata if provided for email channel
+      let fullBody = body;
+      if (channel === "email" && (cc.trim() || bcc.trim())) {
+        const copyDetails = [
+          cc.trim() ? `CC: ${cc.trim()}` : null,
+          bcc.trim() ? `BCC: ${bcc.trim()}` : null,
+        ]
+          .filter(Boolean)
+          .join(" | ");
+        fullBody = `[${copyDetails}]\n\n${body}`;
+      }
+
       await createCommunication({
         customer_id: selectedCustomerId || null,
         channel,
         direction: "outbound",
         subject: channel === "email" ? subject : null,
-        body,
+        body: fullBody,
         sentiment: "neutral",
       });
 
@@ -430,7 +447,11 @@ export function CommunicationComposerModal({
                 disabled={submitting || !body.trim()}
                 className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium"
               >
-                {submitting ? "Recording..." : currentCapability.isManual ? "Log Record" : "Send & Record"}
+                {submitting
+                  ? "Saving Record..."
+                  : currentCapability.available && !currentCapability.isManual
+                  ? "Send & Record"
+                  : "Log Communication Record"}
               </Button>
             </DialogFooter>
           </form>

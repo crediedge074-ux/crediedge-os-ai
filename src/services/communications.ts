@@ -203,25 +203,12 @@ export async function fetchCommunicationIntelligenceMetrics(): Promise<Communica
     }
   }
 
-  // 6. AI Priority Score calculation (0–100 based on proportion of non-urgent / positive messages)
-  let aiPriorityScore: number | null = null;
-  let aiPriorityLabel = "INSUFFICIENT DATA";
-  let priorityInsufficient = true;
+  // 6. AI Priority Score — Return explicit INSUFFICIENT DATA until dedicated AI priority scoring engine is integrated
+  const aiPriorityScore: number | null = null;
+  const aiPriorityLabel = "INSUFFICIENT DATA";
+  const priorityInsufficient = true;
 
-  if (totalCommunications >= 1) {
-    priorityInsufficient = false;
-    const urgentCount = communicationsList.filter(
-      (c) => c.sentiment === "urgent" || c.sentiment === "frustrated"
-    ).length;
-    const neutralOrPositiveCount = totalCommunications - urgentCount;
-    aiPriorityScore = Math.round((neutralOrPositiveCount / totalCommunications) * 100);
-
-    if (aiPriorityScore >= 80) aiPriorityLabel = "High Priority Alignment";
-    else if (aiPriorityScore >= 60) aiPriorityLabel = "Moderate Priority";
-    else aiPriorityLabel = "Needs Immediate Attention";
-  }
-
-  // 7. Customer Satisfaction calculation from reviews or positive sentiments
+  // 7. Customer Satisfaction — Strictly derived from authoritative reviews table
   const { data: reviewsData } = await supabase
     .from("reviews")
     .select("rating")
@@ -238,31 +225,17 @@ export async function fetchCommunicationIntelligenceMetrics(): Promise<Communica
     const avgRating = totalRating / reviewsList.length;
     satisfactionScore = Math.round((avgRating / 5) * 100);
     satisfactionLabel = `${avgRating.toFixed(1)} / 5.0 Star Rating`;
-  } else if (totalCommunications >= 3) {
-    const positiveCount = communicationsList.filter((c) => c.sentiment === "positive").length;
-    satisfactionScore = Math.round((positiveCount / totalCommunications) * 100);
-    satisfactionInsufficient = false;
-    satisfactionLabel = `${satisfactionScore}% Positive Sentiment`;
   }
 
-  // 8. Missed Opportunities calculation (Unanswered urgent/frustrated inbound messages > 24 hours old or unread)
-  const now = new Date().getTime();
-  let missedOpportunitiesCount = 0;
-  customerLatestMsgMap.forEach((val) => {
-    if (val.direction === "inbound") {
-      const ageHours = (now - new Date(val.created_at).getTime()) / (1000 * 60 * 60);
-      if (ageHours > 24) {
-        missedOpportunitiesCount++;
-      }
-    }
-  });
+  // 8. Missed Opportunities — Count inbound messages flagged with urgent/frustrated sentiment requiring attention
+  const missedOpportunitiesCount = communicationsList.filter(
+    (c) => c.direction === "inbound" && (c.sentiment === "urgent" || c.sentiment === "frustrated")
+  ).length;
 
-  // 9. Live Monitoring State
+  // 9. Live Monitoring State — Reflects genuine connected integration state
   let liveMonitoringState: 'Active Monitoring' | 'Manual Mode' | 'Limited Monitoring' = "Manual Mode";
-  if (connectedChannelsCount >= 2) {
+  if (connectedChannelsCount > 0) {
     liveMonitoringState = "Active Monitoring";
-  } else if (connectedChannelsCount === 1) {
-    liveMonitoringState = "Limited Monitoring";
   }
 
   return {
@@ -408,20 +381,7 @@ export async function fetchCommunicationTemplates(): Promise<CommunicationTempla
 
   if (error) {
     console.error("Error fetching communication templates:", error);
-    // If table is missing or query fails, return system fallback array safely
-    return [
-      {
-        id: "sys-1",
-        business_id: null,
-        title: "Service Follow-up",
-        category: "follow_up",
-        channel: "email",
-        subject: "Following up on your recent service",
-        body: "Hi {{customer_first_name}},\n\nThank you for choosing us. We wanted to follow up and see how everything is going.\n\nBest regards,\nTeam",
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-    ];
+    throw new Error(`Failed to load communication templates: ${error.message}`);
   }
 
   return (data || []) as CommunicationTemplate[];
@@ -500,59 +460,30 @@ export async function fetchCommunicationSettings(): Promise<CommunicationSetting
 }
 
 /**
- * AI Assistant logic for drafting and polishing communications using customer context.
+ * AI Assistant status for workspace communications.
+ * Honest baseline behavior: When no LLM provider/key is configured in the Production environment,
+ * explicitly reports AI Service Unavailable rather than returning hardcoded strings.
  */
-export function generateAICommunicationDraft(params: {
+export async function generateAICommunicationDraft(params: {
   action: 'suggest' | 'improve' | 'professional' | 'shorten' | 'expand';
   channel: 'email' | 'sms' | 'whatsapp' | 'phone' | 'note';
   currentBody?: string;
   customerName?: string;
   subject?: string;
-}): { subject?: string; body: string } {
-  const name = params.customerName || "Customer";
-  const body = params.currentBody?.trim() || "";
+}): Promise<{ subject?: string; body: string; error?: string }> {
+  // Check if active AI endpoint / environment key is present
+  const aiApiKey = typeof process !== "undefined" ? process.env?.VITE_OPENAI_API_KEY : null;
 
-  if (params.action === "suggest") {
-    if (params.channel === "email") {
-      return {
-        subject: `Update regarding your recent request`,
-        body: `Hi ${name},\n\nI hope you are having a great day. I am writing to provide you with an update regarding your request. Please let us know if there is anything else we can assist you with.\n\nBest regards,\nYour Team`,
-      };
-    }
+  if (!aiApiKey) {
     return {
-      body: `Hi ${name}, thank you for contacting us! We're processing your request and will follow up shortly.`,
+      body: params.currentBody || "",
+      error: "AI Provider Configuration Missing: AI Assistant features require an active LLM provider key in workspace settings.",
     };
   }
 
-  if (params.action === "improve" || params.action === "professional") {
-    if (!body) {
-      return {
-        body: `Dear ${name},\n\nThank you for reaching out to us. We appreciate your communication and look forward to serving you.\n\nSincerely,\nCustomer Care Team`,
-      };
-    }
-    return {
-      body: `Dear ${name},\n\n${body.replace(/hey|hi/gi, "Hello")}\n\nThank you for your cooperation and prompt attention to this matter.\n\nWarm regards,\nService Team`,
-    };
-  }
-
-  if (params.action === "shorten") {
-    if (!body) return { body: `Hi ${name}, thank you for your message. We'll be in touch shortly.` };
-    const sentences = body.split(".");
-    return {
-      body: sentences.slice(0, Math.max(1, Math.ceil(sentences.length / 2))).join(".") + ".",
-    };
-  }
-
-  if (params.action === "expand") {
-    if (!body) {
-      return {
-        body: `Hi ${name},\n\nThank you for getting in touch with our team. We wanted to make sure all your questions were answered thoroughly and that you have all the necessary details.\n\nPlease reply at your convenience if you need further clarification.\n\nBest regards,`,
-      };
-    }
-    return {
-      body: `${body}\n\nWe value your partnership and want to ensure you receive the highest standard of support. Please reach out anytime if you have additional questions or concerns.`,
-    };
-  }
-
-  return { body };
+  // Placeholder for real provider execution when configured
+  return {
+    body: params.currentBody || "",
+    error: "AI Assistant Unavailable: LLM completion engine not configured for this workspace.",
+  };
 }

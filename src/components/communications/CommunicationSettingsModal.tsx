@@ -166,17 +166,21 @@ export function CommunicationSettingsModal({
               <div className="flex items-center justify-between py-2">
                 <div className="space-y-0.5">
                   <Label className="text-sm font-medium text-slate-200">Email Notifications</Label>
-                  <p className="text-xs text-slate-500">Receive copy of unread customer messages via email</p>
+                  <p className="text-xs text-slate-500">Receive copy of unread customer messages via email (Setup Required)</p>
                 </div>
-                <Switch checked={settings?.email_notifications ?? true} disabled />
+                <Badge variant="outline" className="border-slate-800 text-slate-500">
+                  Setup Required
+                </Badge>
               </div>
 
               <div className="flex items-center justify-between py-2">
                 <div className="space-y-0.5">
                   <Label className="text-sm font-medium text-slate-200">AI Assistant Guidance</Label>
-                  <p className="text-xs text-slate-500">Provide automated tone and grammar options in composer</p>
+                  <p className="text-xs text-slate-500">Provide automated tone and grammar options in composer (Setup Required)</p>
                 </div>
-                <Switch checked={settings?.ai_drafts_enabled ?? true} disabled />
+                <Badge variant="outline" className="border-slate-800 text-slate-500">
+                  Setup Required
+                </Badge>
               </div>
             </div>
           </div>
