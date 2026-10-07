@@ -7,8 +7,7 @@ import {
   Star,
   CalendarDays,
 } from "lucide-react";
-import { Sidebar } from "@/components/dashboard/Sidebar";
-import { TopNav } from "@/components/dashboard/TopNav";
+import { AppLayout } from "@/components/ui/AppLayout";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { MorningBriefing } from "@/components/dashboard/MorningBriefing";
 import { CrediEdgeScore } from "@/components/dashboard/CrediEdgeScore";
@@ -35,11 +34,8 @@ function Dashboard() {
   });
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <Sidebar />
-      <div className="lg:pl-60 xl:pl-64">
-        <TopNav />
-
+    <AppLayout>
+      <div className="min-h-screen bg-background text-foreground">
         <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-7 xl:px-8">
 
           {/* Date header */}
@@ -173,6 +169,6 @@ function Dashboard() {
           <div className="h-8" />
         </main>
       </div>
-    </div>
+    </AppLayout>
   );
 }

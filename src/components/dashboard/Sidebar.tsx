@@ -1,8 +1,7 @@
-import { LayoutDashboard, Sparkles, SquareCheck as CheckSquare, Calendar, Users, Inbox, Star, ChartBar as BarChart3, FileText, Target, Globe, Plug, Settings, Menu, X } from "lucide-react";
+import { LayoutDashboard, Sparkles, SquareCheck as CheckSquare, Calendar, Users, Inbox, Star, ChartBar as BarChart3, FileText, Target, Globe, Plug, Settings, X } from "lucide-react";
 import { Link, useLocation } from "@tanstack/react-router";
 import { Logo } from "./Logo";
 import { HealthScore } from "./HealthScore";
-import { useState } from "react";
 
 const nav = [
   { label: "Command Centre", icon: LayoutDashboard, to: "/" },
@@ -20,9 +19,13 @@ const nav = [
   { label: "Settings", icon: Settings, to: "/settings" },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  mobileOpen?: boolean;
+  onMobileOpenChange?: (open: boolean) => void;
+}
+
+export function Sidebar({ mobileOpen = false, onMobileOpenChange }: SidebarProps) {
   const { pathname } = useLocation();
-  const [mobileOpen, setMobileOpen] = useState(false);
 
   const NavItem = ({ item }: { item: (typeof nav)[number] }) => {
     const isActive = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
@@ -31,7 +34,7 @@ export function Sidebar() {
       <li>
         <Link
           to={item.to}
-          onClick={() => setMobileOpen(false)}
+          onClick={() => onMobileOpenChange?.(false)}
           className={`group flex w-full items-center justify-between rounded-lg px-3 py-2 text-[12.5px] font-medium transition-all duration-150 xl:py-2 xl:text-[13px] ${
             isActive
               ? "bg-brand text-white shadow-sm"
@@ -59,19 +62,11 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Mobile toggle */}
-      <button
-        onClick={() => setMobileOpen(true)}
-        className="fixed left-4 top-4 z-50 grid h-8 w-8 place-items-center rounded-lg border border-border bg-card text-foreground shadow-soft lg:hidden"
-      >
-        <Menu className="h-4 w-4" strokeWidth={1.75} />
-      </button>
-
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
           className="fixed inset-0 z-40 bg-foreground/20 backdrop-blur-sm lg:hidden"
-          onClick={() => setMobileOpen(false)}
+          onClick={() => onMobileOpenChange?.(false)}
         />
       )}
 
@@ -84,7 +79,7 @@ export function Sidebar() {
         <div className="flex h-[60px] items-center justify-between border-b border-border px-4 xl:px-5">
           <Logo />
           <button
-            onClick={() => setMobileOpen(false)}
+            onClick={() => onMobileOpenChange?.(false)}
             className="grid h-7 w-7 place-items-center rounded-lg text-foreground/50 transition-colors hover:bg-secondary hover:text-foreground lg:hidden"
           >
             <X className="h-4 w-4" strokeWidth={1.75} />

@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { TopNav } from "@/components/dashboard/TopNav";
@@ -35,6 +35,7 @@ function AppSkeleton() {
 export function AppLayout({ children }: AppLayoutProps) {
   const { session, loading } = useAuthContext();
   const navigate = useNavigate();
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (!loading && !session) {
@@ -47,9 +48,9 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <Sidebar />
+      <Sidebar mobileOpen={mobileSidebarOpen} onMobileOpenChange={setMobileSidebarOpen} />
       <div className="lg:pl-60 xl:pl-64">
-        <TopNav />
+        <TopNav onMenuClick={() => setMobileSidebarOpen(true)} />
         <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-7 xl:px-8">
           {children}
         </main>

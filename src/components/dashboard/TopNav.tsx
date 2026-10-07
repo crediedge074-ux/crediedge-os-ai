@@ -4,7 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { signOut } from "@/services/auth";
 
-export function TopNav() {
+export function TopNav({ onMenuClick }: { onMenuClick?: () => void }) {
   const { profile, membership, user } = useAuthContext();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -34,7 +34,10 @@ export function TopNav() {
 
   return (
     <header className="sticky top-0 z-30 flex h-[60px] items-center gap-3 border-b border-border bg-card/95 px-4 backdrop-blur-sm sm:px-6">
-      <button className="grid h-8 w-8 place-items-center rounded-lg text-foreground/60 transition-colors duration-150 hover:bg-secondary hover:text-foreground lg:hidden">
+      <button
+        onClick={onMenuClick}
+        className="grid h-8 w-8 place-items-center rounded-lg text-foreground/60 transition-colors duration-150 hover:bg-secondary hover:text-foreground lg:hidden"
+      >
         <Menu className="h-4.5 w-4.5" strokeWidth={1.75} />
       </button>
 
