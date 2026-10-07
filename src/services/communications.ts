@@ -68,9 +68,9 @@ export interface CommunicationIntelligenceMetrics {
   aiPriorityLabel: string;
   satisfactionScore: number | null;
   satisfactionLabel: string;
-  missedOpportunitiesCount: number;
+  missedOpportunitiesCount: number | null;
   connectedChannelsCount: number;
-  liveMonitoringState: 'Active Monitoring' | 'Manual Mode' | 'Limited Monitoring';
+  liveMonitoringState: 'Active Monitoring' | 'Manual Mode' | 'Monitoring Status Unavailable';
   insufficientDataFlags: {
     responseTime: boolean;
     priorityScore: boolean;
@@ -123,13 +123,13 @@ export async function fetchCommunicationIntelligenceMetrics(): Promise<Communica
   const totalCommunications = communicationsList.length;
 
   // 2. Fetch connected integrations
-  const { data: integrationsData } = await supabase
+  const { data: integrationsData } = await (supabase as any)
     .from("integrations")
     .select("id, provider, status")
     .eq("business_id", business.id)
     .eq("status", "connected");
 
-  const connectedIntegrations = integrationsData || [];
+  const connectedIntegrations = (integrationsData || []) as Array<{ id: string; provider: string; status: string }>;
   const connectedChannelsCount = connectedIntegrations.length;
 
   // 3. Unread Messages Count
@@ -227,16 +227,12 @@ export async function fetchCommunicationIntelligenceMetrics(): Promise<Communica
     satisfactionLabel = `${avgRating.toFixed(1)} / 5.0 Star Rating`;
   }
 
-  // 8. Missed Opportunities — Count inbound messages flagged with urgent/frustrated sentiment requiring attention
-  const missedOpportunitiesCount = communicationsList.filter(
-    (c) => c.direction === "inbound" && (c.sentiment === "urgent" || c.sentiment === "frustrated")
-  ).length;
+  // 8. Missed Opportunities — Explicitly INSUFFICIENT DATA until authoritative opportunity detection engine is integrated
+  const missedOpportunitiesCount: number | null = null;
+  const missedOpportunitiesInsufficient = true;
 
-  // 9. Live Monitoring State — Reflects genuine connected integration state
-  let liveMonitoringState: 'Active Monitoring' | 'Manual Mode' | 'Limited Monitoring' = "Manual Mode";
-  if (connectedChannelsCount > 0) {
-    liveMonitoringState = "Active Monitoring";
-  }
+  // 9. Live Monitoring State — Honest status (does not infer active monitoring solely from connected channels)
+  const liveMonitoringState: 'Active Monitoring' | 'Manual Mode' | 'Monitoring Status Unavailable' = "Manual Mode";
 
   return {
     totalCommunications,
@@ -255,7 +251,7 @@ export async function fetchCommunicationIntelligenceMetrics(): Promise<Communica
       responseTime: responseTimeInsufficient,
       priorityScore: priorityInsufficient,
       satisfaction: satisfactionInsufficient,
-      missedOpportunities: awaitingReplyCount === 0 && missedOpportunitiesCount === 0,
+        missedOpportunities: missedOpportunitiesInsufficient,
     },
   };
 }
@@ -347,13 +343,14 @@ export async function createCommunication(params: {
     throw new Error(error.message);
   }
 
-  // Audit activity log
+  // Audit activity log (Accurately records communication logging without pretending an external email/SMS was transmitted)
   await logActivity({
+    business_id: business.id,
     entity_type: "communication",
     entity_id: data.id,
     customer_id: params.customer_id || undefined,
-    action: "message_sent",
-    description: `Recorded outbound ${params.channel} communication.`,
+    action: "created",
+    description: `Recorded ${params.channel} communication entry.`,
   });
 
   return data as unknown as CommunicationRecord;
@@ -366,7 +363,7 @@ export async function fetchCommunicationTemplates(): Promise<CommunicationTempla
   const business = await fetchCurrentBusiness();
   const businessId = business?.id;
 
-  const query = supabase
+  const query = (supabase as any)
     .from("communication_templates")
     .select("id, business_id, title, category, channel, subject, body, variables, created_at, updated_at")
     .order("created_at", { ascending: false });
@@ -400,7 +397,7 @@ export async function createCommunicationTemplate(params: {
   const business = await fetchCurrentBusiness();
   if (!business) throw new Error("No active workspace found");
 
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from("communication_templates")
     .insert({
       business_id: business.id,
@@ -436,12 +433,12 @@ export async function fetchCommunicationSettings(): Promise<CommunicationSetting
     };
   }
 
-  const { data: integrationsData } = await supabase
+  const { data: integrationsData } = await (supabase as any)
     .from("integrations")
     .select("id, provider, status, created_at")
     .eq("business_id", business.id);
 
-  const connected_integrations = (integrationsData || [])
+  const connected_integrations = ((integrationsData || []) as Array<{ id: string; provider: string; status: string; created_at: string }>)
     .filter((item) => item.status === "connected")
     .map((item) => ({
       id: item.id,

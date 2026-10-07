@@ -24,12 +24,10 @@ function CommunicationsPage() {
         crumbs={[{ label: "Communications" }]}
         action={{
           label: "Compose",
-          icon: MessageSquare,
           onClick: () => setComposerOpen(true),
         }}
         secondaryAction={{
           label: "Settings",
-          icon: Settings,
           onClick: () => setSettingsOpen(true),
         }}
       />

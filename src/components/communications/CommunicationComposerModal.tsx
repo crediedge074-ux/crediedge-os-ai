@@ -14,7 +14,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { AIDisclosure } from "@/components/ui/AIDisclosure";
-import { getCustomers, Customer } from "@/services/customers";
+import { getCustomers } from "@/services/customers";
+type Customer = Awaited<ReturnType<typeof getCustomers>>[number];
 import { getPrimaryMembership } from "@/services/business";
 import { supabase } from "@/lib/supabase";
 import {
@@ -360,46 +361,12 @@ export function CommunicationComposerModal({
                 </Select>
               </div>
 
-              {/* AI Draft Helpers */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs border-indigo-500/30 text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20"
-                  onClick={() => handleAiAction("suggest")}
-                >
-                  <Sparkles className="h-3 w-3 mr-1" />
-                  Suggest
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700"
-                  onClick={() => handleAiAction("improve")}
-                >
-                  <Wand2 className="h-3 w-3 mr-1" />
-                  Polish
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700"
-                  onClick={() => handleAiAction("professional")}
-                >
-                  Professional
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700"
-                  onClick={() => handleAiAction("shorten")}
-                >
-                  Shorten
-                </Button>
+              {/* AI Assistant Status */}
+              <div className="flex items-center gap-1.5">
+                <Badge variant="outline" className="border-slate-800 bg-slate-950 text-slate-400 text-xs py-1 px-2.5">
+                  <Sparkles className="h-3 w-3 mr-1.5 text-slate-500" />
+                  AI Assistant Unavailable (Provider Setup Required)
+                </Badge>
               </div>
             </div>
 
