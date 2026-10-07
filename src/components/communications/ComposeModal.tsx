@@ -12,6 +12,7 @@ import { getCustomers } from "@/services/customers";
 import { fetchConnectedIntegrations, saveCommunicationRecord, type ComposeResult } from "@/services/communications";
 import { authorizeAndLogAIRequest, getAIAllowance } from "@/services/aiUsage";
 import { logAIEvent } from "@/services/aiDataContract";
+import { appEvents, APP_EVENTS } from "@/lib/events";
 import type { Customer } from "@/lib/database.types";
 import type { IntegrationRow } from "@/services/communications";
 
@@ -219,6 +220,7 @@ export function ComposeModal({ open, onClose }: ComposeModalProps) {
         created_by: user?.id ?? null,
       });
       setResult(res);
+      if (res.communicationId) appEvents.emit(APP_EVENTS.COMMUNICATIONS_MUTATED);
     } catch (err) {
       console.error("[ComposeModal] save error:", err);
       setResult({
@@ -513,7 +515,7 @@ export function ComposeModal({ open, onClose }: ComposeModalProps) {
         <div className="flex items-center justify-between gap-2 pt-2">
           <span className="text-[10.5px] text-muted-foreground">
             {channelConnected
-              ? "A sending integration is connected — configure it in Settings to enable delivery."
+              ? "An integration is connected, but external delivery is not enabled yet — this will be saved as a record only."
               : "No sending integration connected — this will be saved as a record only."}
           </span>
           <div className="flex gap-2">
@@ -525,25 +527,14 @@ export function ComposeModal({ open, onClose }: ComposeModalProps) {
               <Save className="h-3.5 w-3.5" strokeWidth={1.75} />
               {saving ? "Saving..." : "Save / Record"}
             </button>
-            {channelConnected ? (
-              <button
-                onClick={handleSave}
-                disabled={saving || !body.trim()}
-                className="flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 text-[12.5px] font-semibold text-white shadow-sm transition-all hover:bg-brand/90 disabled:opacity-50"
-              >
-                <Send className="h-3.5 w-3.5" strokeWidth={1.75} />
-                Send
-              </button>
-            ) : (
-              <button
-                disabled
-                className="flex items-center gap-1.5 rounded-lg bg-secondary px-3.5 py-2 text-[12.5px] font-semibold text-muted-foreground cursor-not-allowed"
-                title="No sending integration connected"
-              >
-                <Send className="h-3.5 w-3.5" strokeWidth={1.75} />
-                Send (Unavailable)
-              </button>
-            )}
+            <button
+              disabled
+              className="flex items-center gap-1.5 rounded-lg bg-secondary px-3.5 py-2 text-[12.5px] font-semibold text-muted-foreground cursor-not-allowed"
+              title="External delivery is not enabled"
+            >
+              <Send className="h-3.5 w-3.5" strokeWidth={1.75} />
+              Send (Unavailable)
+            </button>
           </div>
         </div>
       </DialogContent>
