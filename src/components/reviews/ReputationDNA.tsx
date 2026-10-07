@@ -1,1349 +1,203 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useAuthContext } from "@/contexts/AuthContext";
+import { appEvents, APP_EVENTS } from "@/lib/events";
+import { authorizeAndLogAIRequest } from "@/services/aiUsage";
+import { logAIEvent } from "@/services/aiDataContract";
 import {
+  buildReviewInsights,
+  buildReviewPriorities,
+  calculateHealthScores,
+  calculateThemes,
+  completeReviewPriority,
+  createReviewRequest,
+  createReviewTask,
+  fetchReviewAnalytics,
+  fetchReviewMetrics,
+  fetchReviewsSnapshot,
+  getConnectedReviewIntegrations,
+  getPlatformUrl,
+  isResponded,
+  nameForCustomer,
+  saveReviewDraftActivity,
+  type ReviewIntegration,
+  type ReviewMetrics,
+  type ReviewPriority,
+  type ReviewRecord,
+  type ReviewsSnapshot,
+} from "@/services/reviews";
+import { createCampaign } from "@/services/campaigns";
+import { Link } from "@tanstack/react-router";
+import {
+  AlertTriangle,
+  BarChart3,
   Brain,
-  TrendingUp,
-  TrendingDown,
-  Star,
-  MessageSquare,
-  ChevronDown,
-  ChevronRight,
-  Zap,
-  Target,
-  Shield,
-  Users,
-  ArrowRight,
-  Lightbulb,
-  CircleCheck as CheckCircle2,
-  TriangleAlert as AlertTriangle,
-  ChartBar as BarChart3,
-  Gift,
-  Sparkles,
-  Award,
-  Eye,
-  Send,
-  RefreshCw,
-  ThumbsUp,
-  ThumbsDown,
-  Minus,
   Calendar,
-  CircleDollarSign,
-  Globe,
+  Check,
+  ChevronDown,
+  CircleAlert,
+  CircleCheck,
   ExternalLink,
-  TrendingUp as TrendUp,
-  Clock,
+  Globe,
+  Lightbulb,
+  Loader2,
   Megaphone,
-  Heart,
+  MessageSquare,
+  RefreshCw,
+  Send,
+  Shield,
+  Sparkles,
+  Star,
+  Target,
+  TrendingDown,
+  TrendingUp,
+  Users,
+  X,
+  Zap,
 } from "lucide-react";
 
-// ─── Animated Number ──────────────────────────────────────────────────────────
+const panel = "rounded-2xl border border-border bg-card shadow-card";
+const muted = "text-muted-foreground";
 
-function AnimatedNumber({
-  value,
-  prefix = "",
-  suffix = "",
-  decimals = 0,
-  duration = 1200,
-}: {
-  value: number;
-  prefix?: string;
-  suffix?: string;
-  decimals?: number;
-  duration?: number;
-}) {
-  const [display, setDisplay] = useState(0);
-  const ref = useRef<HTMLSpanElement>(null);
-  const started = useRef(false);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && !started.current) {
-          started.current = true;
-          const start = performance.now();
-          const tick = (now: number) => {
-            const p = Math.min((now - start) / duration, 1);
-            const eased = 1 - Math.pow(1 - p, 3);
-            setDisplay(eased * value);
-            if (p < 1) requestAnimationFrame(tick);
-          };
-          requestAnimationFrame(tick);
-          obs.disconnect();
-        }
-      },
-      { threshold: 0.3 }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [value, duration]);
-
-  return (
-    <span ref={ref}>
-      {prefix}
-      {decimals > 0 ? display.toFixed(decimals) : Math.round(display).toLocaleString()}
-      {suffix}
-    </span>
-  );
+function formatDate(value: string | null | undefined): string {
+  if (!value) return "Date unavailable";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Date unavailable" : date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }
 
-// ─── Score Ring ───────────────────────────────────────────────────────────────
-
-function ScoreRing({
-  score,
-  size = 80,
-  stroke = 7,
-  color = "#E31B23",
-}: {
-  score: number;
-  size?: number;
-  stroke?: number;
-  color?: string;
-}) {
-  const [animated, setAnimated] = useState(false);
-  const ref = useRef<SVGSVGElement>(null);
-  const r = (size - stroke) / 2;
-  const circ = 2 * Math.PI * r;
-  const offset = circ - (animated ? score / 100 : 0) * circ;
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setAnimated(true);
-          obs.disconnect();
-        }
-      },
-      { threshold: 0.2 }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
-
-  return (
-    <svg ref={ref} width={size} height={size} className="-rotate-90">
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" strokeWidth={stroke} className="text-border" />
-      <circle
-        cx={size / 2} cy={size / 2} r={r} fill="none"
-        stroke={color} strokeWidth={stroke} strokeLinecap="round"
-        strokeDasharray={circ} strokeDashoffset={offset}
-        style={{ transition: "stroke-dashoffset 1.4s cubic-bezier(0.4,0,0.2,1)" }}
-      />
-    </svg>
-  );
+function initials(review: ReviewRecord): string {
+  const name = nameForCustomer(review.customer) || "Review";
+  return name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
 }
 
-// ─── Progress Bar ─────────────────────────────────────────────────────────────
+function Stars({ rating }: { rating: number | null }) {
+  return <span className="flex gap-0.5" aria-label={rating === null ? "Rating unavailable" : `${rating} out of 5 stars`}>{[1, 2, 3, 4, 5].map((star) => <Star key={star} className={`h-3.5 w-3.5 ${rating !== null && star <= rating ? "fill-amber-400 text-amber-400" : "text-border"}`} strokeWidth={1.5} />)}</span>;
+}
 
-function ProgressBar({ value, color = "#E31B23", delay = 0 }: { value: number; color?: string; delay?: number }) {
-  const [w, setW] = useState(0);
-  const ref = useRef<HTMLDivElement>(null);
+function DataBadge({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "neutral" | "verified" | "analysis" | "warning" }) {
+  const styles = { neutral: "bg-secondary text-muted-foreground", verified: "bg-emerald-50 text-emerald-700", analysis: "bg-brand/10 text-brand", warning: "bg-amber-50 text-amber-700" };
+  return <span className={`rounded-md px-1.5 py-0.5 text-[9.5px] font-semibold ${styles[tone]}`}>{children}</span>;
+}
 
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setTimeout(() => setW(value), delay + 100);
-          obs.disconnect();
-        }
-      },
-      { threshold: 0.2 }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [value, delay]);
+function Insufficient({ compact = false }: { compact?: boolean }) {
+  return <span className={`${compact ? "text-[11px]" : "text-[12px]"} font-semibold uppercase tracking-wide text-muted-foreground`}>INSUFFICIENT DATA</span>;
+}
 
-  return (
-    <div ref={ref} className="relative h-1.5 w-full overflow-hidden rounded-full bg-secondary">
-      <div
-        className="absolute inset-y-0 left-0 rounded-full transition-all duration-700 ease-out"
-        style={{ width: `${w}%`, backgroundColor: color }}
-      />
+function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+  return <div className="fixed inset-0 z-50 grid place-items-center bg-foreground/40 p-4" role="dialog" aria-modal="true" aria-label={title}>
+    <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-border bg-card shadow-2xl">
+      <div className="flex items-center justify-between border-b border-border px-5 py-4"><h2 className="text-[16px] font-semibold text-foreground">{title}</h2><button onClick={onClose} className="rounded-lg p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground" aria-label="Close"><X className="h-4 w-4" /></button></div>
+      <div className="p-5">{children}</div>
     </div>
-  );
+  </div>;
 }
 
-// ─── Star Row ─────────────────────────────────────────────────────────────────
-
-function StarRow({ rating, filled = true }: { rating: number; filled?: boolean }) {
-  return (
-    <div className="flex gap-0.5">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <Star
-          key={i}
-          className={`h-3.5 w-3.5 ${i < rating ? (filled ? "fill-brand text-brand" : "fill-amber-400 text-amber-400") : "text-border"}`}
-          strokeWidth={0}
-        />
-      ))}
-    </div>
-  );
+function SectionTitle({ icon: Icon, title, detail, action }: { icon: typeof Star; title: string; detail?: string; action?: React.ReactNode }) {
+  return <div className="flex items-center gap-2 border-b border-border px-5 py-3.5"><Icon className="h-4 w-4 text-brand" strokeWidth={1.75} /><span className="text-[13.5px] font-semibold tracking-tight text-foreground">{title}</span>{detail && <span className={`ml-auto text-[10.5px] ${muted}`}>{detail}</span>}{action}</div>;
 }
 
-// ─── SOURCE CONFIG ────────────────────────────────────────────────────────────
-
-const sourceColor: Record<string, string> = {
-  Google: "bg-blue-50 text-blue-600",
-  Facebook: "bg-indigo-50 text-indigo-600",
-  Trustpilot: "bg-emerald-50 text-emerald-600",
-  Yelp: "bg-red-50 text-red-600",
-  TripAdvisor: "bg-green-50 text-green-600",
-};
-
-// ─── SENTIMENT CONFIG ─────────────────────────────────────────────────────────
-
-type ReviewSentiment = "Very Positive" | "Positive" | "Neutral" | "Negative" | "Urgent" | "High Influence";
-
-const sentimentCfg: Record<ReviewSentiment, { color: string; bg: string; icon: React.ElementType }> = {
-  "Very Positive": { color: "text-emerald-600", bg: "bg-emerald-50", icon: ThumbsUp },
-  Positive: { color: "text-brand", bg: "bg-brand/10", icon: ThumbsUp },
-  Neutral: { color: "text-muted-foreground", bg: "bg-secondary", icon: Minus },
-  Negative: { color: "text-amber-600", bg: "bg-amber-50", icon: ThumbsDown },
-  Urgent: { color: "text-destructive", bg: "bg-destructive/10", icon: AlertTriangle },
-  "High Influence": { color: "text-purple-600", bg: "bg-purple-50", icon: Star },
-};
-
-// ─── DATA ─────────────────────────────────────────────────────────────────────
-
-const reviews = [
-  {
-    id: "1",
-    name: "John Smith",
-    initials: "JS",
-    rating: 5,
-    source: "Google",
-    date: "2 days ago",
-    text: "Absolutely brilliant service. Had my car serviced and it was back on the road the same day. The team kept me informed throughout — couldn't ask for more.",
-    replied: true,
-    reply: "Thank you so much, John! We're thrilled you had a great experience. We look forward to seeing you next time!",
-    sentiment: "Very Positive" as ReviewSentiment,
-    themes: ["Communication", "Speed", "Service Quality"],
-    aiNote: "Ideal candidate for a referral request. High advocacy potential based on language used.",
-    ltv: "£1,240",
-    jobs: 3,
-  },
-  {
-    id: "2",
-    name: "Sarah Johnson",
-    initials: "SJ",
-    rating: 5,
-    source: "Google",
-    date: "1 week ago",
-    text: "Really professional team. The communication throughout was excellent and the pricing was very fair. Will definitely be back.",
-    replied: false,
-    sentiment: "Very Positive" as ReviewSentiment,
-    themes: ["Communication", "Pricing", "Professionalism"],
-    aiNote: "Reply immediately — Google rewards fast responses. Include a personalised thank-you mentioning her specific praise.",
-    ltv: "£4,200",
-    jobs: 7,
-  },
-  {
-    id: "3",
-    name: "Marcus Williams",
-    initials: "MW",
-    rating: 4,
-    source: "Trustpilot",
-    date: "2 weeks ago",
-    text: "Great work overall. Would have given 5 stars if the wait time was a little shorter. The quality of the work itself was excellent.",
-    replied: true,
-    reply: "Thank you Marcus! We appreciate the feedback on wait times and are working to improve our scheduling.",
-    sentiment: "Positive" as ReviewSentiment,
-    themes: ["Wait Time", "Quality", "Service"],
-    aiNote: "Wait time mentioned — this is a recurring theme. Consider booking gap review. Acknowledge personally.",
-    ltv: "£3,100",
-    jobs: 6,
-  },
-  {
-    id: "4",
-    name: "Emily Clarke",
-    initials: "EC",
-    rating: 5,
-    source: "Google",
-    date: "3 weeks ago",
-    text: "Best garage I've ever used. Honest pricing and quality workmanship. They went above and beyond to explain exactly what was needed.",
-    replied: false,
-    sentiment: "Very Positive" as ReviewSentiment,
-    themes: ["Pricing", "Quality", "Transparency"],
-    aiNote: "Strong review — no response sent. Google visibility reduces without timely replies. Reply urgently.",
-    ltv: "£980",
-    jobs: 2,
-  },
-  {
-    id: "5",
-    name: "James Thompson",
-    initials: "JT",
-    rating: 3,
-    source: "Google",
-    date: "1 month ago",
-    text: "Decent work but had to wait longer than expected. Was told it would be ready by 2pm, wasn't ready until 5pm. Communication could be better.",
-    replied: false,
-    sentiment: "Negative" as ReviewSentiment,
-    themes: ["Wait Time", "Communication", "Expectations"],
-    aiNote: "URGENT: 3-star review with no response. Reply today with an apology and invite back. Risk of further negative content.",
-    ltv: "£5,600",
-    jobs: 9,
-  },
-  {
-    id: "6",
-    name: "Rebecca Foster",
-    initials: "RF",
-    rating: 1,
-    source: "Google",
-    date: "3 weeks ago",
-    text: "Very disappointed. Car was booked in for a week, work wasn't completed and I wasn't kept informed. Will not return.",
-    replied: false,
-    sentiment: "Urgent" as ReviewSentiment,
-    themes: ["Communication", "Reliability", "Completion"],
-    aiNote: "CRITICAL: 1-star review unanswered for 3 weeks. This is actively harming your Google ranking. Respond today with a full apology and a direct resolution offer.",
-    ltv: "£240",
-    jobs: 1,
-  },
-];
-
-const priorities = [
-  {
-    id: "1",
-    action: "Reply to Rebecca's 1-star review",
-    priority: "Critical" as const,
-    impact: "£1,800",
-    confidence: 96,
-    time: "5 min",
-    reason: "1-star reviews without a response actively harm your Google ranking. Every day of silence increases the probability of a second negative review from the same customer by 34%. A professional, empathetic public response converts 22% of dissatisfied reviewers into loyal customers.",
-    reviewId: "6",
-  },
-  {
-    id: "2",
-    action: "Reply to James's 3-star review",
-    priority: "High" as const,
-    impact: "£640",
-    confidence: 88,
-    time: "5 min",
-    reason: "James is your highest-LTV customer at £5,600 over 9 jobs. A 3-star review from an otherwise loyal customer signals frustration, not departure. A personalised apology acknowledging wait time issues has an 81% chance of retaining this customer and improving his next rating.",
-    reviewId: "5",
-  },
-  {
-    id: "3",
-    action: "Ask 27 customers for reviews",
-    priority: "High" as const,
-    impact: "£4,500",
-    confidence: 84,
-    time: "10 min",
-    reason: "27 customers who have visited in the last 60 days have not been asked for a review. Based on your current satisfaction rate, 18 of them are predicted to leave 4-5 star reviews. This would increase your Google ranking position by an estimated 2 places.",
-    reviewId: null,
-  },
-  {
-    id: "4",
-    action: "Reply to Sarah and Emily's 5-star reviews",
-    priority: "Medium" as const,
-    impact: "£280",
-    confidence: 79,
-    time: "5 min",
-    reason: "5-star reviews without a response miss a referral and loyalty opportunity. A personalised reply that names what they specifically praised increases repeat booking likelihood by 31%.",
-    reviewId: "2",
-  },
-];
-
-const themeData = [
-  { label: "Communication", positive: 18, negative: 4, color: "#E31B23" },
-  { label: "Service Quality", positive: 22, negative: 1, color: "#10b981" },
-  { label: "Pricing", positive: 14, negative: 2, color: "#3b82f6" },
-  { label: "Wait Time", positive: 3, negative: 9, color: "#f59e0b" },
-  { label: "Professionalism", positive: 16, negative: 0, color: "#8b5cf6" },
-  { label: "Transparency", positive: 11, negative: 1, color: "#06b6d4" },
-  { label: "Reliability", positive: 8, negative: 3, color: "#ec4899" },
-];
-
-const healthMetrics = [
-  { label: "Review Score", score: 89, color: "#E31B23" },
-  { label: "Response Score", score: 54, color: "#f59e0b" },
-  { label: "Customer Trust", score: 82, color: "#10b981" },
-  { label: "Service Quality", score: 91, color: "#3b82f6" },
-  { label: "Communication", score: 76, color: "#8b5cf6" },
-  { label: "Loyalty Score", score: 84, color: "#06b6d4" },
-];
-
-const benchmarks = [
-  { label: "Average Rating", you: "4.3", market: "3.9", rank: "Top 18%", up: true },
-  { label: "Review Count", you: "127", market: "84", rank: "Top 22%", up: true },
-  { label: "Response Rate", you: "54%", market: "61%", rank: "Below avg", up: false },
-  { label: "Review Growth", you: "+14%", market: "+8%", rank: "Top 15%", up: true },
-  { label: "Avg Reply Time", you: "6.2h", market: "18h", rank: "Top 5%", up: true },
-];
-
-const timeline = [
-  { type: "review", name: "John Smith", stars: 5, date: "2 Jul 2026", source: "Google", text: "Absolutely brilliant service." },
-  { type: "reply", name: "You replied", date: "2 Jul 2026", text: "Thank you so much, John!" },
-  { type: "request", name: "Review request sent", date: "1 Jul 2026", text: "Sent to 8 customers via SMS" },
-  { type: "review", name: "Marcus Williams", stars: 4, date: "28 Jun 2026", source: "Trustpilot", text: "Great work overall." },
-  { type: "review", name: "Emily Clarke", stars: 5, date: "22 Jun 2026", source: "Google", text: "Best garage I've ever used." },
-  { type: "campaign", name: "Campaign launched", date: "20 Jun 2026", text: "Become Highest Rated Garage — started" },
-  { type: "review", name: "Rebecca Foster", stars: 1, date: "18 Jun 2026", source: "Google", text: "Very disappointed." },
-];
-
-const aiMemory = [
-  "Customers mention 'communication' in 76% of all reviews — your single biggest strength.",
-  "Wait time is cited negatively in 4 of the last 6 critical reviews. Scheduling review recommended.",
-  "Review requests sent within 24 hours of job completion achieve a 68% open rate vs 31% after 72 hours.",
-  "Phone call follow-ups produce reviews with 40% more words on average — stronger for SEO.",
-  "Friday afternoon jobs generate 2.4x more reviews than any other time slot.",
-  "Customers who receive a personalised reply leave a second review 28% of the time.",
-];
-
-// ─── HERO ─────────────────────────────────────────────────────────────────────
-
-function ReputationDNAHero() {
-  return (
-    <div className="relative overflow-hidden rounded-2xl bg-foreground p-6 text-background shadow-card">
-      <div className="absolute -right-20 -top-20 h-72 w-72 rounded-full bg-brand/20 blur-3xl" />
-      <div className="absolute -bottom-10 left-1/3 h-48 w-48 rounded-full bg-brand/10 blur-2xl" />
-
-      <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-background/10 px-3 py-1 text-[10.5px] font-semibold uppercase tracking-wider">
-            <Sparkles className="h-3 w-3 text-brand" />
-            AI-Powered Intelligence
-          </div>
-          <h1 className="text-[22px] font-bold leading-tight tracking-tight text-background">
-            Reputation DNA™
-          </h1>
-          <p className="mt-1.5 max-w-lg text-[13px] leading-relaxed text-background/65">
-            Build a reputation your customers trust. Every review analysed, every opportunity identified, every risk predicted.
-          </p>
-        </div>
-
-        <div className="flex shrink-0 flex-wrap gap-3">
-          {[
-            { label: "Overall Rating", value: "4.3", sub: "out of 5", icon: Star },
-            { label: "Total Reviews", value: "127", sub: "across 4 platforms", icon: MessageSquare },
-            { label: "Response Rate", value: "54%", sub: "needs improvement", icon: CheckCircle2 },
-            { label: "AI Reputation Score", value: "82/100", sub: "Top 18%", icon: Brain },
-          ].map((stat) => {
-            const Icon = stat.icon;
-            return (
-              <div key={stat.label} className="flex min-w-[110px] flex-col gap-0.5 rounded-xl bg-background/10 p-3">
-                <div className="flex items-center gap-1.5">
-                  <Icon className="h-3 w-3 text-background/55" strokeWidth={1.75} />
-                  <span className="text-[9.5px] font-medium text-background/55">{stat.label}</span>
-                </div>
-                <span className="text-[18px] font-bold tracking-tight text-background">{stat.value}</span>
-                <span className="text-[9px] text-background/50">{stat.sub}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="relative mt-5 flex flex-wrap gap-2.5">
-        {[
-          { label: "2 unanswered negative reviews — reply today", dot: "bg-destructive animate-pulse" },
-          { label: "27 customers ready to be asked for reviews", dot: "bg-brand" },
-          { label: "Response rate below market average", dot: "bg-amber-400" },
-        ].map((item) => (
-          <div key={item.label} className="flex items-center gap-2 rounded-lg bg-background/10 px-3 py-1.5">
-            <span className={`h-1.5 w-1.5 rounded-full ${item.dot}`} />
-            <span className="text-[11.5px] text-background/80">{item.label}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+function MetricCard({ label, value, detail, unavailable = false }: { label: string; value: string; detail?: string; unavailable?: boolean }) {
+  return <div className={`${panel} p-4 transition-all hover:-translate-y-0.5`}><div className={`text-[10.5px] font-medium ${muted}`}>{label}</div><div className="mt-1.5 text-[18px] font-bold text-foreground">{unavailable ? <Insufficient compact /> : value}</div>{detail && <div className={`mt-1 text-[10px] ${muted}`}>{detail}</div>}</div>;
 }
 
-// ─── AI REPUTATION SUMMARY ────────────────────────────────────────────────────
-
-function AIReputationSummary() {
-  return (
-    <div className="relative overflow-hidden rounded-2xl bg-foreground p-5 text-background shadow-card">
-      <div className="absolute -right-8 -top-8 h-28 w-28 rounded-full bg-brand/15 blur-2xl" />
-      <div className="relative flex items-start gap-3">
-        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-background/15">
-          <Brain className="h-5 w-5 text-background" strokeWidth={1.75} />
-        </div>
-        <div>
-          <div className="mb-2 flex items-center gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-background/60">AI Reputation Summary</span>
-            <span className="rounded-md bg-brand/40 px-1.5 py-0.5 text-[9.5px] font-bold text-background">LIVE</span>
-          </div>
-          <p className="text-[13px] leading-relaxed text-background/85">
-            Your reputation is <span className="font-semibold text-background">strong but undefended</span>. Your average rating of{" "}
-            <span className="font-semibold text-brand">4.3</span> has increased by 0.3 this month — customers consistently praise{" "}
-            <span className="font-semibold text-background">communication and workmanship</span>. However, 2 negative reviews remain
-            unanswered and your response rate of 54% is below the market average of 61%. The biggest improvement opportunity is{" "}
-            <span className="font-semibold text-background">reducing wait times</span> and{" "}
-            <span className="font-semibold text-background">activating your 27 silent happy customers</span>. You are currently outperforming
-            similar businesses in customer satisfaction and review growth.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2.5">
-            <div className="flex items-center gap-2 rounded-xl bg-background/10 px-3.5 py-2">
-              <CircleDollarSign className="h-3.5 w-3.5 text-background/70" strokeWidth={1.75} />
-              <span className="text-[11.5px] text-background/80">
-                Revenue opportunity from review improvements:{" "}
-                <span className="font-semibold text-background">+£3,200</span>
-              </span>
-            </div>
-            <div className="flex items-center gap-2 rounded-xl bg-background/10 px-3.5 py-2">
-              <TrendingUp className="h-3.5 w-3.5 text-background/70" strokeWidth={1.75} />
-              <span className="text-[11.5px] text-background/80">
-                Potential Google ranking gain:{" "}
-                <span className="font-semibold text-background">+2 positions</span>
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+function PlatformModal({ integrations, onClose }: { integrations: ReviewIntegration[]; onClose: () => void }) {
+  const platforms = [
+    { key: "google_business_profile", label: "Google Business Profile", description: "Verified Google review data and supported platform links." },
+    { key: "trustpilot", label: "Trustpilot", description: "Verified Trustpilot review data and supported platform links." },
+  ];
+  return <Modal title="Connect review platform" onClose={onClose}><p className={`mb-4 text-[12px] leading-relaxed ${muted}`}>Connections are managed through the central CrediEdgeOS integrations layer. OAuth and provider credentials are not simulated here.</p><div className="space-y-3">{platforms.map((platform) => { const integration = integrations.find((item) => item.provider.toLowerCase() === platform.key || item.provider.toLowerCase() === platform.key.replace("_business_profile", "")); const connected = integration?.status === "connected"; return <div key={platform.key} className="flex items-center gap-3 rounded-xl border border-border p-4"><div className="grid h-9 w-9 place-items-center rounded-xl bg-secondary"><Globe className="h-4 w-4 text-muted-foreground" /></div><div className="min-w-0 flex-1"><div className="text-[13px] font-semibold text-foreground">{platform.label}</div><div className={`mt-0.5 text-[11px] ${muted}`}>{platform.description}</div></div><DataBadge tone={connected ? "verified" : "warning"}>{connected ? "Connected" : integration?.status === "error" ? "Connection Error" : "Connection Required"}</DataBadge>{!connected && <Link to="/integrations" className="rounded-lg bg-brand px-3 py-1.5 text-[11px] font-semibold text-white">Open integrations</Link>}</div>; })}</div></Modal>;
 }
 
-// ─── TODAY'S PRIORITIES ───────────────────────────────────────────────────────
+function RequestModal({ snapshot, onClose }: { snapshot: ReviewsSnapshot; onClose: () => void }) {
+  const platforms = getConnectedReviewIntegrations(snapshot.integrations);
+  const [customerId, setCustomerId] = useState(snapshot.customers[0]?.id || "");
+  const [jobId, setJobId] = useState("");
+  const [platform, setPlatform] = useState(platforms[0]?.provider || "");
+  const [message, setMessage] = useState("Thank you for choosing us. If you have a moment, please share your experience on the review platform you prefer.");
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const { business, user } = useAuthContext();
+  const customerJobs = snapshot.jobs.filter((job) => job.customer_id === customerId && job.status === "completed");
+  const selectedIntegration = platforms.find((item) => item.provider === platform);
+  const requestUrl = selectedIntegration && typeof selectedIntegration.settings.review_url === "string" ? selectedIntegration.settings.review_url : null;
+  const submit = async () => { if (!business?.id || !user?.id || !customerId || !platform || !message.trim()) return; setSaving(true); setNotice(null); try { await createReviewRequest({ businessId: business.id, userId: user.id, customerId, jobId: jobId || null, platform, message: message.trim(), requestUrl }); setNotice("Request created. Delivery is unavailable until a verified messaging provider is connected; no message was sent."); } catch { setNotice("The request could not be created. Please try again."); } finally { setSaving(false); } };
+  return <Modal title="Request a review" onClose={onClose}><div className="space-y-4"><div><label className="mb-1 block text-[11px] font-semibold text-foreground">Customer</label><select value={customerId} onChange={(event) => setCustomerId(event.target.value)} className="w-full rounded-xl border border-border bg-card px-3 py-2 text-[12px] text-foreground"><option value="">Select customer</option>{snapshot.customers.map((customer) => <option key={customer.id} value={customer.id}>{nameForCustomer(customer) || "Customer"}</option>)}</select></div><div><label className="mb-1 block text-[11px] font-semibold text-foreground">Completed job</label><select value={jobId} onChange={(event) => setJobId(event.target.value)} className="w-full rounded-xl border border-border bg-card px-3 py-2 text-[12px] text-foreground"><option value="">No job selected</option>{customerJobs.map((job) => <option key={job.id} value={job.id}>{job.title || job.job_number}</option>)}</select></div><div><label className="mb-1 block text-[11px] font-semibold text-foreground">Platform</label>{platforms.length ? <select value={platform} onChange={(event) => setPlatform(event.target.value)} className="w-full rounded-xl border border-border bg-card px-3 py-2 text-[12px] text-foreground">{platforms.map((item) => <option key={item.id} value={item.provider}>{item.provider}</option>)}</select> : <div className="rounded-xl border border-dashed border-border p-3"><Insufficient compact /><p className={`mt-1 text-[11px] ${muted}`}>Connect Google Business Profile or Trustpilot before selecting a destination.</p></div>}</div><div><label className="mb-1 block text-[11px] font-semibold text-foreground">Message</label><textarea value={message} onChange={(event) => setMessage(event.target.value)} rows={5} className="w-full resize-none rounded-xl border border-border bg-card px-3 py-2 text-[12px] text-foreground" /></div>{requestUrl && <div className="rounded-xl bg-emerald-50 p-3 text-[11px] text-emerald-800">Verified platform route available: {requestUrl}</div>}{notice && <div className="rounded-xl bg-secondary p-3 text-[11px] text-foreground">{notice}</div>}<div className="flex justify-end gap-2"><button onClick={onClose} className="rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-foreground">Cancel</button><button disabled={saving || !customerId || !platform || !platforms.length} onClick={submit} className="rounded-lg bg-brand px-3 py-2 text-[12px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{saving ? "Saving…" : "Create request"}</button></div></div></Modal>;
+}
 
-function TodaysPriorities({ onViewReview }: { onViewReview: (id: string) => void }) {
+function Hero({ metrics, lastSyncedAt, onRefresh }: { metrics: ReviewMetrics; lastSyncedAt: string | null; onRefresh: () => void }) {
+  const stats = [{ label: "Overall rating", value: metrics.averageRating === null ? null : metrics.averageRating.toFixed(1), sub: "from verified reviews" }, { label: "Total reviews", value: metrics.total?.toString() || null, sub: Object.keys(metrics.sourceCounts).length ? `${Object.keys(metrics.sourceCounts).length} source${Object.keys(metrics.sourceCounts).length === 1 ? "" : "s"}` : "No connected source" }, { label: "Response rate", value: metrics.responseRate === null ? null : `${Math.round(metrics.responseRate)}%`, sub: "from response evidence" }, { label: "Reputation score", value: null, sub: "Methodology requires evidence" }];
+  return <div className="relative overflow-hidden rounded-2xl bg-foreground p-6 text-background shadow-card"><div className="absolute -right-20 -top-20 h-72 w-72 rounded-full bg-brand/20 blur-3xl" /><div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between"><div><div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-background/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider"><Sparkles className="h-3 w-3 text-brand" /> Evidence-based intelligence</div><h1 className="text-[22px] font-bold leading-tight tracking-tight">Reputation DNA™</h1><p className="mt-1.5 max-w-lg text-[13px] leading-relaxed text-background/65">Understand how real customer feedback shapes your reputation, priorities, and next best action.</p><div className="mt-3 flex items-center gap-2 text-[10.5px] text-background/55"><span className={`h-1.5 w-1.5 rounded-full ${lastSyncedAt ? "bg-emerald-400" : "bg-amber-400"}`} />{lastSyncedAt ? `LIVE · synced ${formatDate(lastSyncedAt)}` : "Waiting for verified platform data"}<button onClick={onRefresh} className="rounded-md bg-background/10 p-1 hover:bg-background/20" aria-label="Refresh reviews"><RefreshCw className="h-3 w-3" /></button></div></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{stats.map((stat) => <div key={stat.label} className="min-w-[110px] rounded-xl bg-background/10 p-3"><div className="text-[9.5px] font-medium text-background/55">{stat.label}</div><div className="mt-1 text-[18px] font-bold">{stat.value || <Insufficient compact />}</div><div className="text-[9px] text-background/50">{stat.sub}</div></div>)}</div></div></div>;
+}
+
+function Summary({ snapshot, metrics }: { snapshot: ReviewsSnapshot; metrics: ReviewMetrics }) {
+  const insights = buildReviewInsights(snapshot.reviews).slice(0, 3);
+  return <div className={`${panel} overflow-hidden bg-foreground text-background`}><div className="p-5"><div className="flex items-center gap-2"><Brain className="h-4 w-4" /><span className="text-[11px] font-semibold uppercase tracking-wider text-background/65">Review intelligence summary</span><DataBadge tone="analysis">Deterministic analysis</DataBadge></div>{snapshot.reviews.length ? <p className="mt-3 text-[13px] leading-relaxed text-background/85">Across {metrics.total} verified review{metrics.total === 1 ? "" : "s"}, the current average rating is <strong>{metrics.averageRating?.toFixed(2)}</strong> and <strong>{metrics.responseRate === null ? "response coverage is unavailable" : `${Math.round(metrics.responseRate)}% have response evidence`}</strong>. {insights.length ? insights[0].statement : "No recurring theme is supported yet."}</p> : <div className="mt-3"><Insufficient /><p className="mt-1 text-[12px] text-background/65">Connect a supported platform or sync workspace reviews before requesting an analysis.</p></div>}<div className="mt-3 flex flex-wrap gap-2">{insights.map((insight) => <span key={`${insight.label}-${insight.statement}`} className="rounded-xl bg-background/10 px-3 py-2 text-[11px] text-background/80">{insight.statement}</span>)}</div></div></div>;
+}
+
+function Priorities({ priorities, onSelect, onComplete, onCreateTask }: { priorities: ReviewPriority[]; onSelect: (id: string) => void; onComplete: (priority: ReviewPriority) => void; onCreateTask: (priority: ReviewPriority) => void }) {
   const [expanded, setExpanded] = useState<string | null>(null);
-
-  const priorityCfg = {
-    Critical: { dot: "bg-destructive animate-pulse", badge: "bg-destructive/10 text-destructive" },
-    High: { dot: "bg-brand", badge: "bg-brand/10 text-brand" },
-    Medium: { dot: "bg-amber-500", badge: "bg-amber-50 text-amber-600" },
-    Low: { dot: "bg-muted-foreground/40", badge: "bg-secondary text-muted-foreground" },
-  } as const;
-
-  return (
-    <div className="rounded-2xl border border-border bg-card shadow-card">
-      <div className="flex items-center gap-2.5 border-b border-border px-5 py-3.5">
-        <Target className="h-4 w-4 text-brand" strokeWidth={1.75} />
-        <span className="text-[13.5px] font-semibold tracking-tight text-foreground">Today's Review Priorities</span>
-        <span className="grid h-5 min-w-5 place-items-center rounded-full bg-brand px-1 text-[10px] font-bold text-white">
-          {priorities.length}
-        </span>
-      </div>
-
-      <div className="divide-y divide-border">
-        {priorities.map((p) => {
-          const cfg = priorityCfg[p.priority];
-          return (
-            <div key={p.id} className="p-4 transition-colors hover:bg-secondary/20">
-              <div className="flex items-start gap-3">
-                <div className={`mt-1 h-2 w-2 shrink-0 rounded-full ${cfg.dot}`} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-start gap-2 justify-between">
-                    <div>
-                      <span className="text-[12.5px] font-semibold text-foreground">{p.action}</span>
-                      <div className="mt-1 flex flex-wrap items-center gap-2">
-                        <span className={`rounded-md px-1.5 py-0.5 text-[9.5px] font-semibold ${cfg.badge}`}>{p.priority}</span>
-                        <span className="text-[11px] font-bold text-brand">{p.impact} impact</span>
-                        <span className="text-muted-foreground/40">·</span>
-                        <span className="text-[10.5px] text-muted-foreground">{p.confidence}% confidence</span>
-                        <span className="text-muted-foreground/40">·</span>
-                        <span className="flex items-center gap-0.5 text-[10.5px] text-muted-foreground">
-                          <Clock className="h-2.5 w-2.5" strokeWidth={1.75} />
-                          {p.time}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 gap-2">
-                      {p.reviewId && (
-                        <button
-                          onClick={() => onViewReview(p.reviewId!)}
-                          className="rounded-lg bg-brand px-3 py-1.5 text-[11px] font-semibold text-white transition-all hover:bg-brand/90"
-                        >
-                          Complete
-                        </button>
-                      )}
-                      <button
-                        onClick={() => setExpanded(expanded === p.id ? null : p.id)}
-                        className="flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-semibold text-muted-foreground transition-all hover:border-foreground/20 hover:text-foreground"
-                      >
-                        <Eye className="h-3 w-3" strokeWidth={1.75} />
-                        Explain Why
-                        <ChevronDown className={`h-2.5 w-2.5 transition-transform duration-200 ${expanded === p.id ? "rotate-180" : ""}`} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {expanded === p.id && (
-                    <div className="mt-3 rounded-xl border border-brand/15 bg-brand/5 p-3.5">
-                      <div className="flex items-start gap-2">
-                        <Brain className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand" strokeWidth={1.75} />
-                        <p className="text-[11.5px] leading-relaxed text-foreground/80">{p.reason}</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+  return <div className={panel}><SectionTitle icon={Target} title="Today's Review Priorities" detail={priorities.length ? `${priorities.length} actionable` : "No active priorities"} />{priorities.length ? <div className="divide-y divide-border">{priorities.map((priority) => <div key={priority.id} className="p-4"><div className="flex items-start gap-3"><span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${priority.level === "Critical" ? "bg-destructive" : priority.level === "High" ? "bg-brand" : "bg-amber-500"}`} /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-start justify-between gap-2"><div><div className="text-[12.5px] font-semibold text-foreground">{priority.title}</div><div className="mt-1 flex flex-wrap gap-2"><DataBadge tone={priority.level === "Critical" ? "warning" : "analysis"}>{priority.level}</DataBadge>{priority.evidence.map((item) => <span key={item} className={`text-[10.5px] ${muted}`}>{item}</span>)}</div></div><div className="flex gap-2"><button onClick={() => priority.reviewId && onComplete(priority)} className="rounded-lg bg-brand px-3 py-1.5 text-[11px] font-semibold text-white">Complete</button>{priority.reviewId && <button onClick={() => onSelect(priority.reviewId as string)} className="rounded-lg border border-border px-3 py-1.5 text-[11px] font-semibold text-foreground">Open</button>}<button onClick={() => onCreateTask(priority)} className="rounded-lg border border-border px-3 py-1.5 text-[11px] font-semibold text-foreground">Task</button></div></div><button onClick={() => setExpanded(expanded === priority.id ? null : priority.id)} className="mt-2 flex items-center gap-1 text-[10.5px] font-semibold text-brand">Explain why <ChevronDown className={`h-3 w-3 ${expanded === priority.id ? "rotate-180" : ""}`} /></button>{expanded === priority.id && <div className="mt-2 rounded-xl border border-brand/15 bg-brand/5 p-3 text-[11.5px] leading-relaxed text-foreground/80">Evidence-based analysis: {priority.reason} Supporting evidence: {priority.evidence.join("; ")}.</div>}</div></div></div>)}</div> : <div className="p-5"><Insufficient /><p className={`mt-1 text-[12px] ${muted}`}>Priorities appear when the workspace has unanswered low-rated reviews or another defensible review action.</p></div>}</div>;
 }
 
-// ─── REVIEW LIST ──────────────────────────────────────────────────────────────
-
-function ReviewList({
-  selected,
-  onSelect,
-}: {
-  selected: string;
-  onSelect: (id: string) => void;
-}) {
-  return (
-    <div className="flex flex-col rounded-2xl border border-border bg-card shadow-card overflow-hidden">
-      <div className="flex items-center gap-2.5 border-b border-border px-4 py-3">
-        <Star className="h-4 w-4 text-brand" strokeWidth={1.75} />
-        <span className="text-[12px] font-semibold text-foreground">All Reviews</span>
-        <span className="grid h-5 min-w-5 place-items-center rounded-full bg-brand px-1 text-[10px] font-bold text-white">
-          {reviews.length}
-        </span>
-        <span className="ml-auto text-[10px] text-muted-foreground">AI-sorted by urgency</span>
-      </div>
-
-      <ul className="flex-1 divide-y divide-border overflow-y-auto">
-        {reviews.map((r) => {
-          const sentCfg = sentimentCfg[r.sentiment];
-          const SentIcon = sentCfg.icon;
-          const isSelected = selected === r.id;
-
-          return (
-            <li
-              key={r.id}
-              onClick={() => onSelect(r.id)}
-              className={`cursor-pointer px-4 py-3.5 transition-all duration-150 ${
-                isSelected
-                  ? "bg-brand/5 border-l-2 border-l-brand"
-                  : "hover:bg-secondary/40 border-l-2 border-l-transparent"
-              }`}
-            >
-              <div className="flex items-start gap-2.5">
-                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand/10 text-[12px] font-bold text-brand">
-                  {r.initials}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-1.5">
-                    <span className="text-[12.5px] font-semibold text-foreground">{r.name}</span>
-                    <span className="shrink-0 text-[10px] text-muted-foreground">{r.date}</span>
-                  </div>
-                  <StarRow rating={r.rating} />
-                  <p className="mt-1 line-clamp-1 text-[11px] text-muted-foreground">{r.text}</p>
-                  <div className="mt-1.5 flex items-center gap-1.5">
-                    <span className={`rounded-md px-1 py-0.5 text-[9px] font-medium ${sourceColor[r.source] ?? "bg-secondary text-muted-foreground"}`}>{r.source}</span>
-                    <span className={`flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[9.5px] font-medium ${sentCfg.bg} ${sentCfg.color}`}>
-                      <SentIcon className="h-2 w-2" strokeWidth={1.75} />
-                      {r.sentiment}
-                    </span>
-                    {!r.replied && (
-                      <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-[9.5px] font-semibold text-amber-600">No reply</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
+function ReviewList({ reviews, selectedId, onSelect, onConnect }: { reviews: ReviewRecord[]; selectedId: string | null; onSelect: (id: string) => void; onConnect: () => void }) {
+  const [filter, setFilter] = useState("all");
+  const visible = reviews.filter((review) => filter === "all" || filter === "unanswered" && !isResponded(review) || filter === "negative" && Number(review.rating || 0) <= 3 || filter === "google" && review.source?.toLowerCase().includes("google") || filter === "trustpilot" && review.source?.toLowerCase().includes("trustpilot"));
+  return <div className={`${panel} overflow-hidden`}><div className="border-b border-border px-4 py-3"><div className="flex items-center gap-2"><Star className="h-4 w-4 text-brand" /><span className="text-[12px] font-semibold text-foreground">All Reviews</span><span className={`rounded-md bg-secondary px-1.5 py-0.5 text-[10px] ${muted}`}>{reviews.length}</span></div><div className="mt-3 flex flex-wrap gap-1.5">{["all", "unanswered", "negative", "google", "trustpilot"].map((item) => <button key={item} onClick={() => setFilter(item)} className={`rounded-md px-2 py-1 text-[10px] font-semibold capitalize ${filter === item ? "bg-foreground text-background" : "bg-secondary text-muted-foreground"}`}>{item}</button>)}</div></div>{visible.length ? <ul className="max-h-[540px] divide-y divide-border overflow-y-auto">{visible.map((review) => <li key={review.id} onClick={() => onSelect(review.id)} className={`cursor-pointer border-l-2 px-4 py-3 transition-colors hover:bg-secondary/40 ${selectedId === review.id ? "border-l-brand bg-brand/5" : "border-l-transparent"}`}><div className="flex items-start gap-2.5"><div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand/10 text-[10px] font-bold text-brand">{initials(review)}</div><div className="min-w-0 flex-1"><div className="flex justify-between gap-2"><span className="truncate text-[12px] font-semibold text-foreground">{nameForCustomer(review.customer) || "Unmatched reviewer"}</span><span className={`shrink-0 text-[10px] ${muted}`}>{formatDate(review.submitted_at || review.created_at)}</span></div><Stars rating={review.rating} /><p className={`mt-1 line-clamp-2 text-[11px] ${muted}`}>{review.feedback || "Review text unavailable."}</p><div className="mt-1.5 flex flex-wrap gap-1.5"><DataBadge tone="verified">{review.source || "Source unavailable"}</DataBadge><DataBadge tone={isResponded(review) ? "verified" : "warning"}>{isResponded(review) ? "Responded" : "No response"}</DataBadge></div></div></div></li>)}</ul> : <div className="p-5"><Insufficient /><p className={`mt-1 text-[12px] ${muted}`}>No genuine reviews match this filter.</p>{!reviews.length && <button onClick={onConnect} className="mt-3 rounded-lg bg-brand px-3 py-2 text-[11px] font-semibold text-white">Connect a platform</button>}</div>}</div>;
 }
 
-// ─── REVIEW DETAIL ────────────────────────────────────────────────────────────
-
-function ReviewDetail({ review }: { review: (typeof reviews)[0] }) {
-  const [replyText, setReplyText] = useState(review.reply ?? "");
-  const sentCfg = sentimentCfg[review.sentiment];
-  const SentIcon = sentCfg.icon;
-
-  const suggestReply = () => {
-    if (review.rating >= 4) {
-      setReplyText(`Thank you so much for your kind words, ${review.name.split(" ")[0]}! We're delighted you had a great experience and we look forward to welcoming you back soon.`);
-    } else if (review.rating === 3) {
-      setReplyText(`Thank you for your feedback, ${review.name.split(" ")[0]}. We sincerely apologise for the wait time — this is something we're actively addressing. We'd love to welcome you back and show you the improvement. Please feel free to reach out directly.`);
-    } else {
-      setReplyText(`Dear ${review.name.split(" ")[0]}, we are truly sorry to hear about your experience — this is not the standard we hold ourselves to. We would very much like the opportunity to make this right. Please contact us directly at your earliest convenience.`);
-    }
-  };
-
-  return (
-    <div className="flex flex-col rounded-2xl border border-border bg-card shadow-card overflow-hidden">
-      <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
-        <div className="flex items-center gap-3">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand/10 text-[13px] font-bold text-brand">
-            {review.initials}
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[14px] font-semibold text-foreground">{review.name}</span>
-              <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${sourceColor[review.source] ?? "bg-secondary text-muted-foreground"}`}>{review.source}</span>
-              <span className={`flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[9.5px] font-medium ${sentCfg.bg} ${sentCfg.color}`}>
-                <SentIcon className="h-2.5 w-2.5" strokeWidth={1.75} />
-                {review.sentiment}
-              </span>
-            </div>
-            <div className="mt-1 flex items-center gap-2">
-              <StarRow rating={review.rating} />
-              <span className="text-[11px] text-muted-foreground">{review.date}</span>
-              <span className="text-muted-foreground/30">·</span>
-              <span className="text-[11px] text-muted-foreground">LTV: <span className="font-semibold text-foreground">{review.ltv}</span></span>
-            </div>
-          </div>
-        </div>
-        <button className="shrink-0 rounded-lg border border-border bg-card px-3 py-1.5 text-[11.5px] font-medium text-foreground transition-all hover:border-foreground/20 hover:bg-secondary">
-          <ExternalLink className="inline h-3 w-3 mr-1" strokeWidth={1.75} />
-          Open in {review.source}
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-5 space-y-4">
-        {/* Review text */}
-        <div className="rounded-xl bg-secondary/50 p-4">
-          <p className="text-[13.5px] leading-relaxed text-foreground">{review.text}</p>
-        </div>
-
-        {/* Themes */}
-        <div>
-          <div className="mb-2 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Identified Themes</div>
-          <div className="flex flex-wrap gap-1.5">
-            {review.themes.map((t) => (
-              <span key={t} className="rounded-lg bg-secondary px-2.5 py-1 text-[11px] font-medium text-foreground">{t}</span>
-            ))}
-          </div>
-        </div>
-
-        {/* AI Note */}
-        <div className="rounded-xl border border-brand/15 bg-brand/5 p-3.5">
-          <div className="mb-1.5 flex items-center gap-1.5">
-            <Brain className="h-3 w-3 text-brand" strokeWidth={1.75} />
-            <span className="text-[10.5px] font-semibold text-brand">AI Insight</span>
-          </div>
-          <p className="text-[11.5px] leading-relaxed text-foreground/80">{review.aiNote}</p>
-        </div>
-
-        {/* Existing reply */}
-        {review.replied && review.reply && (
-          <div>
-            <div className="mb-2 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Your Reply</div>
-            <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-4">
-              <p className="text-[12.5px] leading-relaxed text-emerald-800">{review.reply}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Reply composer */}
-        {!review.replied && (
-          <div>
-            <div className="mb-2 flex items-center gap-2">
-              <span className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Your Reply</span>
-              <button
-                onClick={suggestReply}
-                className="flex items-center gap-1 rounded-lg bg-brand/10 border border-brand/20 px-2.5 py-1 text-[11px] font-semibold text-brand transition-all hover:bg-brand/20"
-              >
-                <Sparkles className="h-2.5 w-2.5" strokeWidth={1.75} />
-                AI Suggest
-              </button>
-            </div>
-            <textarea
-              value={replyText}
-              onChange={(e) => setReplyText(e.target.value)}
-              placeholder="Write a professional reply..."
-              rows={4}
-              className="w-full resize-none rounded-xl border border-border bg-secondary/30 px-4 py-3 text-[13px] text-foreground placeholder:text-muted-foreground focus:border-foreground/20 focus:bg-card focus:outline-none"
-            />
-            <div className="mt-2 flex items-center justify-between gap-2">
-              <span className="text-[10.5px] text-muted-foreground">Always review before publishing</span>
-              <button className="flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-[12.5px] font-semibold text-white shadow-sm transition-all hover:bg-brand/90">
-                <Send className="h-3.5 w-3.5" strokeWidth={1.75} />
-                Publish Reply
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+function ReviewDetail({ review, integration, businessId, userId, onRefresh }: { review: ReviewRecord | null; integration?: ReviewIntegration; businessId: string; userId: string; onRefresh: () => void }) {
+  const [reply, setReply] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const [working, setWorking] = useState(false);
+  useEffect(() => { setReply(""); setNotice(null); }, [review?.id]);
+  if (!review) return <div className={`${panel} grid min-h-[360px] place-items-center p-6 text-center`}><div><MessageSquare className="mx-auto h-8 w-8 text-muted-foreground/40" /><div className="mt-2 text-[14px] font-semibold text-foreground">Select a review</div><p className={`mt-1 text-[12px] ${muted}`}>Review details and response actions will appear here.</p></div></div>;
+  const platformUrl = getPlatformUrl(integration, review);
+  const suggest = async () => { setWorking(true); const result = await authorizeAndLogAIRequest({ businessId, userId, actionType: "review_reply_assistance", complexityTier: "free" }); if (result.authorized) { const customer = nameForCustomer(review.customer)?.split(" ")[0] || "there"; setReply(Number(review.rating || 0) >= 4 ? `Thank you for sharing your experience, ${customer}. We appreciate your kind feedback and look forward to welcoming you back.` : `Thank you for your feedback, ${customer}. We are sorry that your experience fell short. We would welcome the opportunity to understand more and make this right. Please contact us directly so we can help.`); await logAIEvent({ businessId, userId, eventType: "review_reply_drafted", source: "reviews", metadata: { reviewId: review.id, evidence: review.feedback, deterministic: true } }); setNotice("AI-assisted draft created from this review. Please edit and approve it before using it."); } else setNotice("AI assistance is unavailable right now."); setWorking(false); };
+  const saveDraft = async () => { if (!reply.trim()) return; setWorking(true); await saveReviewDraftActivity({ businessId, userId, review, text: reply.trim() }); setNotice("Draft recorded in the workspace timeline. It has not been published."); setWorking(false); };
+  return <div className={`${panel} overflow-hidden`}><div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-4"><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-full bg-brand/10 text-[12px] font-bold text-brand">{initials(review)}</div><div><div className="flex flex-wrap items-center gap-2"><span className="text-[14px] font-semibold text-foreground">{nameForCustomer(review.customer) || "Unmatched reviewer"}</span><DataBadge tone="verified">{review.source || "Source unavailable"}</DataBadge></div><div className="mt-1 flex items-center gap-2"><Stars rating={review.rating} /><span className={`text-[11px] ${muted}`}>{formatDate(review.submitted_at || review.created_at)}</span><DataBadge tone={isResponded(review) ? "verified" : "warning"}>{isResponded(review) ? "Responded" : "Unanswered"}</DataBadge></div></div></div>{platformUrl ? <button onClick={() => window.open(platformUrl, "_blank", "noopener,noreferrer")} className="rounded-lg border border-border px-3 py-1.5 text-[11px] font-medium text-foreground"><ExternalLink className="mr-1 inline h-3 w-3" />Open platform</button> : <DataBadge>Platform link unavailable</DataBadge>}</div><div className="space-y-4 p-5"><div className="rounded-xl bg-secondary/50 p-4 text-[13px] leading-relaxed text-foreground">{review.feedback || "Review text unavailable."}</div><div><div className={`mb-2 text-[10.5px] font-semibold uppercase tracking-wider ${muted}`}>Evidence-based analysis</div><div className="rounded-xl border border-brand/15 bg-brand/5 p-3.5 text-[11.5px] leading-relaxed text-foreground/80">{review.rating === null ? <Insufficient /> : review.rating <= 3 ? `This review is actionable because it is rated ${review.rating}/5 and has ${isResponded(review) ? "response evidence" : "no response evidence"}.` : `This review records a ${review.rating}/5 experience. No recurring claim is made from one review alone.`} <DataBadge tone="analysis">Deterministic analysis</DataBadge></div></div>{review.response_text && <div><div className={`mb-2 text-[10.5px] font-semibold uppercase tracking-wider ${muted}`}>Verified response</div><div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-[12px] leading-relaxed text-emerald-800">{review.response_text}<div className="mt-2 text-[10px]">Published {formatDate(review.response_at)}</div></div></div>}{!isResponded(review) && <div><div className="mb-2 flex items-center gap-2"><span className={`text-[10.5px] font-semibold uppercase tracking-wider ${muted}`}>Reply draft</span><button disabled={working} onClick={suggest} className="rounded-lg border border-brand/20 bg-brand/10 px-2.5 py-1 text-[11px] font-semibold text-brand disabled:opacity-50"><Sparkles className="mr-1 inline h-3 w-3" />AI Suggest</button></div><textarea value={reply} onChange={(event) => setReply(event.target.value)} rows={5} placeholder="Write an editable response…" className="w-full resize-none rounded-xl border border-border bg-card px-4 py-3 text-[12px] text-foreground" /><div className="mt-2 flex flex-wrap items-center justify-between gap-2"><span className={`text-[10.5px] ${muted}`}>Publishing requires explicit confirmation and a verified provider API.</span><div className="flex gap-2"><button disabled={!reply.trim() || working} onClick={saveDraft} className="rounded-lg border border-border px-3 py-2 text-[11px] font-semibold text-foreground">Save draft</button><button disabled className="rounded-lg bg-secondary px-3 py-2 text-[11px] font-semibold text-muted-foreground">Publish unavailable</button></div></div></div>}{notice && <div className="rounded-xl bg-secondary p-3 text-[11px] text-foreground">{notice}</div>}<button onClick={onRefresh} className="text-[10.5px] font-semibold text-brand">Refresh review status</button></div></div>;
 }
 
-// ─── REVIEW ANALYSIS ─────────────────────────────────────────────────────────
-
-function ReviewAnalysis() {
-  return (
-    <div className="rounded-2xl border border-border bg-card shadow-card">
-      <div className="border-b border-border px-5 py-3.5">
-        <div className="flex items-center gap-2">
-          <Brain className="h-4 w-4 text-brand" strokeWidth={1.75} />
-          <span className="text-[13.5px] font-semibold tracking-tight text-foreground">AI Review Analysis</span>
-          <span className="ml-auto text-[11px] text-muted-foreground">127 reviews analysed</span>
-        </div>
-      </div>
-      <div className="p-5 space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <div className="mb-2.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Positive Themes</div>
-            <div className="space-y-2">
-              {themeData.filter((t) => t.positive > t.negative).map((t) => (
-                <div key={t.label} className="flex items-center gap-3">
-                  <span className="w-28 shrink-0 text-[11.5px] text-foreground">{t.label}</span>
-                  <ProgressBar value={(t.positive / 22) * 100} color="#10b981" />
-                  <span className="w-6 shrink-0 text-right text-[11px] font-bold text-emerald-600">{t.positive}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div>
-            <div className="mb-2.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Negative Themes</div>
-            <div className="space-y-2">
-              {themeData.filter((t) => t.negative > 0).sort((a, b) => b.negative - a.negative).map((t) => (
-                <div key={t.label} className="flex items-center gap-3">
-                  <span className="w-28 shrink-0 text-[11.5px] text-foreground">{t.label}</span>
-                  <ProgressBar value={(t.negative / 9) * 100} color="#f59e0b" />
-                  <span className="w-6 shrink-0 text-right text-[11px] font-bold text-amber-600">{t.negative}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-xl bg-brand/5 border border-brand/10 p-3.5">
-          <div className="mb-1.5 flex items-center gap-1.5">
-            <Lightbulb className="h-3 w-3 text-brand" strokeWidth={1.75} />
-            <span className="text-[10.5px] font-semibold text-brand">AI Pattern Recognition</span>
-          </div>
-          <p className="text-[11.5px] leading-relaxed text-foreground/80">
-            <span className="font-semibold text-foreground">Wait time</span> is cited negatively 9 times — your most actionable improvement area. Resolving this could convert 3–4 star reviews into 5-star reviews. Consider a same-day ETA update system to reduce perceived wait times by 40%.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {[
-            { label: "5-Star Reviews", value: 89, total: 127, color: "#10b981" },
-            { label: "4-Star Reviews", value: 24, total: 127, color: "#E31B23" },
-            { label: "3-Star Reviews", value: 9, total: 127, color: "#f59e0b" },
-            { label: "1-2 Star Reviews", value: 5, total: 127, color: "#ef4444" },
-          ].map((r) => (
-            <div key={r.label} className="rounded-xl bg-secondary/50 p-3 text-center">
-              <div className="text-[10px] font-medium text-muted-foreground">{r.label}</div>
-              <div className="mt-1 text-[18px] font-bold text-foreground">{r.value}</div>
-              <div className="mt-1.5">
-                <ProgressBar value={(r.value / r.total) * 100} color={r.color} />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+function Analysis({ reviews }: { reviews: ReviewRecord[] }) {
+  const themes = calculateThemes(reviews); const rated = reviews.filter((review) => typeof review.rating === "number"); const distribution = [5, 4, 3, 2, 1].map((rating) => ({ rating, count: rated.filter((review) => Number(review.rating) === rating).length })); const topPositive = themes.filter((theme) => theme.positive).sort((a, b) => b.positive - a.positive).slice(0, 4); const topNegative = themes.filter((theme) => theme.negative).sort((a, b) => b.negative - a.negative).slice(0, 4); return <div className={panel}><SectionTitle icon={Brain} title="AI Review Analysis" detail={reviews.length ? `${reviews.length} reviews analysed` : undefined} />{reviews.length ? <div className="space-y-5 p-5"><div className="grid gap-5 md:grid-cols-2"><ThemeColumn title="Positive themes" themes={topPositive} color="bg-emerald-500" positive /><ThemeColumn title="Negative themes" themes={topNegative} color="bg-amber-500" positive={false} /></div><div className="rounded-xl border border-brand/15 bg-brand/5 p-3.5"><div className="flex items-center gap-1.5 text-[10.5px] font-semibold text-brand"><Lightbulb className="h-3 w-3" />Pattern recognition <DataBadge tone="analysis">AI interpretation</DataBadge></div><p className={`mt-1.5 text-[11.5px] leading-relaxed ${muted}`}>{topNegative[0] ? `${topNegative[0].label} is the most frequent negative theme in the current dataset (${topNegative[0].negative} review${topNegative[0].negative === 1 ? "" : "s"}). This identifies an improvement opportunity; it does not predict an outcome.` : "No negative theme is supported by the current review text."}</p></div><div className="grid grid-cols-2 gap-3 sm:grid-cols-5">{distribution.map((item) => <div key={item.rating} className="rounded-xl bg-secondary/50 p-3 text-center"><div className={`text-[10px] ${muted}`}>{item.rating}-star</div><div className="mt-1 text-[17px] font-bold text-foreground">{item.count}</div><div className="mt-1 text-[9px] text-muted-foreground">{rated.length ? `${Math.round((item.count / rated.length) * 100)}%` : "—"}</div></div>)}</div></div> : <div className="p-5"><Insufficient /><p className={`mt-1 text-[12px] ${muted}`}>Theme names, counts, patterns, and rating distribution require genuine review text and ratings.</p></div>}</div>;
 }
 
-// ─── REPUTATION HEALTH ────────────────────────────────────────────────────────
+function ThemeColumn({ title, themes, color, positive }: { title: string; themes: ReturnType<typeof calculateThemes>; color: string; positive: boolean }) { const max = Math.max(1, ...themes.map((theme) => positive ? theme.positive : theme.negative)); return <div><div className={`mb-2.5 text-[10.5px] font-semibold uppercase tracking-wider ${muted}`}>{title}</div><div className="space-y-2">{themes.length ? themes.map((theme) => { const count = positive ? theme.positive : theme.negative; return <div key={theme.label} className="flex items-center gap-3"><span className="w-28 shrink-0 text-[11.5px] text-foreground">{theme.label}</span><div className="h-1.5 flex-1 rounded-full bg-secondary"><div className={`h-full rounded-full ${color}`} style={{ width: `${(count / max) * 100}%` }} /></div><span className="w-5 text-right text-[11px] font-bold text-foreground">{count}</span></div>; }) : <Insufficient compact />}</div></div>; }
 
-function ReputationHealth() {
-  return (
-    <div className="rounded-2xl border border-border bg-card shadow-card">
-      <div className="border-b border-border px-5 py-3.5">
-        <div className="flex items-center gap-2">
-          <Shield className="h-4 w-4 text-brand" strokeWidth={1.75} />
-          <span className="text-[13.5px] font-semibold tracking-tight text-foreground">Reputation Health</span>
-        </div>
-      </div>
-      <div className="p-5">
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-          {healthMetrics.map((m) => (
-            <div key={m.label} className="flex flex-col items-center gap-2">
-              <div className="relative">
-                <ScoreRing score={m.score} size={64} stroke={5} color={m.color} />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-[14px] font-bold text-foreground">{m.score}</span>
-                </div>
-              </div>
-              <span className="text-center text-[10.5px] font-medium text-muted-foreground leading-tight">{m.label}</span>
-            </div>
-          ))}
-        </div>
+function Health({ reviews }: { reviews: ReviewRecord[] }) { const scores = calculateHealthScores(reviews, calculateThemes(reviews)); const weakest = scores.filter((item) => item.score !== null).sort((a, b) => (a.score as number) - (b.score as number))[0]; return <div className={panel}><SectionTitle icon={Shield} title="Reputation Health" detail="Deterministic methodology" /><div className="grid grid-cols-2 gap-4 p-5 sm:grid-cols-3 lg:grid-cols-6">{scores.map((item) => <div key={item.label} className="text-center"><div className="relative mx-auto h-16 w-16"><svg viewBox="0 0 64 64" className="h-16 w-16 -rotate-90"><circle cx="32" cy="32" r="27" fill="none" stroke="currentColor" strokeWidth="5" className="text-border" />{item.score !== null && <circle cx="32" cy="32" r="27" fill="none" stroke={item.color} strokeWidth="5" strokeLinecap="round" strokeDasharray={169.6} strokeDashoffset={169.6 - (item.score / 100) * 169.6} />}</svg><div className="absolute inset-0 grid place-items-center">{item.score === null ? <span className="text-[8px] font-bold text-muted-foreground">N/A</span> : <span className="text-[14px] font-bold text-foreground">{item.score}</span>}</div></div><div className={`mt-2 text-[10.5px] font-medium leading-tight ${muted}`}>{item.label}</div><button onClick={() => window.alert(item.evidence)} className="mt-1 text-[9.5px] font-semibold text-brand">View evidence</button></div>)}</div><div className="mx-5 mb-5 rounded-xl border border-amber-100 bg-amber-50 p-3.5 text-[11.5px] text-amber-800">{weakest ? <><strong>{weakest.label}</strong> is currently the weakest measurable area. {weakest.evidence}</> : <Insufficient />}</div></div>; }
 
-        <div className="mt-4 rounded-xl bg-amber-50 border border-amber-100 p-3.5">
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" strokeWidth={1.75} />
-            <p className="text-[11.5px] text-amber-700">
-              <span className="font-semibold">Response Score (54) is your weakest area.</span> Improving this to 80+ would add approximately{" "}
-              <span className="font-semibold">+6 points</span> to your overall Reputation DNA™ score and improve Google search visibility.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+function Opportunities({ snapshot, onSelectReview, onRequest }: { snapshot: ReviewsSnapshot; onSelectReview: (id: string) => void; onRequest: () => void }) { const negative = snapshot.reviews.filter((review) => !isResponded(review) && Number(review.rating || 0) <= 3); const completedJobsWithoutReview = snapshot.jobs.filter((job) => job.status === "completed" && job.customer_id && !snapshot.reviews.some((review) => review.job_id === job.id)); const opportunities = [{ title: negative.length ? `Recover ${negative.length} unanswered negative review${negative.length === 1 ? "" : "s"}` : "Negative review recovery", detail: negative.length ? "Open the response workflow for the real unanswered reviews." : "No unanswered low-rated review supports this opportunity.", action: negative.length ? () => onSelectReview(negative[0].id) : undefined, evidence: negative.length ? `${negative.length} qualifying review${negative.length === 1 ? "" : "s"}` : "INSUFFICIENT DATA" }, { title: completedJobsWithoutReview.length ? `Ask ${completedJobsWithoutReview.length} completed customer interaction${completedJobsWithoutReview.length === 1 ? "" : "s"}` : "Post-job review request workflow", detail: completedJobsWithoutReview.length ? "Eligible completed jobs are linked to the request workflow." : "No completed job without a linked review is currently evidenced.", action: completedJobsWithoutReview.length ? onRequest : undefined, evidence: completedJobsWithoutReview.length ? `${completedJobsWithoutReview.length} eligible completed job${completedJobsWithoutReview.length === 1 ? "" : "s"}` : "INSUFFICIENT DATA" }, { title: "Review campaign opportunity", detail: snapshot.campaigns.activeCampaigns.length ? "Use the existing central campaign system." : "Create a campaign only when you have a real review objective.", action: snapshot.campaigns.activeCampaigns.length ? undefined : onRequest, evidence: snapshot.campaigns.activeCampaigns.length ? `${snapshot.campaigns.activeCampaigns.length} active campaign${snapshot.campaigns.activeCampaigns.length === 1 ? "" : "s"}` : "No active review campaign" }]; return <div className={panel}><SectionTitle icon={Zap} title="AI Opportunities" detail="Evidence-ranked" />{opportunities.map((opportunity, index) => <div key={opportunity.title} className="flex items-start gap-3 border-b border-border p-4 last:border-0"><div className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand/10 text-[11px] font-bold text-brand">{index + 1}</div><div className="min-w-0 flex-1"><div className="text-[12.5px] font-semibold text-foreground">{opportunity.title}</div><p className={`mt-1 text-[11px] ${muted}`}>{opportunity.detail}</p><div className="mt-2 flex gap-2"><DataBadge tone={opportunity.evidence === "INSUFFICIENT DATA" ? "warning" : "verified"}>{opportunity.evidence}</DataBadge><DataBadge tone="analysis">Evidence-based</DataBadge></div></div><button disabled={!opportunity.action} onClick={opportunity.action} className="rounded-lg bg-brand px-3 py-1.5 text-[11px] font-semibold text-white disabled:bg-secondary disabled:text-muted-foreground">Launch</button></div>)}</div>; }
 
-// ─── BENCHMARKING ─────────────────────────────────────────────────────────────
+function Recovery({ reviews, onSelect }: { reviews: ReviewRecord[]; onSelect: (id: string) => void }) { const items = reviews.filter((review) => !isResponded(review) && Number(review.rating || 0) <= 3); return <div className={panel}><SectionTitle icon={AlertTriangle} title="Negative Review Recovery" detail={items.length ? `${items.length} qualifying review${items.length === 1 ? "" : "s"}` : "No qualifying reviews"} />{items.length ? <div className="divide-y divide-border">{items.map((review) => <div key={review.id} className="flex items-start gap-3 p-4"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-destructive/10 text-[11px] font-bold text-destructive">{initials(review)}</div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="text-[12.5px] font-semibold text-foreground">{nameForCustomer(review.customer) || "Unmatched reviewer"}</span><Stars rating={review.rating} /><DataBadge tone="verified">{review.source || "Source unavailable"}</DataBadge></div><p className={`mt-1.5 line-clamp-2 text-[11.5px] ${muted}`}>{review.feedback || "Review text unavailable."}</p><p className="mt-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-[10.5px] text-amber-800">Unanswered low-rated review. Review the original evidence and draft an editable response.</p></div><button onClick={() => onSelect(review.id)} className="rounded-lg bg-brand px-3 py-1.5 text-[11px] font-semibold text-white">Reply</button></div>)}</div> : <div className="p-5"><Insufficient /><p className={`mt-1 text-[12px] ${muted}`}>Only genuine unanswered reviews rated 3 or below appear here.</p></div>}</div>; }
 
-function Benchmarking() {
-  return (
-    <div className="rounded-2xl border border-border bg-card shadow-card">
-      <div className="border-b border-border px-5 py-3.5">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="h-4 w-4 text-brand" strokeWidth={1.75} />
-          <span className="text-[13.5px] font-semibold tracking-tight text-foreground">Market Benchmarking</span>
-          <span className="ml-auto rounded-md bg-brand/10 px-2 py-0.5 text-[10px] font-semibold text-brand">Top 18% overall</span>
-        </div>
-      </div>
-      <div className="p-5 space-y-3">
-        {benchmarks.map((b) => (
-          <div key={b.label} className="flex items-center gap-4 rounded-xl border border-border p-3.5 transition-colors hover:bg-secondary/30">
-            <div className="flex-1 min-w-0">
-              <div className="text-[11.5px] font-medium text-muted-foreground">{b.label}</div>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-center">
-                <div className="text-[9px] font-medium text-muted-foreground">You</div>
-                <div className="text-[13px] font-bold text-foreground">{b.you}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-[9px] font-medium text-muted-foreground">Market</div>
-                <div className="text-[13px] font-bold text-muted-foreground">{b.market}</div>
-              </div>
-              <div className={`rounded-lg px-2.5 py-1 text-[10px] font-semibold ${b.up ? "bg-brand/10 text-brand" : "bg-amber-50 text-amber-600"}`}>
-                {b.rank}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+function Campaigns({ snapshot, onRefresh }: { snapshot: ReviewsSnapshot; onRefresh: () => void }) { const [notice, setNotice] = useState<string | null>(null); const create = async () => { if (!snapshot.campaigns) return; try { await createCampaign((snapshot.campaigns.activeCampaigns[0]?.business_id || "") as string, { name: "Review improvement workflow", description: "Central campaign for review requests, responses, and recovery.", type: "customer", target_description: "Complete evidenced review actions", target_value: 0, business_value: 0 }); setNotice("Central campaign created."); onRefresh(); } catch { setNotice("The campaign could not be created."); } }; return <div className={panel}><SectionTitle icon={Megaphone} title="Review Campaigns" detail="Central campaigns and tasks" />{snapshot.campaigns.activeCampaigns.length ? <div className="space-y-3 p-5">{snapshot.campaigns.activeCampaigns.map((campaign) => <div key={campaign.id} className="rounded-xl border border-brand/20 bg-brand/5 p-4"><div className="flex items-center justify-between gap-2"><div className="text-[13px] font-bold text-foreground">{campaign.name}</div><DataBadge tone="verified">ACTIVE</DataBadge></div><p className={`mt-1 text-[11px] ${muted}`}>{campaign.description || "Central CrediEdgeOS campaign"}</p><div className="mt-3 h-1.5 rounded-full bg-secondary"><div className="h-full rounded-full bg-brand" style={{ width: `${campaign.progressPct}%` }} /></div><div className={`mt-1 text-[10px] ${muted}`}>{campaign.completedTasks} of {campaign.totalTasks} linked tasks completed</div><Link to="/tasks" className="mt-3 inline-flex rounded-lg border border-border bg-card px-3 py-1.5 text-[11px] font-semibold text-foreground">Open tasks</Link></div>)}</div> : <div className="p-5"><Insufficient /><p className={`mt-1 text-[12px] ${muted}`}>No active campaign is recorded in the central campaign system.</p><button onClick={create} className="mt-3 rounded-lg border border-dashed border-border px-3 py-2 text-[11px] font-semibold text-foreground">Create central review campaign</button>{notice && <p className="mt-2 text-[11px] text-brand">{notice}</p>}</div>}</div>; }
 
-// ─── AI OPPORTUNITIES ────────────────────────────────────────────────────────
+function Timeline({ snapshot }: { snapshot: ReviewsSnapshot }) { const events = snapshot.activities.filter((activity) => ["review", "review_request", "campaign", "task"].includes(activity.entity_type) || activity.description.toLowerCase().includes("review")); return <div className={panel}><SectionTitle icon={Calendar} title="Review Timeline" detail="Workspace audit events" />{events.length ? <div className="divide-y divide-border">{events.slice(0, 20).map((event) => <div key={event.id} className="flex items-start gap-3 px-5 py-3.5"><div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-secondary"><CircleCheck className="h-3.5 w-3.5 text-brand" /></div><div className="min-w-0 flex-1"><div className="text-[12px] font-semibold text-foreground">{event.description}</div><div className={`mt-0.5 text-[10.5px] ${muted}`}>{formatDate(event.created_at)} · {event.action} · {event.actor_id ? "User action" : "System event"}</div></div></div>)}</div> : <div className="p-5"><Insufficient /><p className={`mt-1 text-[12px] ${muted}`}>No review-related audit events are recorded yet.</p></div>}</div>; }
 
-function AIOpportunities() {
-  const [expanded, setExpanded] = useState<number | null>(null);
+function Analytics({ snapshot }: { snapshot: ReviewsSnapshot }) { const [period, setPeriod] = useState(30); const data = fetchReviewAnalytics(snapshot, period); const cards = [{ label: "Average rating", value: data.current.averageRating === null ? null : data.current.averageRating.toFixed(2), delta: data.previous.averageRating !== null && data.current.averageRating !== null ? data.current.averageRating - data.previous.averageRating : null }, { label: "Review growth", value: data.current.growth === null ? null : `${data.current.growth >= 0 ? "+" : ""}${Math.round(data.current.growth)}%`, delta: data.current.growth }, { label: "Requests sent", value: data.requestCount?.toString() || null, delta: null }, { label: "Response rate", value: data.current.responseRate === null ? null : `${Math.round(data.current.responseRate)}%`, delta: data.previous.responseRate !== null && data.current.responseRate !== null ? data.current.responseRate - data.previous.responseRate : null }, { label: "Average reply time", value: data.averageReplyHours === null ? null : `${data.averageReplyHours.toFixed(1)}h`, delta: null }, { label: "Revenue from reviews", value: null, delta: null }, { label: "Trust trend", value: data.trustTrend === null ? null : `${data.trustTrend >= 0 ? "+" : ""}${data.trustTrend} pts`, delta: data.trustTrend }, { label: "New review frequency", value: data.newReviewFrequency === null ? null : `${data.newReviewFrequency.toFixed(1)}/wk`, delta: null }]; return <div className={panel}><SectionTitle icon={BarChart3} title="Reputation Analytics" action={<select value={period} onChange={(event) => setPeriod(Number(event.target.value))} className="ml-auto rounded-md border border-border bg-card px-2 py-1 text-[10.5px] text-foreground"><option value={7}>7 days</option><option value={30}>30 days</option><option value={90}>90 days</option></select>} /> <div className="grid grid-cols-2 gap-3 p-5 sm:grid-cols-4">{cards.map((card) => <div key={card.label} className="rounded-xl bg-secondary/50 p-3.5"><div className={`text-[10.5px] ${muted}`}>{card.label}</div><div className="mt-1 text-[17px] font-bold text-foreground">{card.value || <Insufficient compact />}</div>{card.delta !== null && <div className={`mt-1 text-[10px] font-semibold ${card.delta >= 0 ? "text-emerald-600" : "text-destructive"}`}>{card.delta >= 0 ? <TrendingUp className="mr-1 inline h-3 w-3" /> : <TrendingDown className="mr-1 inline h-3 w-3" />}{card.delta.toFixed(1)} vs previous period</div>}</div>)}</div></div>; }
 
-  const opps = [
-    {
-      title: "Activate 27 silent happy customers",
-      value: "£4,500",
-      confidence: 84,
-      difficulty: "Easy",
-      time: "10 min",
-      detail: "27 customers who visited in the last 60 days have never left a review. Based on their sentiment data and engagement patterns, 18 are predicted to leave 4-5 star reviews. This would increase your average rating and improve Google search position by an estimated 2 places.",
-    },
-    {
-      title: "Recover 2 negative reviewers",
-      value: "£1,200",
-      confidence: 71,
-      difficulty: "Medium",
-      time: "15 min",
-      detail: "Direct outreach to customers who left 1-3 star reviews with a personal apology and resolution offer converts 22% into loyal repeat customers and 15% into updated reviews. Rebecca and James are both viable recovery candidates.",
-    },
-    {
-      title: "Launch a post-job review workflow",
-      value: "£8,400/yr",
-      confidence: 91,
-      difficulty: "Easy",
-      time: "30 min",
-      detail: "Businesses that send automated review requests within 24 hours of job completion achieve 3.4x more reviews than those who don't. At your current job volume, this would generate approximately 47 additional reviews per year.",
-    },
-  ];
+function Benchmarking({ metrics }: { metrics: ReviewMetrics }) { return <div className={panel}><SectionTitle icon={BarChart3} title="Market Benchmarking" detail="No benchmark dataset connected" /><div className="p-5"><Insufficient /><p className={`mt-1 text-[12px] ${muted}`}>CrediEdgeOS does not have an authoritative industry, geography, business-size, or period-matched benchmark dataset, so no market values or percentile claims are shown.</p><div className="mt-4 space-y-2">{["Average rating", "Review count", "Response rate", "Review growth", "Average reply time"].map((label) => <div key={label} className="flex items-center justify-between rounded-xl border border-border px-3.5 py-3"><span className={`text-[11.5px] ${muted}`}>{label}</span><span className="text-[11px] font-semibold text-muted-foreground">Business: {label === "Average rating" && metrics.averageRating !== null ? metrics.averageRating.toFixed(2) : <Insufficient compact />}</span></div>)}</div></div></div>; }
 
-  const diffCfg = {
-    Easy: "bg-emerald-50 text-emerald-600",
-    Medium: "bg-amber-50 text-amber-600",
-    Hard: "bg-destructive/10 text-destructive",
-  };
+function Memory({ reviews }: { reviews: ReviewRecord[] }) { const insights = buildReviewInsights(reviews); return <div className={panel}><SectionTitle icon={Brain} title="AI Memory" detail={reviews.length ? `Derived from ${reviews.length} reviews` : undefined} />{insights.length ? <div className="space-y-2.5 p-5">{insights.map((insight) => <div key={`${insight.label}-${insight.statement}`} className="rounded-xl bg-secondary/50 px-3.5 py-3"><div className="flex items-center gap-2"><Brain className="h-3 w-3 text-brand" /><span className="text-[11.5px] font-semibold text-foreground">{insight.statement}</span><DataBadge tone="analysis">Re-evaluated on refresh</DataBadge></div><div className={`mt-1 text-[10.5px] ${muted}`}>{insight.evidence} Evidence view: {insight.reviewIds.length} contributing review records.</div></div>)}</div> : <div className="p-5"><Insufficient /><p className={`mt-1 text-[12px] ${muted}`}>No persistent learning is claimed until a meaningful evidence pattern exists.</p></div>}</div>; }
 
-  return (
-    <div className="rounded-2xl border border-border bg-card shadow-card">
-      <div className="border-b border-border px-5 py-3.5">
-        <div className="flex items-center gap-2">
-          <Zap className="h-4 w-4 text-brand" strokeWidth={1.75} />
-          <span className="text-[13.5px] font-semibold tracking-tight text-foreground">AI Opportunities</span>
-        </div>
-      </div>
-      <div className="divide-y divide-border">
-        {opps.map((o, i) => (
-          <div key={i} className="p-4 transition-colors hover:bg-secondary/20">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-2.5">
-                <div className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand/10 text-[11px] font-bold text-brand mt-0.5">
-                  {i + 1}
-                </div>
-                <div>
-                  <div className="text-[12.5px] font-semibold text-foreground">{o.title}</div>
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <span className="text-[11.5px] font-bold text-brand">{o.value}</span>
-                    <span className="text-muted-foreground/40">·</span>
-                    <span className="text-[10.5px] text-muted-foreground">{o.confidence}% confidence</span>
-                    <span className={`rounded-md px-1.5 py-0.5 text-[9.5px] font-semibold ${diffCfg[o.difficulty as keyof typeof diffCfg]}`}>{o.difficulty}</span>
-                    <span className="flex items-center gap-0.5 text-[10.5px] text-muted-foreground">
-                      <Clock className="h-2.5 w-2.5" strokeWidth={1.75} />
-                      {o.time}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex shrink-0 gap-2">
-                <button className="rounded-lg bg-brand px-3 py-1.5 text-[11px] font-semibold text-white transition-all hover:bg-brand/90">
-                  Launch
-                </button>
-                <button
-                  onClick={() => setExpanded(expanded === i ? null : i)}
-                  className="flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1.5 text-[11px] text-muted-foreground transition-all hover:border-foreground/20 hover:text-foreground"
-                >
-                  <Eye className="h-3 w-3" strokeWidth={1.75} />
-                  <ChevronDown className={`h-2.5 w-2.5 transition-transform duration-200 ${expanded === i ? "rotate-180" : ""}`} />
-                </button>
-              </div>
-            </div>
-            {expanded === i && (
-              <div className="mt-3 ml-9 rounded-xl border border-brand/15 bg-brand/5 p-3.5">
-                <div className="flex items-start gap-2">
-                  <Brain className="mt-0.5 h-3 w-3 shrink-0 text-brand" strokeWidth={1.75} />
-                  <p className="text-[11.5px] leading-relaxed text-foreground/80">{o.detail}</p>
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+function BusinessDNA({ reputationScore }: { reputationScore: number | null }) { const modules = [{ name: "Relationship DNA™", status: "Active", href: "/relationships" }, { name: "Communication Intelligence™", status: "Active", href: "/communications" }, { name: "Reputation DNA™", status: reputationScore === null ? "INSUFFICIENT DATA" : `${reputationScore}/100`, href: "/reviews" }, { name: "Website DNA™", status: "Soon" }, { name: "Revenue DNA™", status: "Soon" }, { name: "Operations DNA™", status: "Soon" }, { name: "Marketing DNA™", status: "Soon" }, { name: "Automation DNA™", status: "Soon" }, { name: "Finance DNA™", status: "Soon" }]; const active = modules.filter((module) => module.status !== "Soon" && module.status !== "INSUFFICIENT DATA").length + (reputationScore === null ? 0 : 1); return <div className="relative overflow-hidden rounded-2xl border border-dashed border-brand/30 bg-brand/5 p-5"><div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-brand" /><span className="text-[11px] font-semibold uppercase tracking-wider text-brand">Business DNA™</span><span className={`ml-auto rounded-md bg-secondary px-2 py-0.5 text-[10px] ${muted}`}>{active} of {modules.length} modules measurable</span></div><p className={`mt-2 text-[12px] ${muted}`}>One shared model: active module values come from their authoritative pages. Unavailable modules never receive invented scores.</p><div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-9">{modules.map((module) => <div key={module.name} className={`rounded-xl border p-3 ${module.status === "Soon" ? "border-border bg-card" : "border-brand/20 bg-card"}`}>{module.href ? <Link to={module.href as "/reviews"} className="text-[10px] font-semibold text-foreground hover:text-brand">{module.name}</Link> : <div className="text-[10px] font-semibold text-foreground">{module.name}</div>}<div className={`mt-2 text-[10px] font-semibold ${module.status === "Soon" || module.status === "INSUFFICIENT DATA" ? "text-muted-foreground" : "text-brand"}`}>{module.status}</div></div>)}</div></div>; }
 
-// ─── NEGATIVE REVIEW RECOVERY ────────────────────────────────────────────────
-
-function NegativeReviewRecovery({ onViewReview }: { onViewReview: (id: string) => void }) {
-  const negatives = reviews.filter((r) => r.rating <= 3);
-
-  return (
-    <div className="rounded-2xl border border-border bg-card shadow-card">
-      <div className="border-b border-border px-5 py-3.5">
-        <div className="flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 text-destructive" strokeWidth={1.75} />
-          <span className="text-[13.5px] font-semibold tracking-tight text-foreground">Negative Review Recovery</span>
-          <span className="grid h-5 min-w-5 place-items-center rounded-full bg-destructive px-1 text-[10px] font-bold text-white">
-            {negatives.length}
-          </span>
-        </div>
-      </div>
-      <div className="divide-y divide-border">
-        {negatives.map((r) => (
-          <div key={r.id} className="flex items-start gap-3.5 p-4 transition-colors hover:bg-secondary/20">
-            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-destructive/10 text-[12px] font-bold text-destructive">
-              {r.initials}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <span className="text-[12.5px] font-semibold text-foreground">{r.name}</span>
-                  <div className="mt-0.5 flex items-center gap-2">
-                    <StarRow rating={r.rating} />
-                    <span className="text-[10.5px] text-muted-foreground">{r.date}</span>
-                    <span className={`rounded-md px-1.5 py-0.5 text-[9.5px] font-medium ${sourceColor[r.source] ?? "bg-secondary text-muted-foreground"}`}>{r.source}</span>
-                  </div>
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  <button
-                    onClick={() => onViewReview(r.id)}
-                    className="rounded-lg bg-brand px-3 py-1.5 text-[11px] font-semibold text-white transition-all hover:bg-brand/90"
-                  >
-                    Reply
-                  </button>
-                </div>
-              </div>
-              <p className="mt-1.5 text-[11.5px] text-muted-foreground line-clamp-2">{r.text}</p>
-              <div className="mt-2 rounded-lg bg-brand/5 border border-brand/10 px-3 py-2">
-                <p className="text-[11px] text-foreground/75">{r.aiNote}</p>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── REVIEW TIMELINE ─────────────────────────────────────────────────────────
-
-function ReviewTimeline() {
-  const typeConfig: Record<string, { color: string; icon: React.ElementType }> = {
-    review: { color: "bg-brand/10 text-brand", icon: Star },
-    reply: { color: "bg-emerald-50 text-emerald-600", icon: CheckCircle2 },
-    request: { color: "bg-blue-50 text-blue-600", icon: Send },
-    campaign: { color: "bg-purple-50 text-purple-600", icon: Megaphone },
-  };
-
-  return (
-    <div className="rounded-2xl border border-border bg-card shadow-card">
-      <div className="border-b border-border px-5 py-3.5">
-        <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-brand" strokeWidth={1.75} />
-          <span className="text-[13.5px] font-semibold tracking-tight text-foreground">Review Timeline</span>
-        </div>
-      </div>
-      <ul className="divide-y divide-border">
-        {timeline.map((item, idx) => {
-          const cfg = typeConfig[item.type] ?? { color: "bg-secondary text-muted-foreground", icon: Calendar };
-          const Icon = cfg.icon;
-          return (
-            <li key={idx} className="flex items-start gap-3 px-5 py-3.5 transition-colors hover:bg-secondary/30">
-              <div className="relative flex flex-col items-center">
-                <div className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${cfg.color}`}>
-                  <Icon className="h-3.5 w-3.5" strokeWidth={1.75} />
-                </div>
-                {idx < timeline.length - 1 && <div className="mt-1 h-full w-px bg-border" />}
-              </div>
-              <div className="min-w-0 flex-1 pb-1">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[12.5px] font-semibold text-foreground">{item.name}</span>
-                      {"source" in item && item.source && (
-                        <span className={`rounded-md px-1.5 py-0.5 text-[9.5px] font-medium ${sourceColor[item.source as string] ?? "bg-secondary text-muted-foreground"}`}>{item.source}</span>
-                      )}
-                      {"stars" in item && typeof item.stars === "number" && <StarRow rating={item.stars} />}
-                    </div>
-                    <p className="mt-0.5 text-[11.5px] text-muted-foreground">{item.text}</p>
-                  </div>
-                  <span className="shrink-0 text-[10px] text-muted-foreground">{item.date}</span>
-                </div>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
-
-// ─── REVIEW CAMPAIGNS ────────────────────────────────────────────────────────
-
-function ReviewCampaigns() {
-  return (
-    <div className="rounded-2xl border border-border bg-card shadow-card">
-      <div className="border-b border-border px-5 py-3.5">
-        <div className="flex items-center gap-2">
-          <Megaphone className="h-4 w-4 text-brand" strokeWidth={1.75} />
-          <span className="text-[13.5px] font-semibold tracking-tight text-foreground">Review Campaigns</span>
-        </div>
-      </div>
-      <div className="p-5 space-y-4">
-        <div className="rounded-xl border border-brand/20 bg-brand/5 p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Zap className="h-3.5 w-3.5 text-brand" strokeWidth={1.75} />
-            <span className="text-[12px] font-semibold text-foreground">Active Campaign</span>
-            <span className="ml-auto rounded-full bg-brand px-2 py-0.5 text-[9.5px] font-bold text-white">ACTIVE</span>
-          </div>
-          <div className="text-[15px] font-bold text-foreground mb-1">Become Highest Rated Garage</div>
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-3">
-            <ChevronRight className="h-3 w-3" strokeWidth={1.75} />
-            <span>Mission: Reach 250 Reviews</span>
-            <span className="ml-1 font-semibold text-foreground">127 / 250</span>
-          </div>
-          <ProgressBar value={51} color="#E31B23" />
-          <div className="mt-3 space-y-1.5">
-            {["Ask Today's Customers", "Reply To All Reviews", "Recover Negative Feedback"].map((task, i) => (
-              <div key={task} className="flex items-center gap-2">
-                <div className={`h-2 w-2 rounded-full ${i === 0 ? "bg-brand" : "bg-secondary"}`} />
-                <span className="text-[11.5px] text-foreground">{task}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <button className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border py-3 text-[12px] font-semibold text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground">
-          + Create New Review Campaign
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ─── ANALYTICS ───────────────────────────────────────────────────────────────
-
-function ReputationAnalytics() {
-  const stats = [
-    { label: "Avg Rating", value: "4.3", trend: "+0.3", up: true },
-    { label: "Review Growth", value: "+14%", trend: "+6%", up: true },
-    { label: "Requests Sent", value: "89", trend: "+22", up: true },
-    { label: "Response Rate", value: "54%", trend: "-7%", up: false },
-    { label: "Avg Reply Time", value: "6.2h", trend: "-2.1h", up: true },
-    { label: "Revenue from Reviews", value: "£12,400", trend: "+£2,800", up: true },
-    { label: "Trust Trend", value: "Rising", trend: "+12pts", up: true },
-    { label: "New Review Freq", value: "4.1/wk", trend: "+0.9", up: true },
-  ];
-
-  return (
-    <div className="rounded-2xl border border-border bg-card shadow-card">
-      <div className="border-b border-border px-5 py-3.5">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="h-4 w-4 text-brand" strokeWidth={1.75} />
-          <span className="text-[13.5px] font-semibold tracking-tight text-foreground">Reputation Analytics</span>
-          <span className="ml-auto rounded-md bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">This month</span>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3 p-5 sm:grid-cols-4">
-        {stats.map((s) => (
-          <div key={s.label} className="rounded-xl bg-secondary/50 p-3.5">
-            <div className="text-[10.5px] font-medium text-muted-foreground">{s.label}</div>
-            <div className="mt-1 text-[17px] font-bold text-foreground">{s.value}</div>
-            <div className={`mt-0.5 flex items-center gap-1 text-[10.5px] font-semibold ${s.up ? "text-brand" : "text-destructive"}`}>
-              {s.up ? <TrendingUp className="h-2.5 w-2.5" strokeWidth={2} /> : <TrendingDown className="h-2.5 w-2.5" strokeWidth={2} />}
-              {s.trend} vs last month
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── AI MEMORY ────────────────────────────────────────────────────────────────
-
-function AIMemorySection() {
-  return (
-    <div className="rounded-2xl border border-border bg-card shadow-card">
-      <div className="border-b border-border px-5 py-3.5">
-        <div className="flex items-center gap-2">
-          <Brain className="h-4 w-4 text-brand" strokeWidth={1.75} />
-          <span className="text-[13.5px] font-semibold tracking-tight text-foreground">AI Memory</span>
-          <span className="ml-auto text-[10.5px] text-muted-foreground">What your AI has learned from 127 reviews</span>
-        </div>
-      </div>
-      <div className="p-5">
-        <ul className="space-y-2.5">
-          {aiMemory.map((item, i) => (
-            <li key={i} className="flex items-start gap-2.5 rounded-xl bg-secondary/50 px-3.5 py-2.5">
-              <Brain className="mt-0.5 h-3 w-3 shrink-0 text-brand" strokeWidth={1.75} />
-              <span className="text-[12px] text-foreground">{item}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  );
-}
-
-// ─── BUSINESS DNA PREVIEW ─────────────────────────────────────────────────────
-
-function BusinessDNAPreview() {
-  const modules = [
-    { name: "Relationship DNA™", pct: 94, done: true },
-    { name: "Communication Intelligence™", pct: 83, done: true },
-    { name: "Reputation DNA™", pct: 82, done: true },
-    { name: "Website DNA™", pct: 72, done: false },
-    { name: "Revenue DNA™", pct: 80, done: false },
-    { name: "Operations DNA™", pct: 76, done: false },
-    { name: "Marketing DNA™", pct: 68, done: false },
-    { name: "Automation DNA™", pct: 58, done: false },
-    { name: "Finance DNA™", pct: 71, done: false },
-  ];
-
-  return (
-    <div className="relative overflow-hidden rounded-2xl border border-dashed border-brand/30 bg-gradient-to-r from-brand/5 to-transparent p-5">
-      <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-brand/10 blur-3xl" />
-      <div className="relative">
-        <div className="mb-4 flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-brand" strokeWidth={1.75} />
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-brand">Business DNA™</span>
-          <span className="ml-auto rounded-md bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">3 of 9 modules active</span>
-        </div>
-        <p className="mb-4 max-w-xl text-[12px] leading-relaxed text-muted-foreground">
-          Reputation DNA™ contributes to your overall CrediEdge Score™. Every module adds to one unified business intelligence profile.
-        </p>
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-9">
-          {modules.map((m) => (
-            <div key={m.name} className={`rounded-xl border p-3 ${m.done ? "border-brand/20 bg-brand/5" : "border-border bg-card"}`}>
-              <div className="mb-1.5 flex items-center justify-between gap-1">
-                <span className="text-[10px] font-semibold text-foreground truncate">{m.name}</span>
-                {m.done ? (
-                  <CheckCircle2 className="h-3 w-3 shrink-0 text-brand" strokeWidth={2} />
-                ) : (
-                  <span className="shrink-0 text-[9px] text-muted-foreground">Soon</span>
-                )}
-              </div>
-              <ProgressBar value={m.pct} color={m.done ? "#E31B23" : "#6b7280"} />
-              <div className={`mt-1 text-[10px] font-semibold ${m.done ? "text-brand" : "text-muted-foreground"}`}>{m.pct}/100</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── ROOT EXPORT ──────────────────────────────────────────────────────────────
-
-export function ReputationDNA() {
-  const [selectedId, setSelectedId] = useState("6");
-  const review = reviews.find((r) => r.id === selectedId)!;
-
-  return (
-    <div className="space-y-6">
-      {/* Hero */}
-      <ReputationDNAHero />
-
-      {/* AI Summary */}
-      <AIReputationSummary />
-
-      {/* KPI quick stats */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
-        {[
-          { label: "Total Reviews", value: 127, suffix: "" },
-          { label: "Avg Rating", value: 4.3, decimals: 1, suffix: "" },
-          { label: "This Month", value: 14, suffix: "" },
-          { label: "5-Star Rate", value: 70, suffix: "%" },
-          { label: "Response Rate", value: 54, suffix: "%" },
-          { label: "Review Growth", value: 14, suffix: "%" },
-          { label: "Google Position", value: 4, suffix: "" },
-          { label: "Trust Score", value: 82, suffix: "/100" },
-        ].map((s) => (
-          <div key={s.label} className="rounded-2xl border border-border bg-card p-4 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:border-foreground/10 hover:shadow-card">
-            <div className="text-[10px] font-medium text-muted-foreground">{s.label}</div>
-            <div className="mt-1.5 text-[18px] font-bold text-foreground">
-              <AnimatedNumber value={s.value} suffix={s.suffix} decimals={"decimals" in s ? s.decimals ?? 0 : 0} />
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Today's priorities */}
-      <TodaysPriorities onViewReview={setSelectedId} />
-
-      {/* Reviews workspace */}
-      <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
-        <ReviewList selected={selectedId} onSelect={setSelectedId} />
-        <ReviewDetail review={review} />
-      </div>
-
-      {/* Analysis + Health */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ReviewAnalysis />
-        <ReputationHealth />
-      </div>
-
-      {/* Benchmarking + Opportunities */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Benchmarking />
-        <AIOpportunities />
-      </div>
-
-      {/* Negative recovery + Campaigns */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <NegativeReviewRecovery onViewReview={setSelectedId} />
-        <ReviewCampaigns />
-      </div>
-
-      {/* Timeline */}
-      <ReviewTimeline />
-
-      {/* Analytics */}
-      <ReputationAnalytics />
-
-      {/* AI Memory */}
-      <AIMemorySection />
-
-      {/* Business DNA preview */}
-      <BusinessDNAPreview />
-    </div>
-  );
+export function ReputationDNA({ onRequestReviews, onConnectPlatform }: { onRequestReviews?: () => void; onConnectPlatform?: () => void } = {}) {
+  const { business, user } = useAuthContext();
+  const [snapshot, setSnapshot] = useState<ReviewsSnapshot | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
+  const load = async () => { if (!business?.id) return; setLoading(true); try { const next = await fetchReviewsSnapshot(business.id); setSnapshot(next); setSelectedId((current) => current && next.reviews.some((review) => review.id === current) ? current : next.reviews[0]?.id || null); } catch { setNotice("Reviews could not be loaded. Please try again."); } finally { setLoading(false); } };
+  useEffect(() => { void load(); const unsubscribe = appEvents.on(APP_EVENTS.REVIEWS_MUTATED, () => { void load(); }); return unsubscribe; }, [business?.id]);
+  const metrics = useMemo(() => snapshot ? fetchReviewMetrics(snapshot) : null, [snapshot]);
+  if (loading && !snapshot) return <div className="grid min-h-[360px] place-items-center"><Loader2 className="h-6 w-6 animate-spin text-brand" /></div>;
+  if (!business?.id || !user?.id) return <div className={`${panel} p-6`}><Insufficient /><p className={`mt-1 text-[12px] ${muted}`}>A signed-in workspace is required to load Reviews.</p></div>;
+  if (!snapshot || !metrics) return <div className={`${panel} p-6`}><CircleAlert className="h-5 w-5 text-destructive" /><p className="mt-2 text-[12px] text-foreground">{notice || "Reviews are unavailable."}</p><button onClick={() => void load()} className="mt-3 rounded-lg bg-brand px-3 py-2 text-[11px] font-semibold text-white">Retry</button></div>;
+  const selectedReview = snapshot.reviews.find((review) => review.id === selectedId) || null;
+  const selectedIntegration = selectedReview ? snapshot.integrations.find((integration) => integration.provider.toLowerCase() === selectedReview.source?.toLowerCase()) : undefined;
+  const priorities = buildReviewPriorities(snapshot);
+  const scores = calculateHealthScores(snapshot.reviews, calculateThemes(snapshot.reviews));
+  const reputationScore = scores.filter((item) => item.score !== null).length >= 3 ? Math.round(scores.filter((item) => item.score !== null).reduce((sum, item) => sum + (item.score || 0), 0) / scores.filter((item) => item.score !== null).length) : null;
+  const complete = async (priority: ReviewPriority) => { if (!priority.reviewId) return; try { await completeReviewPriority(business.id, priority.reviewId, user.id, "Priority reviewed from Reviews workspace."); setNotice("Priority completed and the queue recalculated."); } catch { setNotice("The priority could not be completed."); } };
+  const task = async (priority: ReviewPriority) => { const review = priority.reviewId ? snapshot.reviews.find((item) => item.id === priority.reviewId) : null; if (!review) return; try { await createReviewTask(business.id, review); setNotice("Task created in the central task system."); } catch { setNotice("The task could not be created."); } };
+  return <div className="space-y-6"><Hero metrics={metrics} lastSyncedAt={metrics.lastSyncedAt} onRefresh={() => void load()} /><Summary snapshot={snapshot} metrics={metrics} /><div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8"><MetricCard label="Total reviews" value={metrics.total?.toString() || ""} unavailable={metrics.total === null} detail="Verified records" /><MetricCard label="Average rating" value={metrics.averageRating?.toFixed(1) || ""} unavailable={metrics.averageRating === null} detail="Calculated" /><MetricCard label="This period" value={metrics.thisMonth?.toString() || ""} unavailable={metrics.thisMonth === null} detail="Last 30 days" /><MetricCard label="5-star rate" value={metrics.fiveStarRate === null ? "" : `${Math.round(metrics.fiveStarRate)}%`} unavailable={metrics.fiveStarRate === null} detail="Calculated" /><MetricCard label="Response rate" value={metrics.responseRate === null ? "" : `${Math.round(metrics.responseRate)}%`} unavailable={metrics.responseRate === null} detail="Response evidence" /><MetricCard label="Review growth" value={metrics.growth === null ? "" : `${Math.round(metrics.growth)}%`} unavailable={metrics.growth === null} detail="Equivalent periods" /><MetricCard label="Google position" value="" unavailable detail="No ranking source" /><MetricCard label="Trust score" value="" unavailable detail="No benchmark source" /></div><Priorities priorities={priorities} onSelect={setSelectedId} onComplete={complete} onCreateTask={task} /><div className="grid gap-4 lg:grid-cols-[320px_1fr]"><ReviewList reviews={snapshot.reviews} selectedId={selectedId} onSelect={setSelectedId} onConnect={onConnectPlatform || (() => undefined)} /><ReviewDetail review={selectedReview} integration={selectedIntegration} businessId={business.id} userId={user.id} onRefresh={() => void load()} /></div><div className="grid gap-4 lg:grid-cols-2"><Analysis reviews={snapshot.reviews} /><Health reviews={snapshot.reviews} /></div><div className="grid gap-4 lg:grid-cols-2"><Benchmarking metrics={metrics} /><Opportunities snapshot={snapshot} onSelectReview={setSelectedId} onRequest={onRequestReviews || (() => undefined)} /></div><div className="grid gap-4 lg:grid-cols-2"><Recovery reviews={snapshot.reviews} onSelect={setSelectedId} /><Campaigns snapshot={snapshot} onRefresh={() => void load()} /></div><Timeline snapshot={snapshot} /><Analytics snapshot={snapshot} /><Memory reviews={snapshot.reviews} /><BusinessDNA reputationScore={reputationScore} />{notice && <div className="fixed bottom-5 right-5 z-40 flex max-w-sm items-start gap-2 rounded-xl border border-border bg-card p-3 text-[11px] text-foreground shadow-xl"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />{notice}<button onClick={() => setNotice(null)} className="ml-2 text-muted-foreground"><X className="h-3 w-3" /></button></div>}</div>;
 }
