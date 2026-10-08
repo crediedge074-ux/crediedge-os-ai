@@ -72,7 +72,7 @@ export function CustomerWorkspace({ open, onClose, onEditCustomer, onAddCustomer
   const filteredCustomers = customers.filter((c) => {
     if (activeFilter === "active") return c.status === "active";
     if (activeFilter === "at_risk") return c.status === "inactive" || (Number(c.lifetime_value) || 0) === 0;
-    if (activeFilter === "opportunities") return (Number(c.lifetime_value) || 0) >= 500 && c.status === "active";
+    if (activeFilter === "opportunities") return (Number(c.lifetime_value) || 0) >= 500;
     if (activeFilter === "recent") {
       const createdDaysAgo = (Date.now() - new Date(c.created_at).getTime()) / (1000 * 60 * 60 * 24);
       return createdDaysAgo <= 30;

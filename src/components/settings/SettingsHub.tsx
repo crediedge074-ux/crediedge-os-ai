@@ -327,10 +327,10 @@ function AccountPanel() {
 
       <div className="space-y-2">
         <div className="text-[13px] font-semibold text-foreground">Security</div>
-        <SettingsRow label="Password" description="Last changed 30 days ago" action={<ActionButton label="Change" />} />
+        <SettingsRow label="Password" description="Change your account password" action={<ActionButton label="Change" />} />
         <SettingsRow label="Two-Factor Authentication" description="Not enabled — recommended for account security" action={<ActionButton label="Enable" variant="brand" />} />
-        <SettingsRow label="Active Sessions" description="1 active session on this device" action={<ActionButton label="View" />} />
-        <SettingsRow label="Active Devices" description="MacBook Pro, iPhone 15" action={<ActionButton label="Manage" />} />
+        <SettingsRow label="Active Sessions" description="Session tracking is not yet available" action={<ActionButton label="View" />} />
+        <SettingsRow label="Active Devices" description="Device management is not yet available" action={<ActionButton label="Manage" />} />
       </div>
 
       <SaveBar onSave={handleSave} saving={saving} feedback={feedback} />
@@ -684,20 +684,17 @@ function AIPanel() {
         </div>
         <div>
           <label className="mb-1.5 block text-[12.5px] font-medium text-muted-foreground">Response Length</label>
-          <select className="w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2.5 text-[13px] text-foreground focus:outline-none">
-            <option>Concise</option>
-            <option>Standard</option>
-            <option>Detailed</option>
-          </select>
+          <div className="flex items-center justify-between rounded-xl border border-dashed border-border bg-secondary/20 px-3.5 py-2.5 text-[13px] text-muted-foreground">
+            <span>Standard</span>
+            <span className="text-[10px] font-medium opacity-70">Coming soon</span>
+          </div>
         </div>
         <div>
           <label className="mb-1.5 block text-[12.5px] font-medium text-muted-foreground">Analysis Frequency</label>
-          <select className="w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2.5 text-[13px] text-foreground focus:outline-none">
-            <option>Every hour</option>
-            <option>Every 6 hours</option>
-            <option>Daily</option>
-            <option>Manual only</option>
-          </select>
+          <div className="flex items-center justify-between rounded-xl border border-dashed border-border bg-secondary/20 px-3.5 py-2.5 text-[13px] text-muted-foreground">
+            <span>Daily</span>
+            <span className="text-[10px] font-medium opacity-70">Coming soon</span>
+          </div>
         </div>
       </div>
 
@@ -892,10 +889,7 @@ function HelpPanel() {
               label={l.label}
               description={l.description}
               action={
-                <button className="flex items-center gap-1.5 rounded-lg border border-border bg-secondary px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground">
-                  {l.action}
-                  <ChevronRight className="h-3 w-3" strokeWidth={2} />
-                </button>
+                <ActionButton label={l.action} />
               }
             />
           );
