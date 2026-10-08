@@ -1,9 +1,10 @@
-import { Sparkles, Bell, HelpCircle, ChevronDown, Menu, LogOut, AlertTriangle, Mail, Star, FileText, Shield, Rocket, X, ArrowRight, Search, Command, CornerDownLeft, Loader2 } from "lucide-react";
+import { Sparkles, Bell, HelpCircle, ChevronDown, Menu, LogOut, AlertTriangle, Mail, Star, FileText, Shield, Rocket, X, ArrowRight, Search, Command, CornerDownLeft, Loader2, ShieldCheck } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, Link } from "@tanstack/react-router";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { signOut } from "@/services/auth";
+import { getAdminAccessStatus, type AdminAccessStatus } from "@/services/adminAccess";
 import { getAllCombinedNotifications, markNotificationRead } from "@/services/notifications";
 import { searchWorkspace, type SearchResponse, type SearchResultItem } from "@/services/search";
 import type { AppNotification } from "@/lib/database.types";
@@ -44,6 +45,7 @@ export function TopNav() {
   const [searchResponse, setSearchResponse] = useState<SearchResponse | null>(null);
   const [searchFocused, setSearchFocused] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [adminAccess, setAdminAccess] = useState<AdminAccessStatus | null>(null);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
@@ -58,6 +60,7 @@ export function TopNav() {
 
   useEffect(() => {
     let mounted = true;
+    getAdminAccessStatus(businessId).then((access) => { if (mounted) setAdminAccess(access); }).catch(() => {});
     getAllCombinedNotifications(businessId, userId)
       .then((combined) => {
         if (mounted) {
@@ -438,6 +441,13 @@ export function TopNav() {
                 <div className="mt-0.5 truncate text-[11.5px] text-muted-foreground">{user?.email}</div>
               </div>
               <div className="p-1">
+                <button
+                  onClick={() => { setMenuOpen(false); navigate({ to: adminAccess?.canAccessAdminConsole ? "/admin" : "/admin/enterprise-preview" }); }}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-medium text-foreground transition-colors hover:bg-secondary"
+                >
+                  <ShieldCheck className="h-3.5 w-3.5" strokeWidth={1.75} />
+                  Admin Console
+                </button>
                 <button
                   onClick={handleSignOut}
                   className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-medium text-red-600 transition-colors hover:bg-red-50"

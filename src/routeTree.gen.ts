@@ -26,7 +26,19 @@ import { Route as FinanceRouteImport } from './routes/finance'
 import { Route as CommunicationsRouteImport } from './routes/communications'
 import { Route as CalendarRouteImport } from './routes/calendar'
 import { Route as AdvisorRouteImport } from './routes/advisor'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as AdminUsersRouteImport } from './routes/admin/users'
+import { Route as AdminSubscriptionsRouteImport } from './routes/admin/subscriptions'
+import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
+import { Route as AdminSecurityRouteImport } from './routes/admin/security'
+import { Route as AdminFeaturesRouteImport } from './routes/admin/features'
+import { Route as AdminEnterprisePreviewRouteImport } from './routes/admin/enterprise-preview'
+import { Route as AdminBusinessesRouteImport } from './routes/admin/businesses'
+import { Route as AdminBillingRouteImport } from './routes/admin/billing'
+import { Route as AdminAiCreditsRouteImport } from './routes/admin/ai-credits'
+import { Route as AdminBusinessesIdRouteImport } from './routes/admin/businesses/$id'
 
 const WebsiteRoute = WebsiteRouteImport.update({
   id: '/website',
@@ -113,14 +125,75 @@ const AdvisorRoute = AdvisorRouteImport.update({
   path: '/advisor',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminUsersRoute = AdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminSubscriptionsRoute = AdminSubscriptionsRouteImport.update({
+  id: '/subscriptions',
+  path: '/subscriptions',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminSettingsRoute = AdminSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminSecurityRoute = AdminSecurityRouteImport.update({
+  id: '/security',
+  path: '/security',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminFeaturesRoute = AdminFeaturesRouteImport.update({
+  id: '/features',
+  path: '/features',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminEnterprisePreviewRoute = AdminEnterprisePreviewRouteImport.update({
+  id: '/enterprise-preview',
+  path: '/enterprise-preview',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminBusinessesRoute = AdminBusinessesRouteImport.update({
+  id: '/businesses',
+  path: '/businesses',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminBillingRoute = AdminBillingRouteImport.update({
+  id: '/billing',
+  path: '/billing',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAiCreditsRoute = AdminAiCreditsRouteImport.update({
+  id: '/ai-credits',
+  path: '/ai-credits',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminBusinessesIdRoute = AdminBusinessesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AdminBusinessesRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
   '/advisor': typeof AdvisorRoute
   '/calendar': typeof CalendarRoute
   '/communications': typeof CommunicationsRoute
@@ -138,6 +211,17 @@ export interface FileRoutesByFullPath {
   '/support': typeof SupportRoute
   '/tasks': typeof TasksRoute
   '/website': typeof WebsiteRoute
+  '/admin/ai-credits': typeof AdminAiCreditsRoute
+  '/admin/billing': typeof AdminBillingRoute
+  '/admin/businesses': typeof AdminBusinessesRouteWithChildren
+  '/admin/enterprise-preview': typeof AdminEnterprisePreviewRoute
+  '/admin/features': typeof AdminFeaturesRoute
+  '/admin/security': typeof AdminSecurityRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/subscriptions': typeof AdminSubscriptionsRoute
+  '/admin/users': typeof AdminUsersRoute
+  '/admin/': typeof AdminIndexRoute
+  '/admin/businesses/$id': typeof AdminBusinessesIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -158,10 +242,22 @@ export interface FileRoutesByTo {
   '/support': typeof SupportRoute
   '/tasks': typeof TasksRoute
   '/website': typeof WebsiteRoute
+  '/admin/ai-credits': typeof AdminAiCreditsRoute
+  '/admin/billing': typeof AdminBillingRoute
+  '/admin/businesses': typeof AdminBusinessesRouteWithChildren
+  '/admin/enterprise-preview': typeof AdminEnterprisePreviewRoute
+  '/admin/features': typeof AdminFeaturesRoute
+  '/admin/security': typeof AdminSecurityRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/subscriptions': typeof AdminSubscriptionsRoute
+  '/admin/users': typeof AdminUsersRoute
+  '/admin': typeof AdminIndexRoute
+  '/admin/businesses/$id': typeof AdminBusinessesIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
   '/advisor': typeof AdvisorRoute
   '/calendar': typeof CalendarRoute
   '/communications': typeof CommunicationsRoute
@@ -179,11 +275,23 @@ export interface FileRoutesById {
   '/support': typeof SupportRoute
   '/tasks': typeof TasksRoute
   '/website': typeof WebsiteRoute
+  '/admin/ai-credits': typeof AdminAiCreditsRoute
+  '/admin/billing': typeof AdminBillingRoute
+  '/admin/businesses': typeof AdminBusinessesRouteWithChildren
+  '/admin/enterprise-preview': typeof AdminEnterprisePreviewRoute
+  '/admin/features': typeof AdminFeaturesRoute
+  '/admin/security': typeof AdminSecurityRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/subscriptions': typeof AdminSubscriptionsRoute
+  '/admin/users': typeof AdminUsersRoute
+  '/admin/': typeof AdminIndexRoute
+  '/admin/businesses/$id': typeof AdminBusinessesIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin'
     | '/advisor'
     | '/calendar'
     | '/communications'
@@ -201,6 +309,17 @@ export interface FileRouteTypes {
     | '/support'
     | '/tasks'
     | '/website'
+    | '/admin/ai-credits'
+    | '/admin/billing'
+    | '/admin/businesses'
+    | '/admin/enterprise-preview'
+    | '/admin/features'
+    | '/admin/security'
+    | '/admin/settings'
+    | '/admin/subscriptions'
+    | '/admin/users'
+    | '/admin/'
+    | '/admin/businesses/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -221,9 +340,21 @@ export interface FileRouteTypes {
     | '/support'
     | '/tasks'
     | '/website'
+    | '/admin/ai-credits'
+    | '/admin/billing'
+    | '/admin/businesses'
+    | '/admin/enterprise-preview'
+    | '/admin/features'
+    | '/admin/security'
+    | '/admin/settings'
+    | '/admin/subscriptions'
+    | '/admin/users'
+    | '/admin'
+    | '/admin/businesses/$id'
   id:
     | '__root__'
     | '/'
+    | '/admin'
     | '/advisor'
     | '/calendar'
     | '/communications'
@@ -241,10 +372,22 @@ export interface FileRouteTypes {
     | '/support'
     | '/tasks'
     | '/website'
+    | '/admin/ai-credits'
+    | '/admin/billing'
+    | '/admin/businesses'
+    | '/admin/enterprise-preview'
+    | '/admin/features'
+    | '/admin/security'
+    | '/admin/settings'
+    | '/admin/subscriptions'
+    | '/admin/users'
+    | '/admin/'
+    | '/admin/businesses/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRouteWithChildren
   AdvisorRoute: typeof AdvisorRoute
   CalendarRoute: typeof CalendarRoute
   CommunicationsRoute: typeof CommunicationsRoute
@@ -385,6 +528,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdvisorRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -392,11 +542,129 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/users': {
+      id: '/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AdminUsersRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/subscriptions': {
+      id: '/admin/subscriptions'
+      path: '/subscriptions'
+      fullPath: '/admin/subscriptions'
+      preLoaderRoute: typeof AdminSubscriptionsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/settings': {
+      id: '/admin/settings'
+      path: '/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AdminSettingsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/security': {
+      id: '/admin/security'
+      path: '/security'
+      fullPath: '/admin/security'
+      preLoaderRoute: typeof AdminSecurityRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/features': {
+      id: '/admin/features'
+      path: '/features'
+      fullPath: '/admin/features'
+      preLoaderRoute: typeof AdminFeaturesRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/enterprise-preview': {
+      id: '/admin/enterprise-preview'
+      path: '/enterprise-preview'
+      fullPath: '/admin/enterprise-preview'
+      preLoaderRoute: typeof AdminEnterprisePreviewRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/businesses': {
+      id: '/admin/businesses'
+      path: '/businesses'
+      fullPath: '/admin/businesses'
+      preLoaderRoute: typeof AdminBusinessesRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/billing': {
+      id: '/admin/billing'
+      path: '/billing'
+      fullPath: '/admin/billing'
+      preLoaderRoute: typeof AdminBillingRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/ai-credits': {
+      id: '/admin/ai-credits'
+      path: '/ai-credits'
+      fullPath: '/admin/ai-credits'
+      preLoaderRoute: typeof AdminAiCreditsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/businesses/$id': {
+      id: '/admin/businesses/$id'
+      path: '/$id'
+      fullPath: '/admin/businesses/$id'
+      preLoaderRoute: typeof AdminBusinessesIdRouteImport
+      parentRoute: typeof AdminBusinessesRoute
+    }
   }
 }
 
+interface AdminBusinessesRouteChildren {
+  AdminBusinessesIdRoute: typeof AdminBusinessesIdRoute
+}
+
+const AdminBusinessesRouteChildren: AdminBusinessesRouteChildren = {
+  AdminBusinessesIdRoute: AdminBusinessesIdRoute,
+}
+
+const AdminBusinessesRouteWithChildren = AdminBusinessesRoute._addFileChildren(
+  AdminBusinessesRouteChildren,
+)
+
+interface AdminRouteChildren {
+  AdminAiCreditsRoute: typeof AdminAiCreditsRoute
+  AdminBillingRoute: typeof AdminBillingRoute
+  AdminBusinessesRoute: typeof AdminBusinessesRouteWithChildren
+  AdminEnterprisePreviewRoute: typeof AdminEnterprisePreviewRoute
+  AdminFeaturesRoute: typeof AdminFeaturesRoute
+  AdminSecurityRoute: typeof AdminSecurityRoute
+  AdminSettingsRoute: typeof AdminSettingsRoute
+  AdminSubscriptionsRoute: typeof AdminSubscriptionsRoute
+  AdminUsersRoute: typeof AdminUsersRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminAiCreditsRoute: AdminAiCreditsRoute,
+  AdminBillingRoute: AdminBillingRoute,
+  AdminBusinessesRoute: AdminBusinessesRouteWithChildren,
+  AdminEnterprisePreviewRoute: AdminEnterprisePreviewRoute,
+  AdminFeaturesRoute: AdminFeaturesRoute,
+  AdminSecurityRoute: AdminSecurityRoute,
+  AdminSettingsRoute: AdminSettingsRoute,
+  AdminSubscriptionsRoute: AdminSubscriptionsRoute,
+  AdminUsersRoute: AdminUsersRoute,
+  AdminIndexRoute: AdminIndexRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRouteWithChildren,
   AdvisorRoute: AdvisorRoute,
   CalendarRoute: CalendarRoute,
   CommunicationsRoute: CommunicationsRoute,
