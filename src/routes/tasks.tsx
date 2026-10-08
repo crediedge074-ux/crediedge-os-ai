@@ -1180,8 +1180,13 @@ function TasksPage() {
     if (!confirm("Are you sure you want to delete this task?")) return;
 
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
-    await deleteTask(taskId, businessId);
-    appEvents.emit(APP_EVENTS.TASKS_MUTATED);
+    try {
+      await deleteTask(taskId, businessId);
+      appEvents.emit(APP_EVENTS.TASKS_MUTATED);
+    } catch (err: any) {
+      alert(`Failed to delete task: ${err?.message || String(err)}`);
+      loadData();
+    }
   };
 
   const memberMap = members.reduce<Record<string, string>>((acc, m) => {

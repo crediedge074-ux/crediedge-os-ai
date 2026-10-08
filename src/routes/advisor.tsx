@@ -25,8 +25,8 @@ function DailyBriefingBanner({
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
-  const remaining = data?.allowanceStatus?.remainingCredits ?? 100;
-  const totalAllowance = data?.allowanceStatus?.monthlyAllowance ?? 100;
+  const remaining = data?.allowanceStatus?.remainingCredits ?? 0;
+  const totalAllowance = data?.allowanceStatus?.monthlyAllowance ?? 0;
 
   return (
     <div className="relative mb-8 overflow-hidden rounded-2xl bg-foreground p-6 text-background shadow-card">

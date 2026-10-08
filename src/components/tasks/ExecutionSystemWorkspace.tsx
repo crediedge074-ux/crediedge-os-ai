@@ -276,9 +276,9 @@ export function ExecutionSystemWorkspace({
       const fieldKey = type === "communication" ? "communication_id" : `${type}_id`;
       if (currentTask) {
         await updateTask(currentTask.id, businessId, { [fieldKey]: entityId } as any);
-      } else if (currentMission && ["customer", "job", "invoice"].includes(type)) {
+      } else if (currentMission) {
         await updateMission(currentMission.id, businessId, { [fieldKey]: entityId } as any);
-      } else if (currentCampaign && ["customer", "job", "invoice"].includes(type)) {
+      } else if (currentCampaign) {
         await updateCampaign(currentCampaign.id, businessId, { [fieldKey]: entityId } as any);
       }
       onRefresh();
@@ -1077,7 +1077,7 @@ export function ExecutionSystemWorkspace({
                     <div className="rounded-xl border border-border bg-secondary/30 p-3.5">
                       <div className="text-[10.5px] font-medium text-muted-foreground">Estimated Duration</div>
                       <div className="text-[14px] font-extrabold text-foreground mt-0.5">
-                        {productivity?.estimatedMinutes || 30} min
+                        {productivity?.estimatedMinutes ? `${productivity.estimatedMinutes} min` : "Not estimated"}
                       </div>
                     </div>
                     <div className="rounded-xl border border-border bg-secondary/30 p-3.5">

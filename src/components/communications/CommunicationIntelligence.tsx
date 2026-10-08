@@ -189,10 +189,15 @@ function ConversationDetail({ item, businessId, userId, onChanged }: { item: Awa
   const complete = async () => {
     if (!userId || !actionTaken.trim()) return;
     setSaving(true);
-    const result = await resolveCommunication({ businessId, communicationId: item.id, customerId: item.customer_id, userId, actionTaken, notes, manualChannel: item.channel });
-    setNotice(result.message);
-    setSaving(false);
-    if (result.success) { setResolveOpen(false); onChanged(); }
+    try {
+      const result = await resolveCommunication({ businessId, communicationId: item.id, customerId: item.customer_id, userId, actionTaken, notes, manualChannel: item.channel });
+      setNotice(result.message);
+      if (result.success) { setResolveOpen(false); onChanged(); }
+    } catch (err: any) {
+      setNotice(`Failed to resolve: ${err?.message || "Please try again."}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-card"><div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4"><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-full bg-brand/10 text-[13px] font-bold text-brand">{(item.customer_name || "?").split(" ").map((word) => word[0]).slice(0, 2).join("").toUpperCase()}</div><div><div className="text-[14px] font-semibold">{item.customer_name || "Unknown customer"}</div><div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground"><Icon className="h-3 w-3" /> via {item.channel} · {formatDate(item.created_at)}</div></div></div><div className="flex gap-2"><button onClick={() => setCoachOpen(!coachOpen)} className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-semibold"><Brain className="h-3 w-3" /> Coach</button><button onClick={() => setResolveOpen(!resolveOpen)} className="flex items-center gap-1.5 rounded-lg bg-brand px-2.5 py-1.5 text-[11px] font-semibold text-white"><CheckCircle2 className="h-3 w-3" /> Mark Done</button></div></div><div className="space-y-3 p-4"><div className="rounded-xl bg-secondary/50 p-4"><div className="mb-2 text-[11px] font-semibold">{item.subject || "Inbound communication"}</div><p className="whitespace-pre-wrap text-[13px] leading-relaxed">{item.body || "No message content available"}</p></div>{coachOpen && <div className="rounded-xl border border-brand/15 bg-brand/5 p-4"><div className="flex items-center gap-2 text-[11px] font-semibold text-brand"><Lightbulb className="h-3.5 w-3.5" /> Evidence coach · deterministic</div><ul className="mt-2 space-y-1 text-[11px] text-muted-foreground"><li>• The message has been waiting {Math.round(item.waiting_hours)} hours.</li><li>• The customer contacted you through {item.channel}.</li>{item.waiting_hours > 24 && <li>• This is beyond the 24-hour response window.</li>}<li>• No LLM analysis is connected, so no sentiment or intent is inferred.</li></ul></div>}{resolveOpen && <div className="rounded-xl border border-brand/20 bg-card p-4"><div className="mb-2 text-[11px] font-semibold">Confirm resolution</div><p className="mb-3 text-[11px] text-muted-foreground">Record what happened before removing this conversation from the priority queue.</p><input value={actionTaken} onChange={(event) => setActionTaken(event.target.value)} placeholder="Action taken" className="mb-2 h-9 w-full rounded-lg border border-border bg-card px-3 text-[12px]" /><textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Optional notes or manual communication details" rows={2} className="w-full resize-none rounded-lg border border-border bg-card px-3 py-2 text-[12px]" /><div className="mt-2 flex justify-end gap-2"><button onClick={() => setResolveOpen(false)} className="rounded-lg border border-border px-3 py-1.5 text-[11px] font-semibold">Cancel</button><button disabled={saving || !actionTaken.trim()} onClick={complete} className="rounded-lg bg-brand px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50">{saving ? "Saving…" : "Confirm resolved"}</button></div></div>}<div className="grid gap-3 xl:grid-cols-2"><Timeline events={timeline} /><DNA dna={dna} /></div><div className="border-t border-border pt-3"><div className="mb-2 flex flex-wrap gap-2"><button onClick={suggestReply} className="flex items-center gap-1 rounded-lg border border-brand/30 bg-brand/5 px-2.5 py-1.5 text-[11px] font-semibold text-brand"><Wand2 className="h-3 w-3" /> Guided Reply</button><button onClick={shorten} disabled={!reply} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-semibold disabled:opacity-40">Shorten</button></div><textarea value={reply} onChange={(event) => setReply(event.target.value)} placeholder={`Write a reply to ${item.customer_name || "the customer"}…`} rows={3} className="w-full resize-none rounded-xl border border-border bg-card px-4 py-3 text-[13px] focus:outline-none" /><div className="mt-2 flex items-center justify-between gap-2"><span className="text-[10.5px] text-muted-foreground">Guided assistance is editable and never sends automatically.</span><button disabled className="flex items-center gap-1.5 rounded-lg bg-secondary px-3 py-2 text-[11px] font-semibold text-muted-foreground"><Send className="h-3 w-3" /> Send unavailable</button></div>{notice && <div className="mt-2 text-[11px] text-muted-foreground">{notice}</div>}</div></div></section>;
@@ -234,6 +239,7 @@ export function CommunicationIntelligence() {
   const [selected, setSelected] = useState<AwaitingReplyItem | null>(null);
   const [periodDays, setPeriodDays] = useState(30);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const period = useMemo(() => { const end = new Date(); const start = new Date(end); start.setDate(start.getDate() - periodDays); return { start: start.toISOString(), end: end.toISOString() }; }, [periodDays]);
   const load = useCallback(async () => {
@@ -248,12 +254,13 @@ export function CommunicationIntelligence() {
         fetchCommunicationScore(businessId),
       ]);
       setMetrics(nextMetrics); setItems(nextItems); setRecommendation(nextRecommendation.item); setAnalytics(nextAnalytics); setScore(nextScore); setSelected((current) => nextItems.find((item) => item.id === current?.id) || nextItems[0] || null);
-    } catch (error) { console.error("[CommunicationIntelligence] load error:", error); } finally { setLoading(false); }
+    } catch (error) { console.error("[CommunicationIntelligence] load error:", error); setLoadError("Communications could not be loaded. Please try again."); } finally { setLoading(false); }
   }, [businessId, period.end, period.start]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => appEvents.on(APP_EVENTS.COMMUNICATIONS_MUTATED, load), [load]);
 
-  if (loading || !metrics) return <div className="flex items-center justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-brand" /></div>;
+  if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-brand" /></div>;
+  if (!metrics) return <div className="flex flex-col items-center justify-center py-20 text-center"><p className="text-[13px] font-semibold text-foreground">{loadError || "Communications are unavailable."}</p><button onClick={() => void load()} className="mt-3 rounded-lg bg-brand px-4 py-2 text-[12px] font-semibold text-white">Retry</button></div>;
   return <div className="space-y-6"><Hero metrics={metrics} /><PriorityCard recommendation={recommendation} onOpen={() => setSelected(recommendation)} /><div className="grid gap-4 lg:grid-cols-[340px_1fr]"><Queue items={items} selected={selected?.id || null} onSelect={setSelected} /><ConversationDetail item={selected} businessId={businessId as string} userId={user?.id || null} onChanged={load} /></div><Analytics analytics={analytics} periodDays={periodDays} onPeriodChange={setPeriodDays} /><div className="grid gap-4 lg:grid-cols-2"><ScoreCard score={score} /><ImpactCard analytics={analytics} /></div><ChannelCard metrics={metrics} /><BusinessDNA score={score} /></div>;
 }

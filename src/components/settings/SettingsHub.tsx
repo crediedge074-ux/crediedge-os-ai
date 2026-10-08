@@ -1,10 +1,13 @@
 import { useState, useEffect } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Building2, User, Users, Bell, Palette, Brain, Database, Shield, CreditCard, Layers, Circle as HelpCircle, Activity, ChevronRight, CircleCheck as CheckCircle2, Globe, Clock, Lock, Key, Download, Upload, Trash2, Star, Smartphone, Monitor, Sun, Moon, RefreshCw } from "lucide-react";
+import { Building2, User, Users, Bell, Palette, Brain, Database, Shield, CreditCard, Layers, Circle as HelpCircle, Activity, ChevronRight, CircleCheck as CheckCircle2, Globe, Clock, Star, Monitor, Sun, Moon, RefreshCw } from "lucide-react";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { updateProfile } from "@/services/profiles";
 import { updateBusiness } from "@/services/business";
 import { updateBusinessSettings } from "@/services/settings";
+import { Switch } from "@/components/ui/switch";
+import { InsufficientData } from "@/components/ui/InsufficientData";
+import { Link } from "@tanstack/react-router";
 
 // ─── Section config ───────────────────────────────────────────────────────────
 
@@ -44,17 +47,6 @@ function SettingsRow({ label, description, action }: { label: string; descriptio
       </div>
       <div className="shrink-0">{action}</div>
     </div>
-  );
-}
-
-function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onChange(!on)}
-      className={`relative h-6 w-11 rounded-full transition-colors ${on ? "bg-brand" : "bg-border"}`}
-    >
-      <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${on ? "translate-x-5" : "translate-x-0.5"}`} />
-    </button>
   );
 }
 
@@ -323,9 +315,7 @@ function AccountPanel() {
           <div className="text-[14px] font-semibold text-foreground">{displayName}</div>
           <div className="text-[12.5px] text-muted-foreground">{user?.email}</div>
         </div>
-        <button className="ml-auto rounded-xl border border-border bg-secondary px-3.5 py-2 text-[12.5px] font-medium text-foreground transition-colors hover:bg-secondary/70">
-          Change Photo
-        </button>
+        <ActionButton label="Change Photo" />
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -378,9 +368,7 @@ function OrganisationPanel() {
           <div className="text-[13px] font-semibold text-foreground">
             Team Members{business?.name ? ` — ${business.name}` : ""}
           </div>
-          <button className="rounded-xl bg-brand px-3.5 py-2 text-[12.5px] font-semibold text-white transition-opacity hover:opacity-80">
-            Invite Member
-          </button>
+          <ActionButton label="Invite Member" />
         </div>
         <div className="overflow-hidden rounded-xl border border-border">
           {roles.map((r, i) => (
@@ -505,7 +493,7 @@ function NotificationsPanel() {
             </div>
             {(["email", "push", "sms"] as const).map((ch) => (
               <div key={ch} className="flex justify-center">
-                <Toggle on={prefs[item.id][ch]} onChange={() => toggle(item.id, ch)} />
+                <Switch checked={prefs[item.id][ch]} onCheckedChange={() => toggle(item.id, ch)} />
               </div>
             ))}
           </div>
@@ -601,7 +589,7 @@ function AppearancePanel() {
       <div>
         <label className="mb-2.5 block text-[13px] font-semibold text-foreground">Layout</label>
         <div className="space-y-2">
-          <SettingsRow label="Compact Mode" description="Reduce spacing and padding for a denser interface" action={<Toggle on={compact} onChange={setCompact} />} />
+          <SettingsRow label="Compact Mode" description="Reduce spacing and padding for a denser interface" action={<Switch checked={compact} onCheckedChange={setCompact} />} />
         </div>
       </div>
 
@@ -729,9 +717,9 @@ function AIPanel() {
       </div>
 
       <div className="space-y-2">
-        <SettingsRow label="AI Enabled" description="Enable AI analysis and insights across the platform" action={<Toggle on={form.ai_enabled} onChange={(v) => setForm((f) => ({ ...f, ai_enabled: v }))} />} />
-        <SettingsRow label="Scheduled AI Refresh" description="Re-analyse all data at 06:00 each morning" action={<Toggle on={form.daily_briefing} onChange={(v) => setForm((f) => ({ ...f, daily_briefing: v }))} />} />
-        <SettingsRow label="Automatic AI Reports" description="Generate weekly executive reports automatically" action={<Toggle on={form.weekly_report} onChange={(v) => setForm((f) => ({ ...f, weekly_report: v }))} />} />
+        <SettingsRow label="AI Enabled" description="Enable AI analysis and insights across the platform" action={<Switch checked={form.ai_enabled} onCheckedChange={(v) => setForm((f) => ({ ...f, ai_enabled: v }))} />} />
+        <SettingsRow label="Scheduled AI Refresh" description="Re-analyse all data at 06:00 each morning" action={<Switch checked={form.daily_briefing} onCheckedChange={(v) => setForm((f) => ({ ...f, daily_briefing: v }))} />} />
+        <SettingsRow label="Automatic AI Reports" description="Generate weekly executive reports automatically" action={<Switch checked={form.weekly_report} onCheckedChange={(v) => setForm((f) => ({ ...f, weekly_report: v }))} />} />
       </div>
 
       <div>
@@ -766,7 +754,7 @@ function DataPanel() {
       <div className="space-y-2">
         <div className="text-[13px] font-semibold text-foreground">Backups</div>
         <SettingsRow label="Create Backup" description="Generate a full backup of your platform data now" action={<ActionButton label="Backup Now" />} />
-        <SettingsRow label="Last Backup" description="Completed successfully — 6 Jul 2026 at 02:00" action={<ActionButton label="Download" />} />
+        <SettingsRow label="Last Backup" description="No backups have been created yet" action={<ActionButton label="Download" />} />
         <SettingsRow label="Restore from Backup" description="Restore a previous backup to this account" action={<ActionButton label="Restore" />} />
       </div>
       <div className="space-y-2">
@@ -785,60 +773,21 @@ function DataPanel() {
 }
 
 function SecurityPanel() {
-  const [twoFa, setTwoFa] = useState(false);
-  const devices = [
-    { name: "MacBook Pro 14", location: "London, UK", lastActive: "Now", current: true },
-    { name: "iPhone 15 Pro", location: "London, UK", lastActive: "1 hour ago", current: false },
-  ];
-  const auditLog = [
-    { action: "Logged in", device: "MacBook Pro", time: "Today 09:31", status: "success" },
-    { action: "Changed password", device: "MacBook Pro", time: "7 Jul 09:18", status: "success" },
-    { action: "API key generated", device: "MacBook Pro", time: "6 Jul 14:52", status: "success" },
-    { action: "Failed login attempt", device: "Unknown", time: "5 Jul 22:14", status: "warning" },
-  ];
   return (
     <div className="space-y-6">
       <SectionHeader title="Security" description="Protect your account with advanced security controls." />
       <div className="space-y-2">
         <div className="text-[13px] font-semibold text-foreground">Authentication</div>
-        <SettingsRow label="Password" description="Last changed 30 days ago" action={<ActionButton label="Change Password" />} />
-        <SettingsRow label="Two-Factor Authentication" description={twoFa ? "Enabled — authenticator app configured" : "Not enabled — adds an extra layer of security"} action={<Toggle on={twoFa} onChange={setTwoFa} />} />
+        <SettingsRow label="Password" description="Change your account password" action={<ActionButton label="Change Password" />} />
+        <SettingsRow label="Two-Factor Authentication" description="Not enabled — adds an extra layer of security" action={<ActionButton label="Enable" variant="brand" />} />
       </div>
       <div>
         <div className="mb-3 text-[13px] font-semibold text-foreground">Active Devices</div>
-        <div className="overflow-hidden rounded-xl border border-border">
-          {devices.map((d, i) => (
-            <div key={d.name} className={`flex items-center gap-4 px-4 py-3.5 ${i === 0 ? "border-b border-border" : ""}`}>
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-secondary">
-                {d.name.includes("iPhone") ? <Smartphone className="h-4 w-4 text-muted-foreground" strokeWidth={1.75} /> : <Monitor className="h-4 w-4 text-muted-foreground" strokeWidth={1.75} />}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-[13px] font-medium text-foreground">{d.name}</span>
-                  {d.current && <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">Current</span>}
-                </div>
-                <div className="text-[11.5px] text-muted-foreground">{d.location} · {d.lastActive}</div>
-              </div>
-              {!d.current && <ActionButton label="Revoke" variant="danger" />}
-            </div>
-          ))}
-        </div>
+        <InsufficientData description="Device session tracking is not yet available. Once connected, your active devices and sessions will appear here." />
       </div>
       <div>
         <div className="mb-3 text-[13px] font-semibold text-foreground">Audit Log</div>
-        <div className="overflow-hidden rounded-xl border border-border">
-          {auditLog.map((entry, i) => (
-            <div key={i} className={`flex items-center gap-3 px-4 py-3 ${i < auditLog.length - 1 ? "border-b border-border" : ""}`}>
-              <div className={`h-1.5 w-1.5 shrink-0 rounded-full ${entry.status === "success" ? "bg-emerald-500" : "bg-amber-500"}`} />
-              <div className="min-w-0 flex-1">
-                <span className="text-[13px] font-medium text-foreground">{entry.action}</span>
-                <span className="mx-1.5 text-muted-foreground/40">·</span>
-                <span className="text-[12px] text-muted-foreground">{entry.device}</span>
-              </div>
-              <span className="shrink-0 text-[11.5px] text-muted-foreground">{entry.time}</span>
-            </div>
-          ))}
-        </div>
+        <InsufficientData description="Security audit events will be listed here once audit logging is enabled for your workspace." />
       </div>
     </div>
   );
@@ -846,12 +795,7 @@ function SecurityPanel() {
 
 function BillingPanel() {
   const { business } = useAuthContext();
-  const plan = business?.subscription_plan ?? "Professional";
-  const invoices = [
-    { number: "INV-2026-007", date: "1 Jul 2026", amount: "£299.00", status: "paid" },
-    { number: "INV-2026-006", date: "1 Jun 2026", amount: "£299.00", status: "paid" },
-    { number: "INV-2026-005", date: "1 May 2026", amount: "£299.00", status: "paid" },
-  ];
+  const plan = business?.subscription_plan ?? "Free";
   return (
     <div className="space-y-6">
       <SectionHeader title="Billing" description="Manage your subscription, payment method and invoices." />
@@ -859,14 +803,7 @@ function BillingPanel() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="text-[15px] font-bold text-foreground">{plan} Plan</div>
-            <div className="mt-1 text-[13px] text-muted-foreground">£299 / month · Renews 1 August 2026</div>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {["Unlimited contacts", "All DNA modules", "AI analysis", "Priority support", "API access"].map((f) => (
-                <span key={f} className="flex items-center gap-1 rounded-full bg-brand/10 px-2.5 py-0.5 text-[11px] font-medium text-brand">
-                  <CheckCircle2 className="h-3 w-3" strokeWidth={2} />{f}
-                </span>
-              ))}
-            </div>
+            <div className="mt-1 text-[13px] text-muted-foreground">Subscription management is coming soon.</div>
           </div>
           <span className="shrink-0 rounded-full bg-brand/10 px-2.5 py-1 text-[11px] font-bold text-brand">Active</span>
         </div>
@@ -877,36 +814,15 @@ function BillingPanel() {
       </div>
       <div className="space-y-2">
         <div className="text-[13px] font-semibold text-foreground">Payment Method</div>
-        <SettingsRow label="Visa ending 4242" description="Expires 12/26 · Default payment method" action={<ActionButton label="Update" />} />
+        <InsufficientData description="No payment method is connected yet. Payment integration is coming soon." />
       </div>
       <div>
         <div className="mb-3 text-[13px] font-semibold text-foreground">Invoice History</div>
-        <div className="overflow-hidden rounded-xl border border-border">
-          {invoices.map((inv, i) => (
-            <div key={inv.number} className={`flex items-center gap-4 px-4 py-3.5 ${i < invoices.length - 1 ? "border-b border-border" : ""}`}>
-              <div className="min-w-0 flex-1">
-                <div className="text-[13px] font-medium text-foreground">{inv.number}</div>
-                <div className="text-[11.5px] text-muted-foreground">{inv.date}</div>
-              </div>
-              <div className="text-[13px] font-semibold text-foreground">{inv.amount}</div>
-              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-700">Paid</span>
-              <ActionButton label="Download" />
-            </div>
-          ))}
-        </div>
+        <InsufficientData description="No invoices available. Invoice history will appear here once billing is connected." />
       </div>
       <div>
         <div className="mb-3 text-[13px] font-semibold text-foreground">AI Credits Usage</div>
-        <div className="rounded-xl border border-border bg-secondary/20 p-4">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-[13px] font-medium text-foreground">Monthly Credits</span>
-            <span className="text-[13px] font-semibold text-foreground">7,284 / 10,000</span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-secondary">
-            <div className="h-full w-[73%] rounded-full bg-brand transition-all duration-700" />
-          </div>
-          <div className="mt-1.5 text-[11.5px] text-muted-foreground">2,716 credits remaining this month</div>
-        </div>
+        <InsufficientData description="AI credit usage details are available on the Business Advisor page. Billing-based credit tracking is coming soon." />
       </div>
     </div>
   );
@@ -924,9 +840,9 @@ function WhiteLabelPanel() {
         <p className="mx-auto mt-2 max-w-sm text-[13px] text-muted-foreground">
           Custom logo, domain, colours, and client portal branding. Contact us to upgrade to Enterprise.
         </p>
-        <button className="mt-4 rounded-xl bg-brand px-5 py-2.5 text-[13px] font-semibold text-white transition-opacity hover:opacity-80">
-          Upgrade to Enterprise
-        </button>
+        <Link to="/admin/enterprise-preview" className="mt-4 inline-flex rounded-xl bg-brand px-5 py-2.5 text-[13px] font-semibold text-white transition-opacity hover:opacity-80">
+          Explore Enterprise
+        </Link>
       </div>
       <div className="pointer-events-none grid grid-cols-1 gap-4 opacity-40 sm:grid-cols-2">
         <FormField label="Custom Logo URL" defaultValue="" hint="Displayed in place of CrediEdgeOS logo" />
@@ -939,52 +855,17 @@ function WhiteLabelPanel() {
 }
 
 function SystemStatusPanel() {
-  const services = [
-    { name: "Core Platform", status: "operational", uptime: "99.98%" },
-    { name: "AI Engine", status: "operational", uptime: "99.94%" },
-    { name: "Database", status: "operational", uptime: "99.99%" },
-    { name: "Background Jobs", status: "operational", uptime: "99.91%" },
-    { name: "API Gateway", status: "operational", uptime: "100%" },
-    { name: "Webhooks", status: "operational", uptime: "99.87%" },
-    { name: "Email Delivery", status: "degraded", uptime: "98.2%" },
-    { name: "SMS Gateway", status: "operational", uptime: "99.76%" },
-  ];
   return (
     <div className="space-y-5">
       <SectionHeader title="System Status" description="Real-time health and performance of all platform services." />
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="text-[11px] font-medium text-muted-foreground">Platform Version</div>
-          <div className="mt-1.5 text-[20px] font-bold text-foreground">v2.14.1</div>
-          <div className="mt-0.5 text-[11px] text-emerald-600">Up to date</div>
+      <div className="rounded-2xl border border-dashed border-border bg-secondary/20 p-6 text-center">
+        <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl border border-border bg-card">
+          <Activity className="h-6 w-6 text-muted-foreground/50" strokeWidth={1.25} />
         </div>
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="text-[11px] font-medium text-muted-foreground">Storage Used</div>
-          <div className="mt-1.5 text-[20px] font-bold text-foreground">4.2 GB</div>
-          <div className="mt-0.5 text-[11px] text-muted-foreground">of 50 GB</div>
-        </div>
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="text-[11px] font-medium text-muted-foreground">Connected Services</div>
-          <div className="mt-1.5 text-[20px] font-bold text-foreground">9</div>
-          <div className="mt-0.5 text-[11px] text-emerald-600">All responding</div>
-        </div>
-      </div>
-      <div className="overflow-hidden rounded-xl border border-border">
-        <div className="grid grid-cols-[1fr_120px_80px] border-b border-border bg-secondary/30 px-4 py-2.5">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Service</div>
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status</div>
-          <div className="text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Uptime</div>
-        </div>
-        {services.map((s, i) => (
-          <div key={s.name} className={`grid grid-cols-[1fr_120px_80px] items-center px-4 py-3 ${i < services.length - 1 ? "border-b border-border" : ""}`}>
-            <span className="text-[13px] font-medium text-foreground">{s.name}</span>
-            <div className="flex items-center gap-1.5">
-              <div className={`h-1.5 w-1.5 rounded-full ${s.status === "operational" ? "bg-emerald-500" : "bg-amber-500"}`} />
-              <span className={`text-[12px] font-medium capitalize ${s.status === "operational" ? "text-emerald-700" : "text-amber-700"}`}>{s.status}</span>
-            </div>
-            <div className="text-right text-[12px] font-medium text-muted-foreground">{s.uptime}</div>
-          </div>
-        ))}
+        <div className="text-[14px] font-semibold text-foreground">System Status Dashboard — Coming Soon</div>
+        <p className="mx-auto mt-2 max-w-sm text-[13px] text-muted-foreground">
+          Real-time platform health metrics, service uptime, and version information will be available here once the monitoring infrastructure is connected.
+        </p>
       </div>
     </div>
   );

@@ -217,8 +217,8 @@ function CalendarPage() {
           members={members}
           onClose={() => setSelectedTaskWorkspace(null)}
           onRefresh={loadData}
-          onSelectCampaign={() => {}}
-          onSelectMission={() => {}}
+          onSelectCampaign={(c) => { setSelectedTaskWorkspace(null); }}
+          onSelectMission={(m) => { setSelectedTaskWorkspace(null); }}
           onSelectTask={(t) => setSelectedTaskWorkspace(t)}
         />
       )}
