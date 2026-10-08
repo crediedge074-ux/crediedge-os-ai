@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Brain } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { AppLayout } from "@/components/ui/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { InsightEngine } from "@/components/insights/InsightEngine";
@@ -15,8 +15,8 @@ function InsightsPage() {
         title="Insights"
         description="Discover opportunities your business didn't know existed."
         crumbs={[{ label: "Insights" }]}
-        action={{ label: "Generate Discoveries", icon: Brain }}
-        secondaryAction={{ label: "View History" }}
+        action={{ label: "Refresh Insights", icon: RefreshCw, onClick: () => window.dispatchEvent(new Event("intelligence:refresh")) }}
+        secondaryAction={{ label: "View Intelligence", to: "/intelligence" }}
       />
       <InsightEngine />
     </AppLayout>

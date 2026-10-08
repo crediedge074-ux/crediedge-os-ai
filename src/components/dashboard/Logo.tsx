@@ -1,16 +1,13 @@
-import logoAsset from "@/assets/crediedge-logo.png.asset.json";
+import { Link } from "@tanstack/react-router";
 
 export function Logo({ className = "" }: { className?: string }) {
   return (
-    <div className={`flex items-center gap-2 ${className}`}>
+    <Link to="/" aria-label="CrediEdgeOS Command Centre" className={`block ${className}`}>
       <img
-        src={logoAsset.url}
-        alt="CrediEdge"
-        className="h-9 w-auto shrink-0 object-contain"
+        src="/CE_OS_LOGO.png"
+        alt="CrediEdgeOS"
+        className="h-9 w-auto max-w-[168px] shrink-0 object-contain object-left"
       />
-      <span className="rounded-md bg-foreground px-1.5 py-0.5 text-[9.5px] font-bold tracking-wider text-background">
-        OS
-      </span>
-    </div>
+    </Link>
   );
 }

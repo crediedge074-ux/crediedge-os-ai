@@ -5,13 +5,20 @@ import { HealthScore } from "./HealthScore";
 import { useState } from "react";
 import { useSidebarContext } from "@/contexts/SidebarContext";
 
-const nav = [
+interface NavItem {
+  label: string;
+  icon: typeof LayoutDashboard;
+  to: string;
+  badge?: number;
+}
+
+const nav: NavItem[] = [
   { label: "Command Centre", icon: LayoutDashboard, to: "/" },
   { label: "Business Advisor", icon: Sparkles, to: "/advisor" },
   { label: "Tasks", icon: CheckSquare, to: "/tasks" },
   { label: "Calendar", icon: Calendar, to: "/calendar" },
   { label: "Relationships", icon: Users, to: "/relationships" },
-  { label: "Communications", icon: Inbox, to: "/communications", badge: 5 },
+  { label: "Communications", icon: Inbox, to: "/communications" },
   { label: "Reviews", icon: Star, to: "/reviews" },
   { label: "Business Intelligence", icon: BarChart3, to: "/intelligence" },
   { label: "Insights", icon: FileText, to: "/insights" },

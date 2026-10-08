@@ -58,13 +58,21 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
   );
 }
 
-function ActionButton({ label, variant = "secondary" }: { label: string; variant?: "secondary" | "brand" | "danger" }) {
+function ActionButton({ label, variant = "secondary", onClick }: { label: string; variant?: "secondary" | "brand" | "danger"; onClick?: () => void }) {
   const cls =
     variant === "brand" ? "bg-brand text-white hover:opacity-80" :
     variant === "danger" ? "border border-red-200 bg-red-50 text-red-700 hover:bg-red-100" :
     "border border-border bg-card text-foreground hover:bg-secondary";
   return (
-    <button className={`rounded-lg px-3 py-1.5 text-[12.5px] font-medium transition-colors ${cls}`}>{label}</button>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!onClick}
+      title={!onClick ? "Coming soon" : undefined}
+      className={`rounded-lg px-3 py-1.5 text-[12.5px] font-medium transition-colors ${cls} disabled:cursor-not-allowed disabled:opacity-60`}
+    >
+      {label}{!onClick && <span className="ml-1 text-[10px] font-normal opacity-70">(Coming soon)</span>}
+    </button>
   );
 }
 

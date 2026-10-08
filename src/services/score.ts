@@ -179,7 +179,7 @@ export async function fetchCrediEdgeScore(
       { name: "Finance", score: financeScore, weight: 25, color: "#F59E0B", description: "Invoice collection rate, unpaid balance ratios, and payment health.", hasData: financeHasData },
       { name: "Communication", score: commsScore, weight: 20, color: "#10B981", description: "Enquiry responsiveness, unread message handling, and client outreach.", hasData: commsHasData },
       { name: "Customer Experience", score: cxScore, weight: 20, color: "#3B82F6", description: "Review ratings, customer retention, and satisfaction scores.", hasData: cxHasData },
-      { name: "Operations", score: opsScore, weight: 20, color: "#8B5CF6", description: "Task and job completion efficiency.", hasData: opsHasData },
+      { name: "Operations", score: opsScore, weight: 20, color: "#0EA5E9", description: "Task and job completion efficiency.", hasData: opsHasData },
       { name: "CRM & Growth", score: mktgScore, weight: 15, color: "#06B6D4", description: "Active customer base size and CRM profile completeness.", hasData: mktgHasData },
     ];
 
@@ -192,7 +192,7 @@ export async function fetchCrediEdgeScore(
       ratingLabel,
       weeklyChange,
       todayChange,
-      percentileRank: overallScore >= 80 ? 12 : overallScore >= 70 ? 25 : 50,
+      percentileRank: null,
       categories,
       hasSufficientData: true,
       explanation: {
@@ -219,7 +219,7 @@ function getEmptyScoreData(summaryMsg: string): CrediEdgeScoreData {
       { name: "Finance", score: 0, weight: 25, color: "#F59E0B", description: "Invoice collection rate and payment health.", hasData: false },
       { name: "Communication", score: 0, weight: 20, color: "#10B981", description: "Enquiry responsiveness.", hasData: false },
       { name: "Customer Experience", score: 0, weight: 20, color: "#3B82F6", description: "Review ratings and satisfaction.", hasData: false },
-      { name: "Operations", score: 0, weight: 20, color: "#8B5CF6", description: "Task and job completion.", hasData: false },
+      { name: "Operations", score: 0, weight: 20, color: "#0EA5E9", description: "Task and job completion.", hasData: false },
       { name: "CRM & Growth", score: 0, weight: 15, color: "#06B6D4", description: "Active customer base size.", hasData: false },
     ],
     explanation: {
