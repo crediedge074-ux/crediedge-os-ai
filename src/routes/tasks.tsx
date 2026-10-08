@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { Plus, Sparkles, Clock, CircleCheck as CheckCircle2, Circle, ListFilter as Filter, ChevronRight, Zap, Trash2, Edit3, User, X, Check, MessageSquare, Heart, ThumbsUp, Send, Target, PoundSterling, History, Trophy, Flame } from "lucide-react";
 import { AppLayout } from "@/components/ui/AppLayout";
@@ -480,6 +480,7 @@ import {
   type CalculatedMission,
 } from "@/services/missions";
 import { fetchCampaigns, type CalculatedCampaign } from "@/services/campaigns";
+import { fetchGoals, type CalculatedGoal } from "@/services/goals";
 import { calculateDeterministicTaskPriority, type PrioritisedTask } from "@/services/taskPriority";
 
 function MissionsSection({
@@ -493,6 +494,7 @@ function MissionsSection({
 }) {
   const [missions, setMissions] = useState<CalculatedMission[]>([]);
   const [campaigns, setCampaigns] = useState<CalculatedCampaign[]>([]);
+  const [goals, setGoals] = useState<CalculatedGoal[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -905,6 +907,7 @@ function TaskModal({
   taskToEdit,
   members,
   missions = [],
+  goals = [],
   defaultMissionId = "",
 }: {
   isOpen: boolean;
@@ -913,6 +916,7 @@ function TaskModal({
   taskToEdit?: Task | null;
   members: WorkspaceMemberInfo[];
   missions?: CalculatedMission[];
+  goals?: CalculatedGoal[];
   defaultMissionId?: string;
 }) {
   const [title, setTitle] = useState("");
@@ -921,6 +925,7 @@ function TaskModal({
   const [dueDate, setDueDate] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
   const [missionId, setMissionId] = useState("");
+  const [goalId, setGoalId] = useState("");
   const [saving, setSaving] = useState(false);
   const [taskError, setTaskError] = useState<string | null>(null);
 
@@ -932,6 +937,7 @@ function TaskModal({
       setDueDate(taskToEdit.due_date || "");
       setAssignedTo(taskToEdit.assigned_to || "");
       setMissionId((taskToEdit as any).mission_id || "");
+      setGoalId((taskToEdit as any).goal_id || "");
     } else {
       setTitle("");
       setDescription("");
@@ -939,6 +945,7 @@ function TaskModal({
       setDueDate("");
       setAssignedTo("");
       setMissionId(defaultMissionId || "");
+      setGoalId("");
     }
     setTaskError(null);
   }, [taskToEdit, isOpen, defaultMissionId]);
@@ -959,6 +966,7 @@ function TaskModal({
         assigned_to: assignedTo || null,
         status: taskToEdit ? taskToEdit.status : "todo",
         mission_id: missionId || null,
+        goal_id: goalId || null,
       } as any);
       onClose();
     } catch (err: any) {
@@ -1038,6 +1046,21 @@ function TaskModal({
 
           <div className="grid grid-cols-2 gap-4">
             <div>
+              <label className="mb-1 block text-[12px] font-semibold text-foreground">Linked Goal</label>
+              <select
+                value={goalId}
+                onChange={(e) => setGoalId(e.target.value)}
+                className="h-10 w-full rounded-xl border border-border bg-secondary/30 px-3 text-[13px] text-foreground focus:outline-none"
+              >
+                <option value="">No Goal Link</option>
+                {goals.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label className="mb-1 block text-[12px] font-semibold text-foreground">Assignee</label>
               <select
                 value={assignedTo}
@@ -1103,6 +1126,7 @@ function TasksPage() {
   const [members, setMembers] = useState<WorkspaceMemberInfo[]>([]);
   const [missions, setMissions] = useState<CalculatedMission[]>([]);
   const [campaigns, setCampaigns] = useState<CalculatedCampaign[]>([]);
+  const [goals, setGoals] = useState<CalculatedGoal[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -1128,12 +1152,14 @@ function TasksPage() {
       fetchWorkspaceMembers(businessId),
       fetchMissions(businessId),
       fetchCampaigns(businessId),
+      fetchGoals(businessId),
     ])
-      .then(([taskList, memberList, missionList, cOverview]) => {
+      .then(([taskList, memberList, missionList, cOverview, goalList]) => {
         setTasks(taskList);
         setMembers(memberList);
         setMissions(missionList);
         setCampaigns(cOverview.activeCampaigns);
+        setGoals(goalList);
       })
       .catch((err) => {
         console.error("Failed to load tasks data:", err);
@@ -1191,6 +1217,11 @@ function TasksPage() {
 
   const memberMap = members.reduce<Record<string, string>>((acc, m) => {
     acc[m.userId] = m.fullName;
+    return acc;
+  }, {});
+
+  const goalMap = goals.reduce<Record<string, string>>((acc, g) => {
+    acc[g.id] = g.title;
     return acc;
   }, {});
 
@@ -1355,6 +1386,11 @@ function TasksPage() {
                       <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${cfg.badge}`}>
                         {cfg.label}
                       </span>
+                      {(t as any).goal_id && goalMap[(t as any).goal_id] && (
+                        <Link to="/goals" className="rounded-md bg-brand/10 px-2 py-0.5 text-[10px] font-bold text-brand hover:bg-brand/20 transition-colors">
+                          Goal: {goalMap[(t as any).goal_id]}
+                        </Link>
+                      )}
                       {isDone && (
                         <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
                           Completed
@@ -1436,6 +1472,7 @@ function TasksPage() {
         taskToEdit={editingTask}
         members={members}
         missions={missions}
+        goals={goals}
         defaultMissionId={createTaskForMissionId}
       />
 

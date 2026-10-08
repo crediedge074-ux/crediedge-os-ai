@@ -104,6 +104,7 @@ export async function createMission(
     title: string;
     description?: string | null;
     campaign_id?: string | null;
+    goal_id?: string | null;
     start_date?: string | null;
   }
 ): Promise<StoredMission> {
@@ -111,6 +112,7 @@ export async function createMission(
     .insert({
       business_id: businessId,
       campaign_id: data.campaign_id || null,
+      goal_id: data.goal_id || null,
       title: data.title.trim(),
       description: data.description?.trim() || null,
       status: "active",
