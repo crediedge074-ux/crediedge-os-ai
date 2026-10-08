@@ -1,13 +1,19 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Building2, User, Users, Bell, Palette, Brain, Database, Shield, CreditCard, Layers, Circle as HelpCircle, Activity, ChevronRight, CircleCheck as CheckCircle2, Globe, Clock, Star, Monitor, Sun, Moon, RefreshCw } from "lucide-react";
-import { useAuthContext } from "@/contexts/AuthContext";
-import { updateProfile } from "@/services/profiles";
-import { updateBusiness } from "@/services/business";
-import { updateBusinessSettings } from "@/services/settings";
-import { Switch } from "@/components/ui/switch";
-import { InsufficientData } from "@/components/ui/InsufficientData";
+import { Building2, User, Users, Bell, Palette, Brain, Database, Shield, CreditCard, Layers, Circle as HelpCircle, Activity, ChevronRight, Globe, Star, Clock, RefreshCw } from "lucide-react";
 import { Link } from "@tanstack/react-router";
+import { InsufficientData } from "@/components/ui/InsufficientData";
+import { SectionHeader, SettingsRow, ActionButton, FormField } from "./primitives";
+
+// ─── Panel imports ───────────────────────────────────────────────────────────
+
+import { BusinessPanel } from "./panels/BusinessPanel";
+import { AccountPanel } from "./panels/AccountPanel";
+import { OrganisationPanel } from "./panels/OrganisationPanel";
+import { NotificationsPanel } from "./panels/NotificationsPanel";
+import { AppearancePanel } from "./panels/AppearancePanel";
+import { AIPanel } from "./panels/AIPanel";
+import { SecurityPanel } from "./panels/SecurityPanel";
 
 // ─── Section config ───────────────────────────────────────────────────────────
 
@@ -36,707 +42,7 @@ const sections: SectionDef[] = [
 
 const groups = ["Core", "Preferences", "Data", "Account", "System"];
 
-// ─── Reusable primitives ──────────────────────────────────────────────────────
-
-function SettingsRow({ label, description, action }: { label: string; description?: string; action: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-secondary/20 px-4 py-3.5">
-      <div className="min-w-0">
-        <div className="text-[13px] font-medium text-foreground">{label}</div>
-        {description && <div className="mt-0.5 text-[12px] text-muted-foreground">{description}</div>}
-      </div>
-      <div className="shrink-0">{action}</div>
-    </div>
-  );
-}
-
-function ActionButton({ label, variant = "secondary", onClick }: { label: string; variant?: "secondary" | "brand" | "danger"; onClick?: () => void }) {
-  const cls =
-    variant === "brand" ? "bg-brand text-white hover:opacity-80" :
-    variant === "danger" ? "border border-red-200 bg-red-50 text-red-700 hover:bg-red-100" :
-    "border border-border bg-card text-foreground hover:bg-secondary";
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={!onClick}
-      title={!onClick ? "Coming soon" : undefined}
-      className={`rounded-lg px-3 py-1.5 text-[12.5px] font-medium transition-colors ${cls} disabled:cursor-not-allowed disabled:opacity-60`}
-    >
-      {label}{!onClick && <span className="ml-1 text-[10px] font-normal opacity-70">(Coming soon)</span>}
-    </button>
-  );
-}
-
-function SectionHeader({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="mb-5 border-b border-border pb-4">
-      <h2 className="text-[15px] font-semibold text-foreground">{title}</h2>
-      <p className="mt-0.5 text-[12.5px] text-muted-foreground">{description}</p>
-    </div>
-  );
-}
-
-function FormField({
-  label, value, onChange, defaultValue, type = "text", hint,
-}: {
-  label: string;
-  value?: string;
-  onChange?: (v: string) => void;
-  defaultValue?: string;
-  type?: string;
-  hint?: string;
-}) {
-  return (
-    <div>
-      <label className="mb-1.5 block text-[12.5px] font-medium text-muted-foreground">{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={onChange ? (e) => onChange(e.target.value) : undefined}
-        defaultValue={value === undefined ? defaultValue : undefined}
-        className="w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2.5 text-[13px] text-foreground placeholder:text-muted-foreground/60 focus:border-foreground/20 focus:bg-card focus:outline-none"
-      />
-      {hint && <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p>}
-    </div>
-  );
-}
-
-type Feedback = "saved" | "error" | null;
-
-function SaveBar({ onSave, saving, feedback }: { onSave?: () => void; saving?: boolean; feedback?: Feedback }) {
-  return (
-    <div className="flex items-center justify-end gap-3 pt-2">
-      {feedback === "saved" && (
-        <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-emerald-600">
-          <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2} />
-          Saved
-        </span>
-      )}
-      {feedback === "error" && (
-        <span className="text-[12.5px] font-medium text-red-600">Failed to save. Try again.</span>
-      )}
-      <button
-        onClick={onSave}
-        disabled={saving}
-        className="rounded-xl bg-brand px-5 py-2.5 text-[13px] font-semibold text-white shadow-sm transition-opacity hover:opacity-80 disabled:opacity-60"
-      >
-        {saving ? "Saving…" : "Save Changes"}
-      </button>
-    </div>
-  );
-}
-
-function PanelSkeleton() {
-  return (
-    <div className="space-y-4">
-      <div className="h-8 w-48 animate-pulse rounded-lg bg-secondary" />
-      <div className="grid grid-cols-2 gap-4">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="h-14 animate-pulse rounded-xl bg-secondary" />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── Panel: Business Profile ──────────────────────────────────────────────────
-
-function BusinessPanel() {
-  const { business, membership, refreshBusiness } = useAuthContext();
-  const [form, setForm] = useState({
-    name: "", industry: "", phone: "", email: "", website: "",
-    vat_number: "", address_line_1: "", city: "", postcode: "",
-    timezone: "Europe/London", currency: "GBP",
-  });
-  const [saving, setSaving] = useState(false);
-  const [feedback, setFeedback] = useState<Feedback>(null);
-
-  useEffect(() => {
-    if (business) {
-      setForm({
-        name: business.name ?? "",
-        industry: business.industry ?? "",
-        phone: business.phone ?? "",
-        email: business.email ?? "",
-        website: business.website ?? "",
-        vat_number: business.vat_number ?? "",
-        address_line_1: business.address_line_1 ?? "",
-        city: business.city ?? "",
-        postcode: business.postcode ?? "",
-        timezone: business.timezone ?? "Europe/London",
-        currency: business.currency ?? "GBP",
-      });
-    }
-  }, [business?.id]);
-
-  const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
-
-  const handleSave = async () => {
-    if (!membership?.business_id) return;
-    setSaving(true);
-    try {
-      await updateBusiness(membership.business_id, form);
-      await refreshBusiness();
-      setFeedback("saved");
-      setTimeout(() => setFeedback(null), 3000);
-    } catch {
-      setFeedback("error");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (!business) return <PanelSkeleton />;
-
-  const businessHours = [
-    { day: "Monday", open: true, from: "08:00", to: "18:00" },
-    { day: "Tuesday", open: true, from: "08:00", to: "18:00" },
-    { day: "Wednesday", open: true, from: "08:00", to: "18:00" },
-    { day: "Thursday", open: true, from: "08:00", to: "18:00" },
-    { day: "Friday", open: true, from: "08:00", to: "17:00" },
-    { day: "Saturday", open: true, from: "09:00", to: "14:00" },
-    { day: "Sunday", open: false, from: "—", to: "—" },
-  ];
-
-  return (
-    <div className="space-y-6">
-      <SectionHeader title="Business Profile" description="Your business identity displayed throughout CrediEdgeOS." />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <FormField label="Business Name" value={form.name} onChange={set("name")} />
-        <FormField label="Industry" value={form.industry} onChange={set("industry")} />
-        <FormField label="Phone Number" value={form.phone} onChange={set("phone")} />
-        <FormField label="Email Address" value={form.email} onChange={set("email")} type="email" />
-        <FormField label="Website" value={form.website} onChange={set("website")} />
-        <FormField label="VAT Number" value={form.vat_number} onChange={set("vat_number")} />
-        <FormField label="Address Line 1" value={form.address_line_1} onChange={set("address_line_1")} />
-        <FormField label="City / Town" value={form.city} onChange={set("city")} />
-        <FormField label="Postcode" value={form.postcode} onChange={set("postcode")} />
-        <div>
-          <label className="mb-1.5 block text-[12.5px] font-medium text-muted-foreground">Timezone</label>
-          <select
-            value={form.timezone}
-            onChange={(e) => set("timezone")(e.target.value)}
-            className="w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2.5 text-[13px] text-foreground focus:border-foreground/20 focus:outline-none"
-          >
-            <option value="Europe/London">Europe/London (GMT+1)</option>
-            <option value="America/New_York">America/New_York (GMT-4)</option>
-            <option value="Asia/Dubai">Asia/Dubai (GMT+4)</option>
-          </select>
-        </div>
-        <div>
-          <label className="mb-1.5 block text-[12.5px] font-medium text-muted-foreground">Currency</label>
-          <select
-            value={form.currency}
-            onChange={(e) => set("currency")(e.target.value)}
-            className="w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2.5 text-[13px] text-foreground focus:border-foreground/20 focus:outline-none"
-          >
-            <option value="GBP">GBP — British Pound (£)</option>
-            <option value="USD">USD — US Dollar ($)</option>
-            <option value="EUR">EUR — Euro (€)</option>
-          </select>
-        </div>
-      </div>
-
-      <div>
-        <div className="mb-3 text-[13px] font-semibold text-foreground">Business Hours</div>
-        <div className="overflow-hidden rounded-xl border border-border">
-          {businessHours.map((bh, i) => (
-            <div key={bh.day} className={`flex items-center gap-4 px-4 py-3 ${i < businessHours.length - 1 ? "border-b border-border" : ""}`}>
-              <div className="w-24 text-[12.5px] font-medium text-foreground">{bh.day}</div>
-              <div className={`h-1.5 w-1.5 rounded-full ${bh.open ? "bg-emerald-500" : "bg-muted-foreground/30"}`} />
-              <div className="text-[12px] text-muted-foreground">{bh.open ? `${bh.from} – ${bh.to}` : "Closed"}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <SaveBar onSave={handleSave} saving={saving} feedback={feedback} />
-    </div>
-  );
-}
-
-// ─── Panel: Account ───────────────────────────────────────────────────────────
-
-function AccountPanel() {
-  const { profile, user, refreshProfile } = useAuthContext();
-  const [form, setForm] = useState({ first_name: "", last_name: "", phone: "" });
-  const [saving, setSaving] = useState(false);
-  const [feedback, setFeedback] = useState<Feedback>(null);
-
-  useEffect(() => {
-    if (profile) {
-      setForm({
-        first_name: profile.first_name ?? "",
-        last_name: profile.last_name ?? "",
-        phone: profile.phone ?? "",
-      });
-    }
-  }, [profile?.id]);
-
-  const handleSave = async () => {
-    if (!user) return;
-    setSaving(true);
-    try {
-      await updateProfile(user.id, {
-        first_name: form.first_name || null,
-        last_name: form.last_name || null,
-        full_name: [form.first_name, form.last_name].filter(Boolean).join(" ") || null,
-        phone: form.phone || null,
-      });
-      await refreshProfile();
-      setFeedback("saved");
-      setTimeout(() => setFeedback(null), 3000);
-    } catch {
-      setFeedback("error");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (!profile) return <PanelSkeleton />;
-
-  const displayName = profile.full_name ?? user?.email?.split("@")[0] ?? "User";
-  const initials = displayName.charAt(0).toUpperCase();
-
-  return (
-    <div className="space-y-6">
-      <SectionHeader title="Account" description="Your personal profile, password and active sessions." />
-
-      <div className="flex items-center gap-4">
-        {profile.avatar_url ? (
-          <img src={profile.avatar_url} alt={displayName} className="h-16 w-16 rounded-2xl object-cover" />
-        ) : (
-          <div className="grid h-16 w-16 place-items-center rounded-2xl bg-brand/10 text-[22px] font-bold text-brand">
-            {initials}
-          </div>
-        )}
-        <div>
-          <div className="text-[14px] font-semibold text-foreground">{displayName}</div>
-          <div className="text-[12.5px] text-muted-foreground">{user?.email}</div>
-        </div>
-        <ActionButton label="Change Photo" />
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <FormField label="First Name" value={form.first_name} onChange={(v) => setForm((f) => ({ ...f, first_name: v }))} />
-        <FormField label="Last Name" value={form.last_name} onChange={(v) => setForm((f) => ({ ...f, last_name: v }))} />
-        <FormField label="Email Address" defaultValue={user?.email} type="email" hint="Email changes require re-authentication." />
-        <FormField label="Phone Number" value={form.phone} onChange={(v) => setForm((f) => ({ ...f, phone: v }))} />
-      </div>
-
-      <div className="space-y-2">
-        <div className="text-[13px] font-semibold text-foreground">Security</div>
-        <SettingsRow label="Password" description="Change your account password" action={<ActionButton label="Change" />} />
-        <SettingsRow label="Two-Factor Authentication" description="Not enabled — recommended for account security" action={<ActionButton label="Enable" variant="brand" />} />
-        <SettingsRow label="Active Sessions" description="Session tracking is not yet available" action={<ActionButton label="View" />} />
-        <SettingsRow label="Active Devices" description="Device management is not yet available" action={<ActionButton label="Manage" />} />
-      </div>
-
-      <SaveBar onSave={handleSave} saving={saving} feedback={feedback} />
-    </div>
-  );
-}
-
-// ─── Panel: Organisation ──────────────────────────────────────────────────────
-
-function OrganisationPanel() {
-  const { profile, membership, business } = useAuthContext();
-
-  const roles = profile ? [
-    {
-      name: profile.full_name ?? profile.first_name ?? "You",
-      email: "",
-      role: membership?.role ?? "Owner",
-      status: "active",
-    },
-  ] : [];
-
-  const rolePermissions = [
-    { role: "Owner", permissions: ["Full access", "Billing", "Users", "Delete data", "API keys"] },
-    { role: "Admin", permissions: ["All features", "Manage users", "View billing"] },
-    { role: "Staff", permissions: ["View data", "Create tasks", "Manage communications"] },
-    { role: "Read Only", permissions: ["View reports", "View dashboard"] },
-  ];
-
-  return (
-    <div className="space-y-6">
-      <SectionHeader title="Organisation" description="Manage your team members, roles and access permissions." />
-
-      <div>
-        <div className="mb-3 flex items-center justify-between">
-          <div className="text-[13px] font-semibold text-foreground">
-            Team Members{business?.name ? ` — ${business.name}` : ""}
-          </div>
-          <ActionButton label="Invite Member" />
-        </div>
-        <div className="overflow-hidden rounded-xl border border-border">
-          {roles.map((r, i) => (
-            <div key={i} className={`flex items-center gap-4 px-4 py-3.5 ${i < roles.length - 1 ? "border-b border-border" : ""}`}>
-              <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand/10 text-[12px] font-bold text-brand">
-                {r.name[0]?.toUpperCase() ?? "?"}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-[13px] font-medium text-foreground">{r.name}</div>
-                {r.email && <div className="text-[11.5px] text-muted-foreground">{r.email}</div>}
-              </div>
-              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-700">
-                {r.role.charAt(0).toUpperCase() + r.role.slice(1)}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <div className="mb-3 text-[13px] font-semibold text-foreground">Role Permissions</div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {rolePermissions.map((r) => (
-            <div key={r.role} className="rounded-xl border border-border bg-secondary/20 p-4">
-              <div className="mb-2.5 text-[13px] font-semibold text-foreground">{r.role}</div>
-              <div className="space-y-1">
-                {r.permissions.map((p) => (
-                  <div key={p} className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
-                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" strokeWidth={1.75} />
-                    {p}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Panel: Notifications ─────────────────────────────────────────────────────
-
-function NotificationsPanel() {
-  const { settings, membership, refreshSettings } = useAuthContext();
-  const [prefs, setPrefs] = useState<Record<string, { email: boolean; push: boolean; sms: boolean }>>({
-    new_enquiry: { email: true, push: true, sms: true },
-    invoice_overdue: { email: true, push: true, sms: false },
-    new_review: { email: true, push: true, sms: false },
-    daily_briefing: { email: true, push: false, sms: false },
-    weekly_report: { email: true, push: false, sms: false },
-    campaign_alerts: { email: false, push: true, sms: false },
-    mission_updates: { email: false, push: true, sms: false },
-    ai_insights: { email: true, push: true, sms: false },
-  });
-  const [saving, setSaving] = useState(false);
-  const [feedback, setFeedback] = useState<Feedback>(null);
-
-  useEffect(() => {
-    if (settings) {
-      setPrefs((p) => ({
-        ...p,
-        daily_briefing: { ...p.daily_briefing, email: settings.daily_briefing },
-        weekly_report: { ...p.weekly_report, email: settings.weekly_report },
-        new_enquiry: { ...p.new_enquiry, email: settings.email_notifications, push: settings.push_notifications, sms: settings.sms_notifications },
-      }));
-    }
-  }, [settings?.id]);
-
-  const toggle = (id: string, channel: "email" | "push" | "sms") => {
-    setPrefs((p) => ({ ...p, [id]: { ...p[id], [channel]: !p[id][channel] } }));
-  };
-
-  const handleSave = async () => {
-    if (!membership?.business_id) return;
-    setSaving(true);
-    try {
-      await updateBusinessSettings(membership.business_id, {
-        email_notifications: prefs.new_enquiry.email,
-        push_notifications: prefs.new_enquiry.push,
-        sms_notifications: prefs.new_enquiry.sms,
-        daily_briefing: prefs.daily_briefing.email,
-        weekly_report: prefs.weekly_report.email,
-      });
-      await refreshSettings();
-      setFeedback("saved");
-      setTimeout(() => setFeedback(null), 3000);
-    } catch {
-      setFeedback("error");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const items = [
-    { id: "new_enquiry", label: "New Enquiry Received", description: "Triggered when a new lead or enquiry arrives" },
-    { id: "invoice_overdue", label: "Invoice Overdue", description: "Alert when an invoice passes its due date" },
-    { id: "new_review", label: "New Review Posted", description: "Notified when a customer posts a new review" },
-    { id: "daily_briefing", label: "Daily AI Briefing", description: "Receive your CEO morning briefing each day" },
-    { id: "weekly_report", label: "Weekly Performance Report", description: "Receive a weekly AI business summary" },
-    { id: "campaign_alerts", label: "Campaign Alerts", description: "Status updates on running campaigns" },
-    { id: "mission_updates", label: "Mission Updates", description: "Task completion and mission progress alerts" },
-    { id: "ai_insights", label: "AI Insights", description: "New AI discoveries and opportunity alerts" },
-  ];
-
-  return (
-    <div className="space-y-4">
-      <SectionHeader title="Notifications" description="Control how and when CrediEdgeOS notifies you." />
-
-      <div className="overflow-hidden rounded-xl border border-border">
-        <div className="grid grid-cols-[1fr_64px_64px_64px] border-b border-border bg-secondary/30 px-4 py-2.5">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Notification</div>
-          <div className="text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Email</div>
-          <div className="text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Push</div>
-          <div className="text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">SMS</div>
-        </div>
-        {items.map((item, i) => (
-          <div key={item.id} className={`grid grid-cols-[1fr_64px_64px_64px] items-center px-4 py-3.5 ${i < items.length - 1 ? "border-b border-border" : ""}`}>
-            <div>
-              <div className="text-[13px] font-medium text-foreground">{item.label}</div>
-              <div className="text-[11.5px] text-muted-foreground">{item.description}</div>
-            </div>
-            {(["email", "push", "sms"] as const).map((ch) => (
-              <div key={ch} className="flex justify-center">
-                <Switch checked={prefs[item.id][ch]} onCheckedChange={() => toggle(item.id, ch)} />
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
-
-      <SaveBar onSave={handleSave} saving={saving} feedback={feedback} />
-    </div>
-  );
-}
-
-// ─── Panel: Appearance ────────────────────────────────────────────────────────
-
-function AppearancePanel() {
-  const { settings, membership, refreshSettings } = useAuthContext();
-  const [theme, setTheme] = useState("Light");
-  const [accent, setAccent] = useState("#E31B23");
-  const [compact, setCompact] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [feedback, setFeedback] = useState<Feedback>(null);
-
-  useEffect(() => {
-    if (settings) {
-      setTheme(settings.theme === "dark" ? "Dark" : settings.theme === "system" ? "System" : "Light");
-      setAccent(settings.accent_colour ?? "#E31B23");
-      setCompact(settings.compact_mode);
-    }
-  }, [settings?.id]);
-
-  const handleSave = async () => {
-    if (!membership?.business_id) return;
-    setSaving(true);
-    try {
-      await updateBusinessSettings(membership.business_id, {
-        theme: theme.toLowerCase(),
-        accent_colour: accent,
-        compact_mode: compact,
-      });
-      await refreshSettings();
-      setFeedback("saved");
-      setTimeout(() => setFeedback(null), 3000);
-    } catch {
-      setFeedback("error");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const colors = [
-    { value: "#E31B23", label: "CrediEdge Red" },
-    { value: "#1A1A1A", label: "Midnight" },
-    { value: "#2563EB", label: "Ocean" },
-    { value: "#059669", label: "Forest" },
-    { value: "#D97706", label: "Amber" },
-    { value: "#7C3AED", label: "Violet" },
-  ];
-
-  return (
-    <div className="space-y-6">
-      <SectionHeader title="Appearance" description="Personalise the look and feel of CrediEdgeOS." />
-
-      <div>
-        <label className="mb-2.5 block text-[13px] font-semibold text-foreground">Theme</label>
-        <div className="flex gap-2">
-          {[{ label: "Light", icon: Sun }, { label: "Dark", icon: Moon }, { label: "System", icon: Monitor }].map(({ label, icon: Icon }) => (
-            <button
-              key={label}
-              onClick={() => setTheme(label)}
-              className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-[13px] font-medium transition-colors ${theme === label ? "border-brand bg-brand/10 text-brand" : "border-border bg-secondary text-muted-foreground hover:text-foreground"}`}
-            >
-              <Icon className="h-4 w-4" strokeWidth={1.75} />
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <label className="mb-2.5 block text-[13px] font-semibold text-foreground">Accent Colour</label>
-        <div className="flex flex-wrap gap-2.5">
-          {colors.map((c) => (
-            <button
-              key={c.value}
-              title={c.label}
-              onClick={() => setAccent(c.value)}
-              className={`h-8 w-8 rounded-full border-2 transition-transform hover:scale-110 ${accent === c.value ? "border-foreground" : "border-transparent"}`}
-              style={{ backgroundColor: c.value }}
-            />
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <label className="mb-2.5 block text-[13px] font-semibold text-foreground">Layout</label>
-        <div className="space-y-2">
-          <SettingsRow label="Compact Mode" description="Reduce spacing and padding for a denser interface" action={<Switch checked={compact} onCheckedChange={setCompact} />} />
-        </div>
-      </div>
-
-      <SaveBar onSave={handleSave} saving={saving} feedback={feedback} />
-    </div>
-  );
-}
-
-// ─── Panel: AI Settings ───────────────────────────────────────────────────────
-
-function AIPanel() {
-  const { settings, membership, refreshSettings } = useAuthContext();
-  const [form, setForm] = useState({
-    ai_provider: "openai",
-    ai_model: "gpt-4o",
-    ai_creativity: 65,
-    ai_enabled: true,
-    daily_briefing: true,
-    weekly_report: true,
-    business_context: "",
-  });
-  const [saving, setSaving] = useState(false);
-  const [feedback, setFeedback] = useState<Feedback>(null);
-
-  useEffect(() => {
-    if (settings) {
-      setForm({
-        ai_provider: settings.ai_provider ?? "openai",
-        ai_model: settings.ai_model ?? "gpt-4o",
-        ai_creativity: settings.ai_creativity ?? 65,
-        ai_enabled: settings.ai_enabled,
-        daily_briefing: settings.daily_briefing,
-        weekly_report: settings.weekly_report,
-        business_context: settings.business_context ?? "",
-      });
-    }
-  }, [settings?.id]);
-
-  const handleSave = async () => {
-    if (!membership?.business_id) return;
-    setSaving(true);
-    try {
-      await updateBusinessSettings(membership.business_id, {
-        ai_provider: form.ai_provider,
-        ai_model: form.ai_model,
-        ai_creativity: form.ai_creativity,
-        ai_enabled: form.ai_enabled,
-        daily_briefing: form.daily_briefing,
-        weekly_report: form.weekly_report,
-        business_context: form.business_context || null,
-      });
-      await refreshSettings();
-      setFeedback("saved");
-      setTimeout(() => setFeedback(null), 3000);
-    } catch {
-      setFeedback("error");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (!settings) return <PanelSkeleton />;
-
-  return (
-    <div className="space-y-6">
-      <SectionHeader title="AI Settings" description="Configure how the AI analyses and communicates with you." />
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div>
-          <label className="mb-1.5 block text-[12.5px] font-medium text-muted-foreground">AI Provider</label>
-          <select
-            value={form.ai_provider}
-            onChange={(e) => setForm((f) => ({ ...f, ai_provider: e.target.value }))}
-            className="w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2.5 text-[13px] text-foreground focus:outline-none"
-          >
-            <option value="openai">OpenAI (GPT-4o)</option>
-            <option value="anthropic">Anthropic (Claude 3.5)</option>
-            <option value="google">Google (Gemini 1.5)</option>
-          </select>
-        </div>
-        <div>
-          <label className="mb-1.5 block text-[12.5px] font-medium text-muted-foreground">Preferred Model</label>
-          <select
-            value={form.ai_model}
-            onChange={(e) => setForm((f) => ({ ...f, ai_model: e.target.value }))}
-            className="w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2.5 text-[13px] text-foreground focus:outline-none"
-          >
-            <option value="gpt-4o">GPT-4o (Recommended)</option>
-            <option value="gpt-4o-mini">GPT-4o Mini (Faster)</option>
-            <option value="o1">GPT-o1 (Advanced Reasoning)</option>
-          </select>
-        </div>
-        <div>
-          <label className="mb-1.5 block text-[12.5px] font-medium text-muted-foreground">Response Length</label>
-          <div className="flex items-center justify-between rounded-xl border border-dashed border-border bg-secondary/20 px-3.5 py-2.5 text-[13px] text-muted-foreground">
-            <span>Standard</span>
-            <span className="text-[10px] font-medium opacity-70">Coming soon</span>
-          </div>
-        </div>
-        <div>
-          <label className="mb-1.5 block text-[12.5px] font-medium text-muted-foreground">Analysis Frequency</label>
-          <div className="flex items-center justify-between rounded-xl border border-dashed border-border bg-secondary/20 px-3.5 py-2.5 text-[13px] text-muted-foreground">
-            <span>Daily</span>
-            <span className="text-[10px] font-medium opacity-70">Coming soon</span>
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <div className="mb-2.5 text-[13px] font-semibold text-foreground">Creativity Level</div>
-        <input
-          type="range" min={0} max={100}
-          value={form.ai_creativity}
-          onChange={(e) => setForm((f) => ({ ...f, ai_creativity: Number(e.target.value) }))}
-          className="w-full accent-brand"
-        />
-        <div className="mt-1 flex justify-between text-[11px] text-muted-foreground">
-          <span>Precise</span>
-          <span>Balanced</span>
-          <span>Creative</span>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <SettingsRow label="AI Enabled" description="Enable AI analysis and insights across the platform" action={<Switch checked={form.ai_enabled} onCheckedChange={(v) => setForm((f) => ({ ...f, ai_enabled: v }))} />} />
-        <SettingsRow label="Scheduled AI Refresh" description="Re-analyse all data at 06:00 each morning" action={<Switch checked={form.daily_briefing} onCheckedChange={(v) => setForm((f) => ({ ...f, daily_briefing: v }))} />} />
-        <SettingsRow label="Automatic AI Reports" description="Generate weekly executive reports automatically" action={<Switch checked={form.weekly_report} onCheckedChange={(v) => setForm((f) => ({ ...f, weekly_report: v }))} />} />
-      </div>
-
-      <div>
-        <label className="mb-1.5 block text-[12.5px] font-medium text-muted-foreground">Business Context</label>
-        <textarea
-          value={form.business_context}
-          onChange={(e) => setForm((f) => ({ ...f, business_context: e.target.value }))}
-          placeholder="Describe your business, goals and challenges to help the AI provide more relevant insights..."
-          rows={4}
-          className="w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2.5 text-[13px] text-foreground placeholder:text-muted-foreground/60 focus:border-foreground/20 focus:outline-none"
-        />
-        <p className="mt-1 text-[11px] text-muted-foreground">This context helps the AI understand your business goals and provide more relevant insights.</p>
-      </div>
-
-      <SaveBar onSave={handleSave} saving={saving} feedback={feedback} />
-    </div>
-  );
-}
-
-// ─── Static panels ────────────────────────────────────────────────────────────
+// ─── Static panels (Coming Soon states) ───────────────────────────────────────
 
 function DataPanel() {
   return (
@@ -769,57 +75,18 @@ function DataPanel() {
   );
 }
 
-function SecurityPanel() {
-  return (
-    <div className="space-y-6">
-      <SectionHeader title="Security" description="Protect your account with advanced security controls." />
-      <div className="space-y-2">
-        <div className="text-[13px] font-semibold text-foreground">Authentication</div>
-        <SettingsRow label="Password" description="Change your account password" action={<ActionButton label="Change Password" />} />
-        <SettingsRow label="Two-Factor Authentication" description="Not enabled — adds an extra layer of security" action={<ActionButton label="Enable" variant="brand" />} />
-      </div>
-      <div>
-        <div className="mb-3 text-[13px] font-semibold text-foreground">Active Devices</div>
-        <InsufficientData description="Device session tracking is not yet available. Once connected, your active devices and sessions will appear here." />
-      </div>
-      <div>
-        <div className="mb-3 text-[13px] font-semibold text-foreground">Audit Log</div>
-        <InsufficientData description="Security audit events will be listed here once audit logging is enabled for your workspace." />
-      </div>
-    </div>
-  );
-}
-
 function BillingPanel() {
-  const { business } = useAuthContext();
-  const plan = business?.subscription_plan ?? "Free";
   return (
     <div className="space-y-6">
       <SectionHeader title="Billing" description="Manage your subscription, payment method and invoices." />
-      <div className="rounded-2xl border border-brand/20 bg-brand/5 p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="text-[15px] font-bold text-foreground">{plan} Plan</div>
-            <div className="mt-1 text-[13px] text-muted-foreground">Subscription management is coming soon.</div>
-          </div>
-          <span className="shrink-0 rounded-full bg-brand/10 px-2.5 py-1 text-[11px] font-bold text-brand">Active</span>
+      <div className="rounded-2xl border border-dashed border-border bg-secondary/20 p-6 text-center">
+        <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl border border-border bg-card">
+          <CreditCard className="h-6 w-6 text-muted-foreground/50" strokeWidth={1.25} />
         </div>
-        <div className="mt-4 flex gap-2">
-          <ActionButton label="Upgrade Plan" variant="brand" />
-          <ActionButton label="Manage Subscription" />
-        </div>
-      </div>
-      <div className="space-y-2">
-        <div className="text-[13px] font-semibold text-foreground">Payment Method</div>
-        <InsufficientData description="No payment method is connected yet. Payment integration is coming soon." />
-      </div>
-      <div>
-        <div className="mb-3 text-[13px] font-semibold text-foreground">Invoice History</div>
-        <InsufficientData description="No invoices available. Invoice history will appear here once billing is connected." />
-      </div>
-      <div>
-        <div className="mb-3 text-[13px] font-semibold text-foreground">AI Credits Usage</div>
-        <InsufficientData description="AI credit usage details are available on the Business Advisor page. Billing-based credit tracking is coming soon." />
+        <div className="text-[14px] font-semibold text-foreground">Billing — Coming Soon</div>
+        <p className="mx-auto mt-2 max-w-sm text-[13px] text-muted-foreground">
+          Subscription management, payment methods, and invoice history will appear here once billing integration is connected.
+        </p>
       </div>
     </div>
   );
@@ -840,12 +107,6 @@ function WhiteLabelPanel() {
         <Link to="/admin/enterprise-preview" className="mt-4 inline-flex rounded-xl bg-brand px-5 py-2.5 text-[13px] font-semibold text-white transition-opacity hover:opacity-80">
           Explore Enterprise
         </Link>
-      </div>
-      <div className="pointer-events-none grid grid-cols-1 gap-4 opacity-40 sm:grid-cols-2">
-        <FormField label="Custom Logo URL" defaultValue="" hint="Displayed in place of CrediEdgeOS logo" />
-        <FormField label="Custom Domain" defaultValue="" hint="e.g. app.yourbusiness.com" />
-        <FormField label="Primary Brand Colour" defaultValue="#E31B23" />
-        <FormField label="Email Sender Name" defaultValue="" hint="Shown in email From field" />
       </div>
     </div>
   );
@@ -884,14 +145,7 @@ function HelpPanel() {
         {links.map((l) => {
           const Icon = l.icon;
           return (
-            <SettingsRow
-              key={l.label}
-              label={l.label}
-              description={l.description}
-              action={
-                <ActionButton label={l.action} />
-              }
-            />
+            <SettingsRow key={l.label} label={l.label} description={l.description} action={<ActionButton label={l.action} />} />
           );
         })}
       </div>
@@ -901,20 +155,23 @@ function HelpPanel() {
 
 // ─── Panel registry ───────────────────────────────────────────────────────────
 
-const panels: Record<string, React.ReactNode> = {
-  business: <BusinessPanel />,
-  account: <AccountPanel />,
-  organisation: <OrganisationPanel />,
-  notifications: <NotificationsPanel />,
-  appearance: <AppearancePanel />,
-  ai: <AIPanel />,
-  data: <DataPanel />,
-  security: <SecurityPanel />,
-  billing: <BillingPanel />,
-  whitelabel: <WhiteLabelPanel />,
-  status: <SystemStatusPanel />,
-  help: <HelpPanel />,
-};
+function PanelContent({ active }: { active: string }) {
+  switch (active) {
+    case "business": return <BusinessPanel />;
+    case "account": return <AccountPanel />;
+    case "organisation": return <OrganisationPanel />;
+    case "notifications": return <NotificationsPanel />;
+    case "appearance": return <AppearancePanel />;
+    case "ai": return <AIPanel />;
+    case "data": return <DataPanel />;
+    case "security": return <SecurityPanel />;
+    case "billing": return <BillingPanel />;
+    case "whitelabel": return <WhiteLabelPanel />;
+    case "status": return <SystemStatusPanel />;
+    case "help": return <HelpPanel />;
+    default: return <InsufficientData description="Select a settings section from the left." />;
+  }
+}
 
 // ─── Root Export ──────────────────────────────────────────────────────────────
 
@@ -969,7 +226,7 @@ export function SettingsHub() {
             <p className="text-[12px] text-muted-foreground">{activeSection.description}</p>
           </div>
         </div>
-        <div className="p-6">{panels[active]}</div>
+        <div className="p-6"><PanelContent active={active} /></div>
       </div>
     </div>
   );
