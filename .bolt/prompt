@@ -1,0 +1,389 @@
+CREDIEDGEOS — PROJECT DEVELOPMENT INSTRUCTIONS
+
+This project is CrediEdgeOS, a Business Operating System for SMEs.
+
+Stack:
+- React
+- TypeScript
+- Supabase
+- Tailwind
+- TanStack Router
+- Existing CrediEdgeOS services, contexts and shared components
+
+CORE PRINCIPLE
+
+Build CrediEdgeOS as a real production SaaS platform.
+
+Real Data → Authoritative Calculation → AI Analysis → Actionable Recommendation → User Approval → Execution → Measured Outcome
+
+Never fabricate information simply to make the UI look populated.
+
+Never use fake/demo/sample business data unless explicitly requested for a controlled development test.
+
+If the application does not have enough authoritative data, show the appropriate CrediEdgeOS insufficient-data state.
+
+If functionality has not yet been built or depends on an unavailable external integration, clearly show Coming Soon / Unavailable rather than pretending it works.
+
+ARCHITECTURE
+
+Before building anything:
+
+1. Inspect the existing architecture.
+2. Identify existing services, hooks, contexts, database tables and shared components.
+3. Reuse existing architecture wherever possible.
+4. Extend existing systems rather than creating duplicate systems.
+5. Do not create duplicate customer, task, calendar, AI credit, authentication, entitlement, activity or event systems.
+6. Protect existing working functionality.
+7. Avoid unnecessary rewrites.
+8. Avoid technical debt and shortcuts that would prevent the platform scaling to 100,000+ businesses.
+
+DATABASE
+
+All business data must come from authoritative Supabase data.
+
+Respect:
+- business/workspace scoping
+- authentication
+- memberships
+- RLS
+- existing database relationships
+- existing services
+
+Never:
+- hardcode business IDs
+- bypass RLS
+- weaken security policies to make functionality work
+- expose service-role keys to the frontend
+- store secrets in client-side environment variables
+- trust client-provided permissions
+
+If a database change is genuinely required, inspect the existing schema first and make the smallest scalable change necessary.
+
+DATA INTEGRITY
+
+Never manufacture:
+
+- customers
+- revenue
+- invoices
+- reviews
+- communications
+- tasks
+- AI insights
+- risks
+- opportunities
+- confidence scores
+- percentages
+- dates
+- platform metrics
+- subscriptions
+- AI credit usage
+- audit events
+
+If there is insufficient evidence:
+
+INSUFFICIENT DATA
+
+If functionality does not exist:
+
+COMING SOON
+
+If an operation failed:
+
+show the actual error state.
+
+Do not convert failures into fake success states.
+
+AI
+
+CrediEdgeOS uses a central AI governance and credit architecture.
+
+Do not create separate AI credit systems.
+
+Do not bypass AI governance.
+
+Do not fabricate AI output.
+
+AI must distinguish between:
+
+- verified facts
+- calculations
+- AI interpretation
+- predictions
+- recommendations
+- missing information
+
+AI confidence must never be arbitrary.
+
+If an AI provider is not connected, do not pretend deterministic logic is an AI model.
+
+AI usage should only consume credits when a genuine AI operation occurs.
+
+Do not repeatedly execute expensive AI requests during testing.
+
+BROWSER TESTING
+
+When a task specifically requests browser testing:
+
+USE THE BROWSER.
+
+Do not claim a feature works because the source code looks correct.
+
+Actually:
+
+- open the page
+- click the controls
+- submit forms
+- open modals
+- change settings
+- navigate
+- refresh
+- verify persistence
+- inspect visible errors
+- inspect console errors
+- inspect failed requests where available
+
+Follow:
+
+Discover → Reproduce → Identify Root Cause → Fix → Reload → Retest → Verify
+
+Only report PASS when something has actually been tested.
+
+If browser access is unavailable, explicitly state that browser verification could not be performed.
+
+UI QUALITY
+
+CrediEdgeOS should feel like ONE coherent premium SaaS product.
+
+Maintain consistency across:
+
+- buttons
+- switches
+- inputs
+- dropdowns
+- cards
+- badges
+- modals
+- drawers
+- typography
+- spacing
+- borders
+- shadows
+- loading states
+- empty states
+- error states
+- success states
+- INSUFFICIENT DATA
+- COMING SOON
+
+Do not create a new visual language for individual pages.
+
+Reuse shared components wherever appropriate.
+
+UI controls must not merely look functional.
+
+If a button exists, it should either:
+
+1. perform the intended action, or
+2. clearly indicate that the functionality is Coming Soon / unavailable.
+
+Never create dead buttons.
+
+SWITCHES / TOGGLES
+
+All switches must be implemented as genuine accessible controls.
+
+They must have:
+
+- consistent dimensions
+- correctly positioned thumb
+- clear ON state
+- clear OFF state
+- correct click behaviour
+- correct keyboard behaviour
+- correct disabled state
+- correct loading state
+- correct persistence where supported
+- correct visual state after refresh
+
+Do not use CSS alone to make a broken control appear functional.
+
+Always verify the underlying state change.
+
+RESPONSIVE DESIGN
+
+Check for:
+
+- overflow
+- clipped content
+- overlapping controls
+- broken cards
+- broken modals
+- broken navigation
+- incorrect spacing
+- incorrect switch alignment
+- form layout problems
+
+Fix genuine UI problems without unnecessarily redesigning working pages.
+
+BUTTONS & INTERACTIONS
+
+Every meaningful interactive element should be tested when relevant.
+
+This includes:
+
+- buttons
+- links
+- dropdowns
+- tabs
+- switches
+- checkboxes
+- radio controls
+- modals
+- drawers
+- forms
+- search
+- filters
+- pagination
+- save
+- cancel
+- delete
+- refresh
+- export
+- navigation
+
+Never assume something works because there is an event handler.
+
+Verify the complete user journey.
+
+PERSISTENCE
+
+When an action modifies data:
+
+1. perform the action
+2. confirm the UI changes
+3. refresh
+4. confirm the change persists
+5. verify related pages where appropriate
+
+Do not show fake optimistic success without confirming the underlying operation.
+
+SECURITY
+
+Security is architectural.
+
+Never rely solely on frontend visibility.
+
+Permissions must be enforced through appropriate server/database mechanisms.
+
+Admin functionality must not become accessible by:
+
+- changing URL
+- manipulating local storage
+- changing React state
+- modifying browser requests
+- changing client-side plan values
+
+PLATFORM ADMIN / ENTERPRISE
+
+CrediEdgeOS has a platform-level Admin Console.
+
+Keep the distinction between:
+
+Platform Owner
+Platform Admin
+Enterprise Admin
+Business Admin
+Standard User
+
+Enterprise architecture must eventually support:
+
+Enterprise
+→ Organisations / Businesses
+→ Users
+
+and eventually:
+
+Enterprise
+→ Reseller
+→ Customer Businesses
+→ Users
+
+Do not architect current functionality in a way that prevents future white-label or reseller functionality.
+
+ADMIN CONSOLE
+
+The Admin Console is a platform control plane, not another normal business workspace.
+
+Reuse central systems for:
+
+- subscriptions
+- feature entitlements
+- AI credits
+- users
+- businesses
+- audit logs
+- enterprise leads
+
+Do not create duplicate systems.
+
+SETTINGS
+
+Settings must be functional wherever the underlying architecture exists.
+
+Do not leave controls appearing functional if they do nothing.
+
+If a setting requires infrastructure that has not yet been implemented:
+
+mark it clearly as Coming Soon.
+
+DOCUMENTATION
+
+Do not update Notion or project documentation unless explicitly instructed by the user.
+
+Before making major architectural changes, explain the impact.
+
+TESTING
+
+For development tasks, run where appropriate:
+
+npx tsc --noEmit
+
+npm run build
+
+For browser tasks, perform actual browser verification.
+
+Never report a successful build as proof that the application itself works.
+
+FINAL REPORTING
+
+Be honest.
+
+Separate:
+
+IMPLEMENTED
+FIXED
+VERIFIED
+COMING SOON
+BLOCKED
+REMAINING
+
+Never claim "production ready" if browser testing has not been performed.
+
+CREDIEDGEOS PRODUCT STANDARD
+
+Every change should move CrediEdgeOS toward:
+
+A reliable, scalable Business Operating System for SMEs.
+
+Prioritise:
+
+1. Product quality
+2. Architectural consistency
+3. Data integrity
+4. Security
+5. Maintainability
+6. Scalability
+7. User experience
+
+Do not optimise for simply making the current task appear complete.
