@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useAuthContext } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabase";
 import { signIn, signUp } from "@/services/auth";
 import { toAuthMessage } from "@/lib/errors";
 import { Logo } from "@/components/dashboard/Logo";
@@ -11,8 +11,8 @@ export const Route = createFileRoute("/login")({
 });
 
 function LoginPage() {
-  const { session, loading } = useAuthContext();
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"in" | "up">("in");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -21,10 +21,18 @@ function LoginPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!loading && session) {
-      navigate({ to: "/" });
-    }
-  }, [loading, session, navigate]);
+    let mounted = true;
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
+      if (session) navigate({ to: "/" });
+      setLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,6 +41,7 @@ function LoginPage() {
     try {
       if (tab === "in") {
         await signIn(email, password);
+        await navigate({ to: "/" });
       } else {
         if (!fullName.trim()) {
           setError("Please enter your full name.");
