@@ -1,3 +1,4 @@
+import { toUserMessage } from "@/lib/errors";
 import { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import type { WorkspaceMemberInfo } from "@/services/tasks";
@@ -103,7 +104,7 @@ export function GoalModal({ isOpen, onClose, onSave, goalToEdit, members, curren
       });
       onClose();
     } catch (err: any) {
-      setError(`Failed to save goal: ${err?.message || String(err)}`);
+      setError(toUserMessage(err, "Failed to save goal. Please try again."));
     } finally {
       setSaving(false);
     }

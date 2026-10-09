@@ -7,6 +7,7 @@ import { getJobs, createJob, updateJob } from "@/services/jobs";
 import { useBusiness } from "@/hooks/useBusiness";
 import type { Job } from "@/lib/database.types";
 import { toast } from "sonner";
+import { toUserMessage } from "@/lib/errors";
 
 export const Route = createFileRoute("/jobs")({
   component: JobsPage,
@@ -58,7 +59,7 @@ function JobsPage() {
       setNewDesc("");
       loadJobs();
     } catch (err: any) {
-      toast.error(err.message || "Failed to create job");
+      toast.error(toUserMessage(err, "We could not create this job. Please try again."));
     }
   };
 

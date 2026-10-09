@@ -10,6 +10,7 @@ import { useCreateCustomer, useUpdateCustomer, useCustomers } from "@/hooks/useC
 import { Users, Search, X, Mail, Phone, MapPin, Edit3 } from "lucide-react";
 import type { Customer, CustomerInsert, CustomerUpdate } from "@/lib/database.types";
 import { toast } from "sonner";
+import { toUserMessage } from "@/lib/errors";
 
 export const Route = createFileRoute("/relationships")({
   component: RelationshipsPage,
@@ -56,7 +57,7 @@ function RelationshipsPage() {
         }
       }
     } catch (err: any) {
-      toast.error(err.message || "An unexpected error occurred while saving.");
+      toast.error(toUserMessage(err, "We could not save your changes. Please try again."));
     }
   };
 

@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { signIn, signUp } from "@/services/auth";
+import { toAuthMessage } from "@/lib/errors";
 import { Logo } from "@/components/dashboard/Logo";
 import { Sparkles, ArrowRight, TriangleAlert as AlertTriangle } from "lucide-react";
 
@@ -41,8 +42,9 @@ function LoginPage() {
         await signUp(email, password, fullName.trim());
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Something went wrong.";
-      setError(message);
+      // Neutral wording on both paths: the response must not reveal whether an
+      // email address already has an account.
+      setError(toAuthMessage(err, tab === "in" ? "signin" : "signup"));
     } finally {
       setSubmitting(false);
     }

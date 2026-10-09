@@ -1,3 +1,4 @@
+import { toUserMessage } from "@/lib/errors";
 import { useState, useEffect } from "react";
 import { X, User, Building2, Mail, Phone, MapPin, Tag, Save, AlertTriangle, CheckCircle2, ShieldCheck } from "lucide-react";
 import type { Customer, CustomerInsert } from "@/lib/database.types";
@@ -192,7 +193,7 @@ export function CustomerForm({ open, onClose, onSave, initial, saving }: Custome
     try {
       await onSave(payload);
     } catch (err: any) {
-      setError(err?.message || "Failed to save customer. Please try again.");
+      setError(toUserMessage(err, "Failed to save customer. Please try again."));
     }
   };
 

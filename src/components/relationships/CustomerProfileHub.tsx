@@ -1,3 +1,4 @@
+import { toUserMessage } from "@/lib/errors";
 import { useState, useEffect } from "react";
 import {
   Activity,
@@ -117,7 +118,7 @@ export function CustomerProfileHub({
         toast.error("Failed to link customer to campaign.");
       }
     } catch (err: any) {
-      toast.error(`Error linking campaign: ${err?.message || String(err)}`);
+      toast.error(toUserMessage(err, "Could not link the campaign. Please try again."));
     } finally {
       setLinkingCampaign(false);
     }
@@ -146,7 +147,7 @@ export function CustomerProfileHub({
       appEvents.emit(APP_EVENTS.CUSTOMERS_MUTATED);
       onRefresh();
     } catch (err: any) {
-      toast.error(`Failed to add note: ${err?.message || String(err)}`);
+      toast.error(toUserMessage(err, "Could not add the note. Please try again."));
     } finally {
       setSavingNote(false);
     }
@@ -175,7 +176,7 @@ export function CustomerProfileHub({
       appEvents.emit(APP_EVENTS.TASKS_MUTATED);
       onRefresh();
     } catch (err: any) {
-      toast.error(`Failed to create task: ${err?.message || String(err)}`);
+      toast.error(toUserMessage(err, "Could not create the task. Please try again."));
     } finally {
       setSavingTask(false);
     }
@@ -197,7 +198,7 @@ export function CustomerProfileHub({
         toast.error("Failed to save memory item.");
       }
     } catch (err: any) {
-      toast.error(`Error saving memory: ${err?.message || String(err)}`);
+      toast.error(toUserMessage(err, "Could not save the memory. Please try again."));
     } finally {
       setSavingMemory(false);
     }
@@ -213,7 +214,7 @@ export function CustomerProfileHub({
         onRefresh();
       }
     } catch (err: any) {
-      toast.error(`Error deleting memory: ${err?.message || String(err)}`);
+      toast.error(toUserMessage(err, "Could not delete the memory. Please try again."));
     }
   };
 

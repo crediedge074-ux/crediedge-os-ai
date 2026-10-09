@@ -482,6 +482,7 @@ import {
 import { fetchCampaigns, type CalculatedCampaign } from "@/services/campaigns";
 import { fetchGoals, type CalculatedGoal } from "@/services/goals";
 import { calculateDeterministicTaskPriority, type PrioritisedTask } from "@/services/taskPriority";
+import { toUserMessage } from "@/lib/errors";
 
 function MissionsSection({
   businessId,
@@ -582,7 +583,7 @@ function MissionsSection({
       await archiveMission(m.id, businessId, "completed");
       loadData();
     } catch (err: any) {
-      alert(`Failed to complete mission: ${err.message || String(err)}`);
+      alert(toUserMessage(err, "We could not complete this mission. Please try again."));
     }
   };
 

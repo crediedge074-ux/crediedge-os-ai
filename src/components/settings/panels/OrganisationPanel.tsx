@@ -1,3 +1,4 @@
+import { toUserMessage } from "@/lib/errors";
 import { useState, useEffect, useCallback } from "react";
 import { Users, Mail, X, Loader2, UserPlus } from "lucide-react";
 import { useAuthContext } from "@/contexts/AuthContext";
@@ -171,7 +172,7 @@ function InviteModal({ businessId, invitedBy, onClose, onInvited }: { businessId
         setTimeout(() => { onInvited(); onClose(); }, 1500);
       }
     } catch (err: any) {
-      setError(err?.message || "Could not send the invitation.");
+      setError(toUserMessage(err, "Could not send the invitation."));
     } finally {
       setSaving(false);
     }

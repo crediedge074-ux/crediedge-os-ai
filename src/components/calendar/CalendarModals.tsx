@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { X, Calendar as CalendarIcon, Clock, Plus, Link, MapPin, User, Check, Layers } from "lucide-react";
 import type { Task, Customer, Job } from "@/lib/database.types";
 import { createCalendarEvent, scheduleTaskOnCalendar, type CalendarEventInsertInput } from "@/services/calendar";
+import { toUserMessage } from "@/lib/errors";
 
 interface NewEventModalProps {
   businessId: string;
@@ -77,7 +78,7 @@ export function NewEventModal({
       onRefresh();
       onClose();
     } catch (err: any) {
-      alert(`Failed to save event: ${err.message || String(err)}`);
+      alert(toUserMessage(err, "We could not save this event. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -300,7 +301,7 @@ export function ScheduleTaskModal({ task, businessId, onClose, onRefresh }: Sche
       onRefresh();
       onClose();
     } catch (err: any) {
-      alert(`Failed to schedule task: ${err.message || String(err)}`);
+      alert(toUserMessage(err, "We could not schedule this task. Please try again."));
     } finally {
       setLoading(false);
     }

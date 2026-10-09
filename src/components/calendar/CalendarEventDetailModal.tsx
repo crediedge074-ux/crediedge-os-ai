@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { X, Calendar as CalendarIcon, Clock, Trash2, ExternalLink, ShieldCheck, MapPin, User, Check, Layers } from "lucide-react";
 import type { CalendarEvent, Task } from "@/lib/database.types";
 import { updateCalendarEvent, deleteCalendarEvent } from "@/services/calendar";
+import { toUserMessage } from "@/lib/errors";
 
 interface CalendarEventDetailModalProps {
   event: CalendarEvent;
@@ -53,7 +54,7 @@ export function CalendarEventDetailModal({
       setIsEditing(false);
       onRefresh();
     } catch (err: any) {
-      alert(`Failed to update event: ${err.message || String(err)}`);
+      alert(toUserMessage(err, "We could not update this event. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -67,7 +68,7 @@ export function CalendarEventDetailModal({
       onRefresh();
       onClose();
     } catch (err: any) {
-      alert(`Failed to delete event: ${err.message || String(err)}`);
+      alert(toUserMessage(err, "We could not delete this event. Please try again."));
     } finally {
       setLoading(false);
     }

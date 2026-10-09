@@ -55,6 +55,7 @@ import { fetchTaskAnalytics, type TaskAnalyticsReport } from "@/services/taskAna
 import { getCustomers } from "@/services/customers";
 import { supabase } from "@/lib/supabase";
 import { ShieldCheck, Award, Info, HelpCircle } from "lucide-react";
+import { toUserMessage } from "@/lib/errors";
 
 interface ExecutionSystemWorkspaceProps {
   businessId: string;
@@ -198,7 +199,7 @@ export function ExecutionSystemWorkspace({
       const updatedProd = await calculateTaskProductivity(currentTask.id, businessId);
       setProductivity(updatedProd);
     } catch (err: any) {
-      alert(`Timer error: ${err.message || String(err)}`);
+      alert(toUserMessage(err, "We could not update the timer. Please try again."));
     } finally {
       setTrackingLoading(false);
     }
@@ -216,7 +217,7 @@ export function ExecutionSystemWorkspace({
       const updatedProd = await calculateTaskProductivity(currentTask.id, businessId);
       setProductivity(updatedProd);
     } catch (err: any) {
-      alert(`Timer error: ${err.message || String(err)}`);
+      alert(toUserMessage(err, "We could not update the timer. Please try again."));
     } finally {
       setTrackingLoading(false);
     }
@@ -243,7 +244,7 @@ export function ExecutionSystemWorkspace({
       const updatedProd = await calculateTaskProductivity(currentTask.id, businessId);
       setProductivity(updatedProd);
     } catch (err: any) {
-      alert(`Manual time error: ${err.message || String(err)}`);
+      alert(toUserMessage(err, "We could not record that time entry. Please try again."));
     } finally {
       setTrackingLoading(false);
     }
@@ -545,7 +546,7 @@ export function ExecutionSystemWorkspace({
                               );
                               setImpactEval(evalRes);
                             } catch (err: any) {
-                              alert(`Failed to update target metric: ${err.message || String(err)}`);
+                              alert(toUserMessage(err, "We could not update this target. Please try again."));
                             }
                           }}
                           className="h-7 rounded-lg border border-border bg-card px-2.5 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-brand font-semibold"
@@ -1179,7 +1180,7 @@ export function ExecutionSystemWorkspace({
                                         setTimeEntries(updatedEntries);
                                       }
                                     } catch (err: any) {
-                                      alert(`Failed to save note: ${err.message || String(err)}`);
+                                      alert(toUserMessage(err, "We could not save this note. Please try again."));
                                     }
                                   }}
                                   className="rounded-lg bg-brand px-3 py-1 text-[11px] font-bold text-white"

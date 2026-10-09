@@ -7,6 +7,7 @@ import { listAuthUsers, deactivateUser, activateUser, sendPasswordReset, type Au
 import { logAdminEvent } from "@/services/adminAccess";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { InsufficientData } from "@/components/ui/InsufficientData";
+import { toUserMessage } from "@/lib/errors";
 
 export const Route = createFileRoute("/admin/users")({
   component: AdminUsersPage,
@@ -61,7 +62,7 @@ function AdminUsersPage() {
       setActionMsg({ type: "success", text: `Deactivated ${email}` });
       void load();
     } catch (err) {
-      setActionMsg({ type: "error", text: err instanceof Error ? err.message : "Failed to deactivate user." });
+      setActionMsg({ type: "error", text: toUserMessage(err, "We could not deactivate this user. Please try again.") });
     } finally {
       setActionLoading(null);
       setTimeout(() => setActionMsg(null), 3000);
@@ -78,7 +79,7 @@ function AdminUsersPage() {
       setActionMsg({ type: "success", text: `Activated ${email}` });
       void load();
     } catch (err) {
-      setActionMsg({ type: "error", text: err instanceof Error ? err.message : "Failed to activate user." });
+      setActionMsg({ type: "error", text: toUserMessage(err, "We could not reactivate this user. Please try again.") });
     } finally {
       setActionLoading(null);
       setTimeout(() => setActionMsg(null), 3000);
@@ -94,7 +95,7 @@ function AdminUsersPage() {
       await logAdminEvent({ action: "password_reset_sent", targetType: "user", targetLabel: email });
       setActionMsg({ type: "success", text: `Password reset email sent to ${email}` });
     } catch (err) {
-      setActionMsg({ type: "error", text: err instanceof Error ? err.message : "Failed to send reset email." });
+      setActionMsg({ type: "error", text: toUserMessage(err, "We could not send the password reset email. Please try again.") });
     } finally {
       setActionLoading(null);
       setTimeout(() => setActionMsg(null), 3000);

@@ -1,8 +1,9 @@
+import { toUserMessage } from "@/lib/errors";
 import { useState, useEffect, useRef } from "react";
 import { Upload, Trash2, Loader2, Eye, EyeOff } from "lucide-react";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { updateProfile } from "@/services/profiles";
-import { uploadAvatar, updateAvatarUrl } from "@/services/storage";
+import { uploadAvatar, updateAvatarUrl, validateImageFile } from "@/services/storage";
 import { logActivity } from "@/services/activity";
 import { SectionHeader, FormField, SaveBar, PanelSkeleton, SettingsRow, ActionButton, type Feedback } from "../primitives";
 import { InsufficientData } from "@/components/ui/InsufficientData";
@@ -47,7 +48,8 @@ export function AccountPanel() {
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
-    if (file.size > 2 * 1024 * 1024) { setAvatarError("Photo must be under 2MB."); return; }
+    const invalid = validateImageFile(file);
+    if (invalid) { setAvatarError(invalid); return; }
     setAvatarUploading(true);
     setAvatarError(null);
     try {
@@ -167,7 +169,7 @@ function PasswordModal({ onClose, userId, businessId }: { onClose: () => void; u
       setSuccess(true);
       setTimeout(() => onClose(), 2000);
     } catch (err: any) {
-      setError(err?.message || "Could not change password. Please try again.");
+      setError(toUserMessage(err, "Could not change password. Please try again."));
     } finally {
       setSaving(false);
     }

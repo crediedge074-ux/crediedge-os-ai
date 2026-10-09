@@ -25,6 +25,7 @@ import type { WorkspaceMemberInfo } from "@/services/tasks";
 import { moveTaskMission } from "@/services/tasks";
 import { updateMission, archiveMission, createMission } from "@/services/missions";
 import { updateCampaign, archiveCampaign } from "@/services/campaigns";
+import { toUserMessage } from "@/lib/errors";
 
 interface HierarchicalNavProps {
   businessId: string;
@@ -88,7 +89,7 @@ export function HierarchicalDetailModal({
       setAssigningTaskId("");
       onRefresh();
     } catch (err: any) {
-      alert(`Failed to assign task: ${err.message || String(err)}`);
+      alert(toUserMessage(err, "We could not assign this task. Please try again."));
     }
   };
 
@@ -97,7 +98,7 @@ export function HierarchicalDetailModal({
       await moveTaskMission(taskId, businessId, null);
       onRefresh();
     } catch (err: any) {
-      alert(`Failed to remove task: ${err.message || String(err)}`);
+      alert(toUserMessage(err, "We could not remove this task. Please try again."));
     }
   };
 

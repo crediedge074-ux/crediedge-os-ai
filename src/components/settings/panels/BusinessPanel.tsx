@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Building2, Upload, Trash2, Loader2 } from "lucide-react";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { updateBusiness } from "@/services/business";
-import { uploadBusinessLogo, updateBusinessLogo } from "@/services/storage";
+import { uploadBusinessLogo, updateBusinessLogo, validateImageFile } from "@/services/storage";
 import { logActivity } from "@/services/activity";
 import { SectionHeader, FormField, SaveBar, PanelSkeleton, type Feedback, type BusinessHour, DEFAULT_BUSINESS_HOURS } from "../primitives";
 import { InsufficientData } from "@/components/ui/InsufficientData";
@@ -77,7 +77,8 @@ export function BusinessPanel() {
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !membership?.business_id) return;
-    if (file.size > 2 * 1024 * 1024) { setLogoError("Logo must be under 2MB."); return; }
+    const invalid = validateImageFile(file);
+    if (invalid) { setLogoError(invalid); return; }
     setLogoUploading(true);
     setLogoError(null);
     try {

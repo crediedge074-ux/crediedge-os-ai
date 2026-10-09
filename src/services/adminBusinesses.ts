@@ -246,7 +246,12 @@ export async function fetchBusinessDetail(businessId: string): Promise<AdminBusi
 }
 
 export async function updateBusinessStatus(businessId: string, status: string): Promise<void> {
-  const { error } = await db.from("businesses").update({ status, updated_at: new Date().toISOString() }).eq("id", businessId);
+  // Commercial/lifecycle columns are not directly writable by the browser;
+  // this goes through a platform-admin-gated server function.
+  const { error } = await (supabase.rpc as any)("admin_set_business_status", {
+    p_business_id: businessId,
+    p_status: status,
+  });
   if (error) throw error;
   await logAdminEvent({
     action: "business_status_changed",
@@ -259,7 +264,10 @@ export async function updateBusinessStatus(businessId: string, status: string): 
 }
 
 export async function updateBusinessSubscriptionPlan(businessId: string, plan: string): Promise<void> {
-  const { error } = await db.from("businesses").update({ subscription_plan: plan, updated_at: new Date().toISOString() }).eq("id", businessId);
+  const { error } = await (supabase.rpc as any)("admin_set_business_plan", {
+    p_business_id: businessId,
+    p_plan: plan,
+  });
   if (error) throw error;
   await logAdminEvent({
     action: "subscription_plan_changed",

@@ -1,3 +1,4 @@
+import { toUserMessage } from "@/lib/errors";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "@tanstack/react-router";
 import {
@@ -158,7 +159,7 @@ function WebsiteUrlSetup({
       await updateBusiness(businessId, { website: normalized });
       onSaved(normalized);
     } catch (err: any) {
-      setError(err?.message || "Could not save the website URL. Please try again.");
+      setError(toUserMessage(err, "Could not save the website URL. Please try again."));
     } finally {
       setSaving(false);
     }
@@ -273,7 +274,7 @@ function WebsiteMissions({
       setTitle("");
       onMissionCreated();
     } catch (err: any) {
-      setError(err?.message || "Could not create the mission. Please try again.");
+      setError(toUserMessage(err, "Could not create the mission. Please try again."));
     } finally {
       setCreating(false);
     }

@@ -7,6 +7,7 @@ import { getInvoices, getPayments, createInvoice } from "@/services/finance";
 import { useBusiness } from "@/hooks/useBusiness";
 import type { Invoice, Payment } from "@/lib/database.types";
 import { toast } from "sonner";
+import { toUserMessage } from "@/lib/errors";
 
 export const Route = createFileRoute("/finance")({
   component: FinancePage,
@@ -61,7 +62,7 @@ function FinancePage() {
       setInvAmount("");
       loadFinance();
     } catch (err: any) {
-      toast.error(err.message || "Failed to create invoice");
+      toast.error(toUserMessage(err, "We could not create this invoice. Please try again."));
     }
   };
 

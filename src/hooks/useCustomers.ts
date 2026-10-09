@@ -1,3 +1,4 @@
+import { toUserMessage } from "@/lib/errors";
 import { useState, useEffect, useCallback } from "react";
 import { useAuthContext } from "@/contexts/AuthContext";
 import {
@@ -32,7 +33,7 @@ export function useCustomers(query?: string) {
         : await getCustomers(businessId);
       if (mounted) setCustomers(data);
     } catch (err) {
-      if (mounted) setError(err instanceof Error ? err.message : "Failed to load customers");
+      if (mounted) setError(toUserMessage(err, "Failed to load customers."));
     } finally {
       if (mounted) setLoading(false);
     }
@@ -58,7 +59,7 @@ export function useCustomer(id: string | null) {
     setLoading(true);
     getCustomer(id)
       .then((data) => { if (mounted) setCustomer(data); })
-      .catch((err) => { if (mounted) setError(err instanceof Error ? err.message : "Failed to load customer"); })
+      .catch((err) => { if (mounted) setError(toUserMessage(err, "Failed to load this customer.")); })
       .finally(() => { if (mounted) setLoading(false); });
     return () => { mounted = false; };
   }, [id]);
@@ -137,7 +138,7 @@ export function useDeleteCustomer() {
       appEvents.emit(APP_EVENTS.CUSTOMERS_MUTATED);
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to archive customer");
+      setError(toUserMessage(err, "Failed to archive customer."));
       return false;
     } finally {
       setDeleting(false);

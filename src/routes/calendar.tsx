@@ -16,6 +16,7 @@ import { CalendarEventDetailModal } from "@/components/calendar/CalendarEventDet
 import { ExecutionSystemWorkspace } from "@/components/tasks/ExecutionSystemWorkspace";
 import { fetchCampaigns } from "@/services/campaigns";
 import { fetchMissions } from "@/services/missions";
+import { toUserMessage } from "@/lib/errors";
 
 export const Route = createFileRoute("/calendar")({
   component: CalendarPage,
@@ -112,7 +113,7 @@ function CalendarPage() {
       await toggleTaskCompletion(task.id, currentBusinessId, task.status, task.title);
       await loadData();
     } catch (err: any) {
-      alert(`Failed to complete task: ${err.message || String(err)}`);
+      alert(toUserMessage(err, "We could not complete this task. Please try again."));
     }
   };
 

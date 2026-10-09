@@ -169,7 +169,8 @@ export function isFeatureEnabled(
   planName: string | null
 ): boolean {
   const feature = features.find((f) => f.key === featureKey);
-  if (!feature) return true;
+  // Fail closed: an unknown feature key must never grant access.
+  if (!feature) return false;
   const override = overrides.find((o) => o.feature_id === feature.id);
   if (override) return override.override_type === "enable";
   const entitlement = entitlements.find((e) => e.feature_id === feature.id);

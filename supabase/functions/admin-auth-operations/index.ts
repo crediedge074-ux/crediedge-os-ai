@@ -15,6 +15,27 @@ interface AdminUserResponse {
   raw_user_meta_data: Record<string, unknown> | null;
 }
 
+// Internal error detail (admin API messages, stack traces) names internal
+// identifiers and configuration, so it is logged server-side and never returned
+// to the browser. Callers get a fixed per-action sentence instead.
+function logAndGeneric(error: unknown, action: string): string {
+  console.error(`[admin-auth-operations] ${action} failed:`, error);
+  return `The ${action.replace(/_/g, " ")} operation could not be completed.`;
+}
+
+// Looks up a target account and the platform role it currently holds, so that
+// tier-crossing actions (changing a role, banning, deleting) can be refused
+// when the target outranks the caller.
+async function getTarget(
+  adminClient: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<{ id: string; role: string | null } | null> {
+  const { data, error } = await adminClient.auth.admin.getUserById(userId);
+  if (error || !data?.user) return null;
+  const role = (data.user.app_metadata as Record<string, unknown> | null)?.platform_role;
+  return { id: data.user.id, role: typeof role === "string" ? role : null };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -66,7 +87,7 @@ Deno.serve(async (req: Request) => {
       });
 
       if (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
+        return new Response(JSON.stringify({ error: logAndGeneric(error, "list_users") }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -98,7 +119,7 @@ Deno.serve(async (req: Request) => {
 
       const { data, error } = await adminClient.auth.admin.getUserById(userId);
       if (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
+        return new Response(JSON.stringify({ error: logAndGeneric(error, "get_user") }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -129,14 +150,69 @@ Deno.serve(async (req: Request) => {
         });
       }
 
+      const target = await getTarget(adminClient, userId);
+      if (!target) {
+        return new Response(JSON.stringify({ error: "User not found" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Credentials of a platform owner may only be changed by that owner.
+      if ((email || password) && target.role === "platform_owner" && userId !== caller.id) {
+        return new Response(JSON.stringify({ error: "Cannot change credentials of a platform owner" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       const updates: Record<string, unknown> = {};
       if (email) updates.email = email;
       if (password) updates.password = password;
-      if (appMetadata) updates.app_metadata = appMetadata;
+
+      // app_metadata carries the platform_role claim that drives every
+      // authorization decision, so it is allowlisted, owner-gated, and may
+      // never be applied to the caller's own account.
+      if (appMetadata !== undefined && appMetadata !== null) {
+        if (callerRole !== "platform_owner") {
+          return new Response(JSON.stringify({ error: "Only the platform owner can change platform roles" }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        if (userId === caller.id) {
+          return new Response(JSON.stringify({ error: "Cannot change your own platform role" }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const keys = Object.keys(appMetadata as Record<string, unknown>);
+        if (keys.some((k) => k !== "platform_role")) {
+          return new Response(JSON.stringify({ error: "Only platform_role may be set" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const requested = (appMetadata as Record<string, unknown>).platform_role;
+        if (requested !== null && requested !== "platform_admin") {
+          return new Response(JSON.stringify({ error: "platform_role must be 'platform_admin' or null" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        updates.app_metadata = { platform_role: requested };
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return new Response(JSON.stringify({ error: "No permitted changes supplied" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
 
       const { data, error } = await adminClient.auth.admin.updateUserById(userId, updates);
       if (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
+        return new Response(JSON.stringify({ error: logAndGeneric(error, "update_user") }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -157,11 +233,26 @@ Deno.serve(async (req: Request) => {
         });
       }
 
+      // A platform admin must not be able to lock the platform owner out.
+      const banTarget = await getTarget(adminClient, userId);
+      if (banTarget?.role === "platform_owner" && callerRole !== "platform_owner") {
+        return new Response(JSON.stringify({ error: "Cannot deactivate a platform owner" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (userId === caller.id) {
+        return new Response(JSON.stringify({ error: "Cannot deactivate your own account" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       const { error } = await adminClient.auth.admin.updateUserById(userId, {
         ban_duration: "876000h",
       });
       if (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
+        return new Response(JSON.stringify({ error: logAndGeneric(error, "deactivate_user") }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -186,7 +277,7 @@ Deno.serve(async (req: Request) => {
         ban_duration: "none",
       });
       if (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
+        return new Response(JSON.stringify({ error: logAndGeneric(error, "activate_user") }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -215,9 +306,18 @@ Deno.serve(async (req: Request) => {
         });
       }
 
+      // A platform admin must not be able to delete the platform owner.
+      const deleteTarget = await getTarget(adminClient, userId);
+      if (deleteTarget?.role === "platform_owner") {
+        return new Response(JSON.stringify({ error: "Cannot delete a platform owner" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       const { error } = await adminClient.auth.admin.deleteUser(userId);
       if (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
+        return new Response(JSON.stringify({ error: logAndGeneric(error, "delete_user") }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -240,7 +340,7 @@ Deno.serve(async (req: Request) => {
 
       const { error } = await adminClient.auth.resetPasswordForEmail(email);
       if (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
+        return new Response(JSON.stringify({ error: logAndGeneric(error, "send_password_reset") }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -257,7 +357,7 @@ Deno.serve(async (req: Request) => {
     });
   } catch (err) {
     return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : "Internal server error" }),
+      JSON.stringify({ error: logAndGeneric(err, "request") }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }

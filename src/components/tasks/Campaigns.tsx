@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Target, TrendingUp, Globe, Zap, Users, Settings2, ChevronDown, ChevronUp, ArrowRight, CircleCheck as CheckCircle2, Clock, PoundSterling, ChartBar as BarChart3, Trophy, Flame, Plus, X, Edit3, Archive } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuthContext } from "@/contexts/AuthContext";
+import { toUserMessage } from "@/lib/errors";
 import {
   fetchCampaigns,
   createCampaign,
@@ -463,7 +464,7 @@ export function Campaigns() {
       await archiveCampaign(c.id, businessId, "completed");
       loadData();
     } catch (err: any) {
-      alert(`Failed to complete campaign: ${err.message || String(err)}`);
+      alert(toUserMessage(err, "We could not complete this campaign. Please try again."));
     }
   };
 

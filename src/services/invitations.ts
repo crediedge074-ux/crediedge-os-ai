@@ -6,7 +6,6 @@ export interface BusinessInvitation {
   business_id: string;
   email: string;
   role: string;
-  token: string;
   invited_by: string | null;
   status: string;
   accepted_by: string | null;
@@ -60,8 +59,10 @@ export async function fetchMembers(businessId: string): Promise<MemberInfo[]> {
 }
 
 export async function fetchInvitations(businessId: string): Promise<BusinessInvitation[]> {
+  // The invitation token is a secret and is deliberately not selected here;
+  // the database also withholds SELECT on that column from the browser.
   const { data, error } = await (supabase.from as any)("business_invitations")
-    .select("*")
+    .select("id, business_id, email, role, invited_by, status, accepted_by, accepted_at, expires_at, created_at, updated_at")
     .eq("business_id", businessId)
     .order("created_at", { ascending: false });
   if (error) {
@@ -84,7 +85,7 @@ export async function createInvitation(
       role,
       invited_by: invitedBy,
     })
-    .select()
+    .select("id, business_id, email, role, invited_by, status, accepted_by, accepted_at, expires_at, created_at, updated_at")
     .single();
   if (error) {
     console.error("[createInvitation] error:", error);
@@ -113,11 +114,13 @@ export async function revokeInvitation(businessId: string, invitationId: string)
   return true;
 }
 
-export async function updateMemberRole(businessId: string, membershipId: string, role: string): Promise<boolean> {
-  const { error } = await (supabase.from as any)("memberships")
-    .update({ role, updated_at: new Date().toISOString() })
-    .eq("id", membershipId)
-    .eq("business_id", businessId);
+export async function updateMemberRole(_businessId: string, membershipId: string, role: string): Promise<boolean> {
+  // Role changes are performed server-side so that only an active owner/admin of
+  // the same business can change a member's role. See set_member_role().
+  const { error } = await (supabase.rpc as any)("set_member_role", {
+    p_membership_id: membershipId,
+    p_role: role,
+  });
   if (error) {
     console.error("[updateMemberRole] error:", error);
     return false;
