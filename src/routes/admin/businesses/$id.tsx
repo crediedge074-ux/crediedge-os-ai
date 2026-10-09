@@ -2,7 +2,7 @@ import { createFileRoute, useParams, Link } from "@tanstack/react-router";
 import { Building2, ArrowLeft, Loader2, AlertCircle, AlertTriangle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AdminPageHeader, AdminBadge } from "@/components/admin/AdminShared";
-import { fetchBusinessDetail, updateBusinessStatus, updateBusinessSubscriptionPlan, type AdminBusinessDetail } from "@/services/adminBusinesses";
+import { fetchBusinessDetail, updateBusinessProfile, updateBusinessStatus, updateBusinessSubscriptionPlan, type AdminBusinessDetail } from "@/services/adminBusinesses";
 import { fetchBusinessOverrides, fetchPlans, type PlatformPlan } from "@/services/adminEntitlements";
 import { InsufficientData } from "@/components/ui/InsufficientData";
 
@@ -21,6 +21,8 @@ function AdminBusinessDetailPage() {
   const [updating, setUpdating] = useState(false);
   const [updateMsg, setUpdateMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [confirmSuspend, setConfirmSuspend] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({ name: "", slug: "", industry: "", email: "", phone: "" });
 
   const load = async () => {
     setLoading(true); setError(false);
@@ -31,6 +33,28 @@ function AdminBusinessDetailPage() {
   };
 
   useEffect(() => { void load(); }, [id]);
+
+  const beginEdit = () => {
+    if (!business) return;
+    setEditForm({ name: business.name, slug: business.slug || "", industry: business.industry || "", email: business.email || "", phone: business.phone || "" });
+    setEditing(true);
+  };
+
+  const saveBusinessProfile = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!business) return;
+    setUpdating(true); setUpdateMsg(null);
+    try {
+      await updateBusinessProfile(business.id, editForm);
+      setEditing(false);
+      setUpdateMsg({ type: "success", text: "Business details updated." });
+      await load();
+    } catch {
+      setUpdateMsg({ type: "error", text: "Failed to update business details." });
+    } finally {
+      setUpdating(false);
+    }
+  };
 
   const handleStatusChange = async (newStatus: string) => {
     if (!business) return;
@@ -91,15 +115,27 @@ function AdminBusinessDetailPage() {
 
       {activeTab === "account" && (
         <div className="rounded-2xl border border-border bg-card p-5 shadow-card">
-          <h3 className="text-[14px] font-semibold text-foreground">Account Information</h3>
-          <dl className="mt-3 space-y-2 text-[12.5px]">
-            <div className="flex justify-between"><dt className="text-muted-foreground">Email</dt><dd>{business.email || "—"}</dd></div>
-            <div className="flex justify-between"><dt className="text-muted-foreground">Phone</dt><dd>{business.phone || "—"}</dd></div>
-            <div className="flex justify-between"><dt className="text-muted-foreground">Website</dt><dd>{business.website || "—"}</dd></div>
-            <div className="flex justify-between"><dt className="text-muted-foreground">Timezone</dt><dd>{business.timezone || "—"}</dd></div>
-            <div className="flex justify-between"><dt className="text-muted-foreground">Currency</dt><dd>{business.currency || "—"}</dd></div>
-            <div className="flex justify-between"><dt className="text-muted-foreground">Trial Ends</dt><dd>{business.trial_ends_at ? new Date(business.trial_ends_at).toLocaleDateString("en-GB") : "—"}</dd></div>
-          </dl>
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-[14px] font-semibold text-foreground">Account Information</h3>
+            {!editing && <button onClick={beginEdit} className="rounded-lg border border-border px-3 py-1.5 text-[11px] font-semibold text-foreground hover:bg-secondary">Edit details</button>}
+          </div>
+          {editing ? (
+            <form onSubmit={(event) => void saveBusinessProfile(event)} className="mt-4 grid gap-3 sm:grid-cols-2">
+              {(["name", "slug", "industry", "email", "phone"] as const).map((field) => (
+                <label key={field} className="text-[12px] font-medium capitalize text-muted-foreground">{field}<input required={field === "name" || field === "slug"} type={field === "email" ? "email" : "text"} value={editForm[field]} onChange={(event) => setEditForm({ ...editForm, [field]: event.target.value })} className="mt-1 h-9 w-full rounded-lg border border-border bg-card px-3 text-[12px] text-foreground focus:outline-none focus:ring-2 focus:ring-brand/20" /></label>
+              ))}
+              <div className="flex gap-2 sm:col-span-2"><button type="submit" disabled={updating} className="rounded-lg bg-brand px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50">{updating ? "Saving…" : "Save"}</button><button type="button" onClick={() => setEditing(false)} className="rounded-lg border border-border px-3 py-1.5 text-[11px] font-medium text-foreground hover:bg-secondary">Cancel</button></div>
+            </form>
+          ) : (
+            <dl className="mt-3 space-y-2 text-[12.5px]">
+              <div className="flex justify-between"><dt className="text-muted-foreground">Email</dt><dd>{business.email || "—"}</dd></div>
+              <div className="flex justify-between"><dt className="text-muted-foreground">Phone</dt><dd>{business.phone || "—"}</dd></div>
+              <div className="flex justify-between"><dt className="text-muted-foreground">Website</dt><dd>{business.website || "—"}</dd></div>
+              <div className="flex justify-between"><dt className="text-muted-foreground">Timezone</dt><dd>{business.timezone || "—"}</dd></div>
+              <div className="flex justify-between"><dt className="text-muted-foreground">Currency</dt><dd>{business.currency || "—"}</dd></div>
+              <div className="flex justify-between"><dt className="text-muted-foreground">Trial Ends</dt><dd>{business.trial_ends_at ? new Date(business.trial_ends_at).toLocaleDateString("en-GB") : "—"}</dd></div>
+            </dl>
+          )}
         </div>
       )}
 

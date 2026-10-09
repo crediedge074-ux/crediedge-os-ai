@@ -12,6 +12,8 @@ interface AdminUserResponse {
   created_at: string;
   last_sign_in_at: string | null;
   email_confirmed_at: string | null;
+  banned_until: string | null;
+  platform_role: string | null;
   raw_user_meta_data: Record<string, unknown> | null;
 }
 
@@ -63,15 +65,28 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+    const { data: ownerRecord, error: ownerLookupError } = await adminClient
+      .from("platform_owners")
+      .select("user_id")
+      .eq("user_id", caller.id)
+      .maybeSingle();
+    if (ownerLookupError) {
+      return new Response(JSON.stringify({ error: "Unable to verify platform access" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const isOwner = Boolean(ownerRecord);
     const callerRole = caller.app_metadata?.platform_role;
-    if (callerRole !== "platform_owner" && callerRole !== "platform_admin") {
+    if (!isOwner && callerRole !== "platform_owner" && callerRole !== "platform_admin") {
       return new Response(JSON.stringify({ error: "Forbidden — platform admin access required" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const adminClient = createClient(supabaseUrl, serviceRoleKey);
     const body = await req.json();
     const { action } = body;
 
@@ -99,10 +114,128 @@ Deno.serve(async (req: Request) => {
         created_at: u.created_at ?? "",
         last_sign_in_at: u.last_sign_in_at ?? null,
         email_confirmed_at: u.email_confirmed_at ?? null,
+        banned_until: u.banned_until ?? null,
+        platform_role: typeof (u.app_metadata as Record<string, unknown> | null)?.platform_role === "string"
+          ? (u.app_metadata as Record<string, unknown>).platform_role as string
+          : null,
         raw_user_meta_data: (u.user_metadata as Record<string, unknown>) ?? null,
       }));
 
       return new Response(JSON.stringify({ users: result }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ─── Create a business ──────────────────────────────────────────────
+    if (action === "create_business") {
+      const name = typeof body.name === "string" ? body.name.trim() : "";
+      const slug = typeof body.slug === "string" ? body.slug.trim().toLowerCase() : "";
+      const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : null;
+      if (!name || !slug || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+        return new Response(JSON.stringify({ error: "A name and valid slug are required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: business, error } = await adminClient
+        .from("businesses")
+        .insert({ name, slug, email })
+        .select("id")
+        .single();
+      if (error) {
+        return new Response(JSON.stringify({ error: logAndGeneric(error, "create_business") }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      await adminClient.from("admin_audit_events").insert({
+        actor_id: caller.id,
+        action: "business_created",
+        target_type: "business",
+        target_id: business.id,
+        target_label: name,
+        business_id: business.id,
+        metadata: { slug },
+      });
+      return new Response(JSON.stringify({ success: true, businessId: business.id }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ─── Update business profile fields ─────────────────────────────────
+    if (action === "update_business") {
+      const businessId = typeof body.businessId === "string" ? body.businessId : "";
+      const allowedFields = ["name", "slug", "industry", "business_size", "website", "email", "phone", "timezone", "currency"] as const;
+      const updates: Record<string, string | null> = {};
+      for (const field of allowedFields) {
+        if (Object.prototype.hasOwnProperty.call(body, field)) {
+          const value = body[field];
+          if (value !== null && typeof value !== "string") {
+            return new Response(JSON.stringify({ error: "Invalid business field" }), {
+              status: 400,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+          updates[field] = typeof value === "string" ? value.trim() || null : null;
+        }
+      }
+      if (!businessId || Object.keys(updates).length === 0) {
+        return new Response(JSON.stringify({ error: "A business and at least one permitted field are required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (updates.slug !== undefined && updates.slug !== null && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(updates.slug)) {
+        return new Response(JSON.stringify({ error: "Invalid business slug" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { error } = await adminClient.from("businesses").update({ ...updates, updated_at: new Date().toISOString() }).eq("id", businessId);
+      if (error) {
+        return new Response(JSON.stringify({ error: logAndGeneric(error, "update_business") }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      await adminClient.from("admin_audit_events").insert({
+        actor_id: caller.id,
+        action: "business_profile_updated",
+        target_type: "business",
+        target_id: businessId,
+        business_id: businessId,
+        metadata: updates,
+      });
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ─── Invite a user ──────────────────────────────────────────────────
+    if (action === "invite_user") {
+      const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+      const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
+      if (!email || !email.includes("@")) {
+        return new Response(JSON.stringify({ error: "A valid email is required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data, error } = await adminClient.auth.admin.inviteUserByEmail(email, {
+        data: fullName ? { full_name: fullName } : undefined,
+      });
+      if (error) {
+        return new Response(JSON.stringify({ error: logAndGeneric(error, "invite_user") }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({ success: true, userId: data.user.id }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -132,6 +265,10 @@ Deno.serve(async (req: Request) => {
         created_at: u.created_at ?? "",
         last_sign_in_at: u.last_sign_in_at ?? null,
         email_confirmed_at: u.email_confirmed_at ?? null,
+        banned_until: u.banned_until ?? null,
+        platform_role: typeof (u.app_metadata as Record<string, unknown> | null)?.platform_role === "string"
+          ? (u.app_metadata as Record<string, unknown>).platform_role as string
+          : null,
         raw_user_meta_data: (u.user_metadata as Record<string, unknown>) ?? null,
       };
 
@@ -174,7 +311,7 @@ Deno.serve(async (req: Request) => {
       // authorization decision, so it is allowlisted, owner-gated, and may
       // never be applied to the caller's own account.
       if (appMetadata !== undefined && appMetadata !== null) {
-        if (callerRole !== "platform_owner") {
+        if (!isOwner) {
           return new Response(JSON.stringify({ error: "Only the platform owner can change platform roles" }), {
             status: 403,
             headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -3,11 +3,31 @@ import { logAdminEvent } from "./adminAccess";
 
 const db = supabase as unknown as { from: (table: string) => any };
 
+async function callAdminOperation<T>(body: Record<string, unknown>): Promise<T> {
+  const apiUrl = `${import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL}/functions/v1/admin-auth-operations`;
+  const { data: session } = await supabase.auth.getSession();
+  const token = session?.session?.access_token;
+  if (!token) throw new Error("No active session");
+  const response = await fetch(apiUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      Apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY || "",
+    },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(typeof payload.error === "string" ? payload.error : `Request failed (${response.status})`);
+  return payload as T;
+}
+
 export interface AdminBusinessSummary {
   id: string;
   name: string;
   slug: string | null;
   industry: string | null;
+  business_size: string | null;
   status: string;
   subscription_plan: string | null;
   subscription_status: string | null;
@@ -170,6 +190,7 @@ export async function fetchBusinesses(params: {
       name: b.name,
       slug: b.slug,
       industry: b.industry,
+      business_size: b.business_size,
       status: b.status,
       subscription_plan: b.subscription_plan,
       subscription_status: b.subscription_status,
@@ -224,6 +245,7 @@ export async function fetchBusinessDetail(businessId: string): Promise<AdminBusi
     name: business.name,
     slug: business.slug,
     industry: business.industry,
+    business_size: business.business_size,
     status: business.status,
     subscription_plan: business.subscription_plan,
     subscription_status: business.subscription_status,
@@ -277,4 +299,16 @@ export async function updateBusinessSubscriptionPlan(businessId: string, plan: s
     businessId,
     metadata: { plan },
   });
+}
+
+export async function createBusiness(input: { name: string; slug: string; email?: string }): Promise<string> {
+  const result = await callAdminOperation<{ businessId: string }>({ action: "create_business", ...input });
+  return result.businessId;
+}
+
+export async function updateBusinessProfile(
+  businessId: string,
+  updates: Partial<Pick<AdminBusinessDetail, "name" | "slug" | "industry" | "business_size" | "website" | "email" | "phone" | "timezone" | "currency">>,
+): Promise<void> {
+  await callAdminOperation({ action: "update_business", businessId, ...updates });
 }

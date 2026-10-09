@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Users, Search, Loader2, ChevronLeft, ChevronRight, AlertCircle, KeyRound, UserCheck, UserX } from "lucide-react";
+import { Users, Search, Loader2, ChevronLeft, ChevronRight, AlertCircle, KeyRound, UserCheck, UserX, UserPlus } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 import { AdminPageHeader, AdminTable, AdminBadge } from "@/components/admin/AdminShared";
 import { fetchUsers, type AdminUserSummary } from "@/services/adminUsers";
-import { listAuthUsers, deactivateUser, activateUser, sendPasswordReset, type AuthUser } from "@/services/adminAuth";
+import { listAuthUsers, deactivateUser, activateUser, sendPasswordReset, inviteUser, type AuthUser } from "@/services/adminAuth";
 import { logAdminEvent } from "@/services/adminAccess";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { InsufficientData } from "@/components/ui/InsufficientData";
@@ -25,6 +25,9 @@ function AdminUsersPage() {
   const [page, setPage] = useState(1);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
   const pageSize = 20;
 
   const load = useCallback(async () => {
@@ -32,7 +35,7 @@ function AdminUsersPage() {
     try {
       const [result, authResult] = await Promise.all([
         fetchUsers({ search, role: roleFilter, status: statusFilter, page, pageSize }),
-        listAuthUsers(1, 100),
+        listAuthUsers(1, 1000),
       ]);
       setUsers(result.users);
       setTotal(result.total);
@@ -86,6 +89,26 @@ function AdminUsersPage() {
     }
   };
 
+  const handleInvite = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setActionLoading("invite");
+    setActionMsg(null);
+    try {
+      const result = await inviteUser(inviteEmail, inviteName);
+      if (!result.success) throw new Error(result.error || "Failed");
+      setInviteEmail("");
+      setInviteName("");
+      setInviteOpen(false);
+      setActionMsg({ type: "success", text: `Invitation sent to ${inviteEmail}` });
+      void load();
+    } catch (err) {
+      setActionMsg({ type: "error", text: toUserMessage(err, "We could not invite this user. Please try again.") });
+    } finally {
+      setActionLoading(null);
+      setTimeout(() => setActionMsg(null), 3000);
+    }
+  };
+
   const handlePasswordReset = async (email: string) => {
     setActionLoading(email);
     setActionMsg(null);
@@ -104,7 +127,20 @@ function AdminUsersPage() {
 
   return (
     <div>
-      <AdminPageHeader title="Users" description="Manage all users across the platform." icon={Users} />
+      <div className="flex items-start justify-between gap-4">
+        <AdminPageHeader title="Users" description="Manage all users across the platform." icon={Users} />
+        <button onClick={() => setInviteOpen((open) => !open)} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-brand px-3 py-2 text-[12px] font-semibold text-white hover:opacity-90">
+          <UserPlus className="h-3.5 w-3.5" /> Invite User
+        </button>
+      </div>
+
+      {inviteOpen && (
+        <form onSubmit={(event) => void handleInvite(event)} className="mb-4 grid gap-3 rounded-xl border border-border bg-card p-4 shadow-card sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+          <label className="text-[12px] font-medium text-muted-foreground">Name<input value={inviteName} onChange={(event) => setInviteName(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-border bg-card px-3 text-[12.5px] text-foreground focus:outline-none focus:ring-2 focus:ring-brand/20" placeholder="Optional" /></label>
+          <label className="text-[12px] font-medium text-muted-foreground">Email<input required type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-border bg-card px-3 text-[12.5px] text-foreground focus:outline-none focus:ring-2 focus:ring-brand/20" placeholder="user@example.com" /></label>
+          <button type="submit" disabled={actionLoading === "invite"} className="h-9 rounded-lg bg-foreground px-4 text-[12px] font-semibold text-background disabled:opacity-50">{actionLoading === "invite" ? "Sending…" : "Send Invite"}</button>
+        </form>
+      )}
 
       <div className="mb-4 flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-[200px]">

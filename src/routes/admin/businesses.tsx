@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Building2, Search, Loader2, ChevronLeft, ChevronRight, AlertCircle } from "lucide-react";
+import { Building2, Search, Loader2, ChevronLeft, ChevronRight, AlertCircle, Plus } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 import { Link } from "@tanstack/react-router";
 import { AdminPageHeader, AdminTable, AdminBadge } from "@/components/admin/AdminShared";
-import { fetchBusinesses, type AdminBusinessSummary } from "@/services/adminBusinesses";
+import { createBusiness, fetchBusinesses, type AdminBusinessSummary } from "@/services/adminBusinesses";
 import { fetchPlans, type PlatformPlan } from "@/services/adminEntitlements";
 import { InsufficientData } from "@/components/ui/InsufficientData";
 
@@ -20,10 +20,17 @@ function AdminBusinessesPage() {
   const [planFilter, setPlanFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [plans, setPlans] = useState<PlatformPlan[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createName, setCreateName] = useState("");
+  const [createSlug, setCreateSlug] = useState("");
+  const [createEmail, setCreateEmail] = useState("");
+  const [creating, setCreating] = useState(false);
   const pageSize = 20;
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const [result, planData] = await Promise.all([
         fetchBusinesses({ search, status: statusFilter, plan: planFilter, page, pageSize }),
@@ -32,7 +39,11 @@ function AdminBusinessesPage() {
       setBusinesses(result.businesses);
       setTotal(result.total);
       if (planData.length > 0) setPlans(planData);
-    } catch { setBusinesses([]); setTotal(0); } finally { setLoading(false); }
+    } catch (err) {
+      setBusinesses([]);
+      setTotal(0);
+      setError(err instanceof Error ? err.message : "Businesses could not be loaded.");
+    } finally { setLoading(false); }
   }, [search, statusFilter, planFilter, page, plans]);
 
   useEffect(() => { const timer = setTimeout(() => { setPage(1); void load(); }, 200); return () => clearTimeout(timer); }, [search, statusFilter, planFilter]);
@@ -40,9 +51,41 @@ function AdminBusinessesPage() {
 
   const totalPages = Math.ceil(total / pageSize);
 
+  const handleCreate = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setCreating(true);
+    setError(null);
+    try {
+      await createBusiness({ name: createName, slug: createSlug, email: createEmail || undefined });
+      setCreateName("");
+      setCreateSlug("");
+      setCreateEmail("");
+      setCreateOpen(false);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Business could not be created.");
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <div>
-      <AdminPageHeader title="Businesses" description="Manage all businesses on the platform." icon={Building2} />
+      <div className="flex items-start justify-between gap-4">
+        <AdminPageHeader title="Businesses" description="Manage all businesses on the platform." icon={Building2} />
+        <button onClick={() => setCreateOpen((open) => !open)} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-brand px-3 py-2 text-[12px] font-semibold text-white hover:opacity-90"><Plus className="h-3.5 w-3.5" /> New Business</button>
+      </div>
+
+      {createOpen && (
+        <form onSubmit={(event) => void handleCreate(event)} className="mb-4 grid gap-3 rounded-xl border border-border bg-card p-4 shadow-card md:grid-cols-[1fr_1fr_1fr_auto] md:items-end">
+          <label className="text-[12px] font-medium text-muted-foreground">Business name<input required value={createName} onChange={(event) => setCreateName(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-border bg-card px-3 text-[12.5px] text-foreground focus:outline-none focus:ring-2 focus:ring-brand/20" /></label>
+          <label className="text-[12px] font-medium text-muted-foreground">Slug<input required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" value={createSlug} onChange={(event) => setCreateSlug(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-border bg-card px-3 text-[12.5px] text-foreground focus:outline-none focus:ring-2 focus:ring-brand/20" placeholder="example-business" /></label>
+          <label className="text-[12px] font-medium text-muted-foreground">Email<input type="email" value={createEmail} onChange={(event) => setCreateEmail(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-border bg-card px-3 text-[12.5px] text-foreground focus:outline-none focus:ring-2 focus:ring-brand/20" /></label>
+          <button type="submit" disabled={creating} className="h-9 rounded-lg bg-foreground px-4 text-[12px] font-semibold text-background disabled:opacity-50">{creating ? "Creating…" : "Create"}</button>
+        </form>
+      )}
+
+      {error && <div className="mb-4 rounded-lg bg-red-50 px-4 py-2.5 text-[12px] font-medium text-red-700">{error}</div>}
 
       <div className="mb-4 flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-[200px]">

@@ -6,6 +6,9 @@ export interface AuthUser {
   created_at: string;
   last_sign_in_at: string | null;
   email_confirmed_at: string | null;
+  banned_until: string | null;
+  platform_role: string | null;
+  raw_user_meta_data: Record<string, unknown> | null;
 }
 
 export async function listAuthUsers(page = 1, perPage = 50): Promise<{ users: AuthUser[]; error: string | null }> {
@@ -35,6 +38,30 @@ export async function listAuthUsers(page = 1, perPage = 50): Promise<{ users: Au
     return { users: data.users as AuthUser[], error: null };
   } catch (err) {
     return { users: [], error: err instanceof Error ? err.message : "Network error" };
+  }
+}
+
+export async function inviteUser(email: string, fullName?: string): Promise<{ success: boolean; userId?: string; error: string | null }> {
+  const apiUrl = `${import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL}/functions/v1/admin-auth-operations`;
+  const { data: session } = await supabase.auth.getSession();
+  const token = session?.session?.access_token;
+  if (!token) return { success: false, error: "No active session" };
+
+  try {
+    const res = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        Apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY || "",
+      },
+      body: JSON.stringify({ action: "invite_user", email, fullName }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return { success: false, error: body.error || `Request failed (${res.status})` };
+    return { success: true, userId: body.userId, error: null };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Network error" };
   }
 }
 
