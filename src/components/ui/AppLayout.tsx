@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { TopNav } from "@/components/dashboard/TopNav";
@@ -52,14 +52,25 @@ function LayoutContent({ children }: { children: ReactNode }) {
 export function AppLayout({ children }: AppLayoutProps) {
   const { session, loading } = useAuthContext();
   const navigate = useNavigate();
+  const [gracePeriod, setGracePeriod] = useState(true);
 
   useEffect(() => {
     if (!loading && !session) {
+      // Give the session a brief moment to appear after a fresh sign-in
+      // navigation. onAuthStateChange can fire just after the route mounts.
+      const timer = setTimeout(() => setGracePeriod(false), 1500);
+      return () => clearTimeout(timer);
+    }
+    setGracePeriod(false);
+  }, [loading, session]);
+
+  useEffect(() => {
+    if (!loading && !session && !gracePeriod) {
       navigate({ to: "/login" });
     }
-  }, [loading, session, navigate]);
+  }, [loading, session, gracePeriod, navigate]);
 
-  if (loading) return <AppSkeleton />;
+  if (loading || (gracePeriod && !session)) return <AppSkeleton />;
   if (!session) return null;
 
   return (
