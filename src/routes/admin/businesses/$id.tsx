@@ -1,9 +1,9 @@
 import { createFileRoute, useParams, Link } from "@tanstack/react-router";
-import { Building2, ArrowLeft, Loader2, AlertCircle } from "lucide-react";
+import { Building2, ArrowLeft, Loader2, AlertCircle, AlertTriangle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AdminPageHeader, AdminBadge } from "@/components/admin/AdminShared";
 import { fetchBusinessDetail, updateBusinessStatus, updateBusinessSubscriptionPlan, type AdminBusinessDetail } from "@/services/adminBusinesses";
-import { fetchBusinessOverrides } from "@/services/adminEntitlements";
+import { fetchBusinessOverrides, fetchPlans, type PlatformPlan } from "@/services/adminEntitlements";
 import { InsufficientData } from "@/components/ui/InsufficientData";
 
 export const Route = createFileRoute("/admin/businesses/$id")({
@@ -14,17 +14,19 @@ function AdminBusinessDetailPage() {
   const { id } = useParams({ from: "/admin/businesses/$id" });
   const [business, setBusiness] = useState<AdminBusinessDetail | null>(null);
   const [overrides, setOverrides] = useState<any[]>([]);
+  const [plans, setPlans] = useState<PlatformPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "account" | "users" | "subscription" | "features" | "ai" | "activity">("overview");
   const [updating, setUpdating] = useState(false);
-  const [updateMsg, setUpdateMsg] = useState<string | null>(null);
+  const [updateMsg, setUpdateMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [confirmSuspend, setConfirmSuspend] = useState(false);
 
   const load = async () => {
     setLoading(true); setError(false);
     try {
-      const [detail, ov] = await Promise.all([fetchBusinessDetail(id), fetchBusinessOverrides(id)]);
-      setBusiness(detail); setOverrides(ov);
+      const [detail, ov, p] = await Promise.all([fetchBusinessDetail(id), fetchBusinessOverrides(id), fetchPlans()]);
+      setBusiness(detail); setOverrides(ov); setPlans(p);
     } catch { setError(true); } finally { setLoading(false); }
   };
 
@@ -32,18 +34,20 @@ function AdminBusinessDetailPage() {
 
   const handleStatusChange = async (newStatus: string) => {
     if (!business) return;
+    if (newStatus === "suspended" && !confirmSuspend) { setConfirmSuspend(true); return; }
+    setConfirmSuspend(false);
     setUpdating(true); setUpdateMsg(null);
-    try { await updateBusinessStatus(business.id, newStatus); setUpdateMsg("Status updated successfully."); void load(); }
-    catch { setUpdateMsg("Failed to update status."); }
-    finally { setUpdating(false); setTimeout(() => setUpdateMsg(null), 3000); }
+    try { await updateBusinessStatus(business.id, newStatus); setUpdateMsg({ type: "success", text: "Status updated successfully." }); void load(); }
+    catch { setUpdateMsg({ type: "error", text: "Failed to update status. You may not have permission." }); }
+    finally { setUpdating(false); setTimeout(() => setUpdateMsg(null), 4000); }
   };
 
   const handlePlanChange = async (newPlan: string) => {
     if (!business) return;
     setUpdating(true); setUpdateMsg(null);
-    try { await updateBusinessSubscriptionPlan(business.id, newPlan); setUpdateMsg("Subscription plan updated."); void load(); }
-    catch { setUpdateMsg("Failed to update plan."); }
-    finally { setUpdating(false); setTimeout(() => setUpdateMsg(null), 3000); }
+    try { await updateBusinessSubscriptionPlan(business.id, newPlan); setUpdateMsg({ type: "success", text: "Subscription plan updated." }); void load(); }
+    catch { setUpdateMsg({ type: "error", text: "Failed to update plan. You may not have permission." }); }
+    finally { setUpdating(false); setTimeout(() => setUpdateMsg(null), 4000); }
   };
 
   if (loading) return <div className="grid min-h-[400px] place-items-center"><Loader2 className="h-6 w-6 animate-spin text-brand" /></div>;
@@ -62,7 +66,7 @@ function AdminBusinessDetailPage() {
         ))}
       </div>
 
-      {updateMsg && <div className="mb-3 rounded-lg bg-emerald-50 px-4 py-2 text-[12px] font-medium text-emerald-700">{updateMsg}</div>}
+      {updateMsg && <div className={`mb-3 rounded-lg px-4 py-2 text-[12px] font-medium ${updateMsg.type === "success" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>{updateMsg.text}</div>}
 
       {activeTab === "overview" && (
         <div className="grid gap-4 lg:grid-cols-2">
@@ -120,21 +124,34 @@ function AdminBusinessDetailPage() {
               <label className="text-[12px] font-medium text-muted-foreground">Current Plan</label>
               <div className="mt-1 flex gap-2">
                 <select defaultValue={business.subscription_plan || ""} onChange={(e) => void handlePlanChange(e.target.value)} disabled={updating} className="h-9 rounded-lg border border-border bg-card px-3 text-[12.5px] text-foreground focus:outline-none">
-                  <option value="Starter">Starter</option>
-                  <option value="Growth">Growth</option>
-                  <option value="Enterprise">Enterprise</option>
+                  {plans.map((p) => <option key={p.id} value={p.name}>{p.display_name}</option>)}
                 </select>
               </div>
             </div>
             <div>
               <label className="text-[12px] font-medium text-muted-foreground">Account Status</label>
               <div className="mt-1 flex gap-2">
-                <select defaultValue={business.status} onChange={(e) => void handleStatusChange(e.target.value)} disabled={updating} className="h-9 rounded-lg border border-border bg-card px-3 text-[12.5px] text-foreground focus:outline-none">
+                <select value={business.status} onChange={(e) => void handleStatusChange(e.target.value)} disabled={updating} className="h-9 rounded-lg border border-border bg-card px-3 text-[12.5px] text-foreground focus:outline-none">
                   <option value="active">Active</option>
                   <option value="suspended">Suspended</option>
                 </select>
               </div>
             </div>
+            {confirmSuspend && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  <div className="flex-1">
+                    <p className="text-[12px] font-medium text-amber-800">Suspend this business?</p>
+                    <p className="mt-0.5 text-[11px] text-amber-700">All users in this business will lose access. This action is audited.</p>
+                    <div className="mt-2 flex gap-2">
+                      <button onClick={() => void handleStatusChange("suspended")} disabled={updating} className="rounded-lg bg-amber-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-amber-700 disabled:opacity-50">Confirm Suspend</button>
+                      <button onClick={() => setConfirmSuspend(false)} className="rounded-lg border border-border px-3 py-1.5 text-[11px] font-medium text-foreground hover:bg-secondary">Cancel</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="rounded-lg bg-secondary/50 p-3 text-[11px] text-muted-foreground">
               Billing integration (Stripe) is Coming Soon. Plan changes update the business record and are audited. Payment processing is not yet connected.
             </div>

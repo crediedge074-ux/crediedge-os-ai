@@ -132,6 +132,35 @@ export async function removeBusinessOverride(businessId: string, featureId: stri
   });
 }
 
+export async function updatePlan(planId: string, updates: {
+  display_name?: string;
+  monthly_price_gbp?: number;
+  annual_price_gbp?: number;
+  ai_credit_allowance?: number;
+  max_users?: number | null;
+  description?: string | null;
+}): Promise<void> {
+  const { error } = await db.from("platform_plans").update(updates).eq("id", planId);
+  if (error) throw error;
+  await logAdminEvent({
+    action: "plan_updated",
+    targetType: "plan",
+    targetId: planId,
+    metadata: updates,
+  });
+}
+
+export async function fetchPlanCounts(): Promise<Record<string, number>> {
+  const { data, error } = await db.from("businesses").select("subscription_plan");
+  if (error) throw error;
+  const counts: Record<string, number> = {};
+  for (const b of data || []) {
+    const plan = (b.subscription_plan || "").toLowerCase();
+    counts[plan] = (counts[plan] || 0) + 1;
+  }
+  return counts;
+}
+
 export function isFeatureEnabled(
   featureKey: string,
   features: FeatureDefinition[],

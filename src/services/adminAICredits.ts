@@ -30,7 +30,7 @@ export interface AICreditSummary {
 export async function fetchAICreditSummary(): Promise<AICreditSummary> {
   const [allowancesRes, usageRes] = await Promise.all([
     db.from("ai_credit_allowances").select("business_id, monthly_credit_allowance, is_active"),
-    db.from("ai_usage_logs").select("id, business_id, action_type, credits_consumed, created_at").order("created_at", { ascending: false }).limit(100),
+    db.from("ai_usage_logs").select("id, business_id, action_type, credits_consumed, created_at").order("created_at", { ascending: false }),
   ]);
 
   const allowances = allowancesRes.data || [];

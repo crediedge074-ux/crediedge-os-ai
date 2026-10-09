@@ -15,20 +15,23 @@ function AdminFeaturesPage() {
   const [entitlements, setEntitlements] = useState<PlanEntitlement[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
     try {
       const [f, p, e] = await Promise.all([fetchFeatures(), fetchPlans(), fetchPlanEntitlements()]);
       setFeatures(f); setPlans(p as any); setEntitlements(e);
-    } catch {} finally { setLoading(false); }
+    } catch { setError("Failed to load feature data."); } finally { setLoading(false); }
   };
 
   useEffect(() => { void load(); }, []);
 
   const handleToggle = async (planId: string, featureId: string, currentEnabled: boolean) => {
-    setUpdating(`${planId}-${featureId}`);
-    try { await togglePlanEntitlement(planId, featureId, !currentEnabled); void load(); } catch {} finally { setUpdating(null); }
+    setUpdating(`${planId}-${featureId}`); setError(null);
+    try { await togglePlanEntitlement(planId, featureId, !currentEnabled); void load(); }
+    catch { setError("Failed to toggle feature. You may not have permission or the operation failed."); }
+    finally { setUpdating(null); setTimeout(() => setError(null), 4000); }
   };
 
   if (loading) return <div className="grid min-h-[400px] place-items-center"><Loader2 className="h-6 w-6 animate-spin text-brand" /></div>;
@@ -38,6 +41,8 @@ function AdminFeaturesPage() {
   return (
     <div>
       <AdminPageHeader title="Feature Entitlements" description="Control which features are available on each plan." icon={Package} />
+
+      {error && <div className="mb-3 rounded-lg bg-red-50 px-4 py-2.5 text-[12px] font-medium text-red-700">{error}</div>}
 
       <div className="overflow-x-auto">
         <table className="w-full rounded-2xl border border-border bg-card shadow-card">

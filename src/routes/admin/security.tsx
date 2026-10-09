@@ -17,21 +17,22 @@ function AdminSecurityPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [leads, setLeads] = useState<EnterpriseLead[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const pageSize = 25;
 
   const load = useCallback(async () => {
-    setLoading(true);
+    setLoading(true); setError(null);
     try {
       const [audit, l] = await Promise.all([fetchAuditEvents({ search, page, pageSize }), fetchEnterpriseLeads()]);
       setEvents(audit.events); setTotal(audit.total); setLeads(l);
-    } catch {} finally { setLoading(false); }
+    } catch { setError("Failed to load audit data. You may not have permission or the request failed."); setEvents([]); setLeads([]); } finally { setLoading(false); }
   }, [search, page]);
 
   useEffect(() => { const timer = setTimeout(() => { setPage(1); void load(); }, 200); return () => clearTimeout(timer); }, [search]);
   useEffect(() => { void load(); }, [page, load]);
 
   const handleLeadStatus = async (leadId: string, status: string) => {
-    try { await updateLeadStatus(leadId, status); void load(); } catch {}
+    try { await updateLeadStatus(leadId, status); void load(); } catch { setError("Failed to update lead status."); setTimeout(() => setError(null), 3000); }
   };
 
   const totalPages = Math.ceil(total / pageSize);
@@ -39,6 +40,8 @@ function AdminSecurityPage() {
   return (
     <div>
       <AdminPageHeader title="Security & Audit" description="Platform audit trail and enterprise lead management." icon={ShieldAlert} />
+
+      {error && <div className="mb-4 rounded-lg bg-red-50 px-4 py-2.5 text-[12px] font-medium text-red-700">{error}</div>}
 
       <div className="mb-6">
         <h3 className="mb-3 text-[14px] font-semibold text-foreground">Enterprise Leads</h3>
@@ -72,10 +75,11 @@ function AdminSecurityPage() {
         : events.length === 0 ? <InsufficientData description="No audit events have been recorded yet." icon={AlertCircle} />
         : (
           <>
-            <AdminTable headers={["Action", "Target", "Label", "Date"]}>
+            <AdminTable headers={["Action", "Actor", "Target", "Label", "Date"]}>
               {events.map((event) => (
                 <tr key={event.id} className="hover:bg-secondary/20">
                   <td className="px-4 py-3 text-[12.5px] font-medium text-foreground">{event.action}</td>
+                  <td className="px-4 py-3 text-[12px] text-muted-foreground">{event.actor_name || event.actor_id.slice(0, 8)}</td>
                   <td className="px-4 py-3 text-[12px] text-muted-foreground">{event.target_type || "—"}</td>
                   <td className="px-4 py-3 text-[12px] text-muted-foreground">{event.target_label || "—"}</td>
                   <td className="px-4 py-3 text-[11px] text-muted-foreground">{new Date(event.created_at).toLocaleString("en-GB")}</td>

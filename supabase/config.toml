@@ -1,0 +1,3 @@
+[functions.admin-auth-operations]
+verify_jwt = true
+entrypoint = "./functions/admin-auth-operations/index.ts"

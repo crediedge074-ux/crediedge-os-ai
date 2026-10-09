@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useLocation } from "@tanstack/react-router";
 import {
   LayoutDashboard, Building2, Users, CreditCard, Package, Sparkles,
   Receipt, ShieldAlert, Settings, ArrowLeft, LogOut, Loader2,
@@ -34,6 +34,7 @@ interface AdminLayoutProps {
 export function AdminLayout({ children }: AdminLayoutProps) {
   const { user, profile, business } = useAuthContext();
   const navigate = useNavigate();
+  const location = useLocation();
   const [access, setAccess] = useState<AdminAccessStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -95,16 +96,21 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
         {/* Navigation */}
         <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
-          {navItems.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to as "/admin"}
-              className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-[12.5px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground data-[status=active]:bg-brand/10 data-[status=active]:text-brand data-[status=active]:font-semibold"
-            >
-              <item.icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-              {item.label}
-            </Link>
-          ))}
+          {navItems.map((item) => {
+            const isActive = item.to === "/admin"
+              ? location.pathname === "/admin"
+              : location.pathname.startsWith(item.to);
+            return (
+              <Link
+                key={item.to}
+                to={item.to as "/admin"}
+                className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-[12.5px] font-medium transition-colors hover:bg-secondary hover:text-foreground ${isActive ? "bg-brand/10 text-brand font-semibold" : "text-muted-foreground"}`}
+              >
+                <item.icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                {item.label}
+              </Link>
+            );
+          })}
         </nav>
 
         {/* Footer */}

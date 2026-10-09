@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Link } from "@tanstack/react-router";
 import { AdminPageHeader, AdminTable, AdminBadge } from "@/components/admin/AdminShared";
 import { fetchBusinesses, type AdminBusinessSummary } from "@/services/adminBusinesses";
+import { fetchPlans, type PlatformPlan } from "@/services/adminEntitlements";
 import { InsufficientData } from "@/components/ui/InsufficientData";
 
 export const Route = createFileRoute("/admin/businesses")({
@@ -18,16 +19,21 @@ function AdminBusinessesPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [planFilter, setPlanFilter] = useState("all");
   const [page, setPage] = useState(1);
+  const [plans, setPlans] = useState<PlatformPlan[]>([]);
   const pageSize = 20;
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await fetchBusinesses({ search, status: statusFilter, plan: planFilter, page, pageSize });
+      const [result, planData] = await Promise.all([
+        fetchBusinesses({ search, status: statusFilter, plan: planFilter, page, pageSize }),
+        plans.length === 0 ? fetchPlans() : Promise.resolve(plans),
+      ]);
       setBusinesses(result.businesses);
       setTotal(result.total);
-    } catch { setBusinesses([]); } finally { setLoading(false); }
-  }, [search, statusFilter, planFilter, page]);
+      if (planData.length > 0) setPlans(planData);
+    } catch { setBusinesses([]); setTotal(0); } finally { setLoading(false); }
+  }, [search, statusFilter, planFilter, page, plans]);
 
   useEffect(() => { const timer = setTimeout(() => { setPage(1); void load(); }, 200); return () => clearTimeout(timer); }, [search, statusFilter, planFilter]);
   useEffect(() => { void load(); }, [page, load]);
@@ -50,9 +56,7 @@ function AdminBusinessesPage() {
         </select>
         <select value={planFilter} onChange={(e) => setPlanFilter(e.target.value)} className="h-9 rounded-lg border border-border bg-card px-3 text-[12.5px] text-foreground focus:outline-none">
           <option value="all">All Plans</option>
-          <option value="Starter">Starter</option>
-          <option value="Growth">Growth</option>
-          <option value="Enterprise">Enterprise</option>
+          {plans.map((p) => <option key={p.id} value={p.name}>{p.display_name}</option>)}
         </select>
       </div>
 
